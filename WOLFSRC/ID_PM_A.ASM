@@ -59,7 +59,16 @@ ARG		mainonly:WORD
 ;
 ; any page in EMS or main memory
 ;
+; The four conditions are independent, so they are tested cheapest-to-reject
+; first: most of the 663 pages are in neither EMS nor main memory, and are
+; turned away by the residency test before their lastHit is read.
+;
 @@anyloop:
+	cmp	[WORD es:di+P_EMSPAGE],-1
+	jne	@@anyres
+	cmp	[WORD es:di+P_MAINPAGE],-1
+	je	@@anynext				; not resident
+@@anyres:
 	cmp	[es:di+P_LASTHIT+2],dx
 	ja	@@anynext
 	jb	@@anytime
@@ -68,11 +77,6 @@ ARG		mainonly:WORD
 @@anytime:						; lastHit < last
 	cmp	[WORD es:di+P_LOCKED],0
 	jne	@@anynext
-	cmp	[WORD es:di+P_EMSPAGE],-1
-	jne	@@anytake
-	cmp	[WORD es:di+P_MAINPAGE],-1
-	je	@@anynext
-@@anytake:
 	mov	ax,[es:di+P_LASTHIT]
 	mov	dx,[es:di+P_LASTHIT+2]
 	mov	bx,si
@@ -86,6 +90,8 @@ ARG		mainonly:WORD
 ; main memory pages only
 ;
 @@mainloop:
+	cmp	[WORD es:di+P_MAINPAGE],-1
+	je	@@mainnext				; mainonly: must be in main memory
 	cmp	[es:di+P_LASTHIT+2],dx
 	ja	@@mainnext
 	jb	@@maintime
@@ -94,8 +100,6 @@ ARG		mainonly:WORD
 @@maintime:
 	cmp	[WORD es:di+P_LOCKED],0
 	jne	@@mainnext
-	cmp	[WORD es:di+P_MAINPAGE],-1
-	je	@@mainnext				; mainonly: must be in main memory
 	mov	ax,[es:di+P_LASTHIT]
 	mov	dx,[es:di+P_LASTHIT+2]
 	mov	bx,si
