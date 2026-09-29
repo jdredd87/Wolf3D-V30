@@ -1041,6 +1041,24 @@ void RecordDemo (void)
 ==================
 */
 
+/*
+==================
+=
+= TDPreloadUpdate
+=
+= PM_Preload's progress callback for TIMEDEMO PRELOAD: nothing to draw, never
+= abort.  (Real play draws the Get Psyched bar here.)  StevenC & Claude.
+=
+==================
+*/
+
+#pragma warn -par
+static boolean TDPreloadUpdate (unsigned current, unsigned total)
+{
+	return false;
+}
+#pragma warn .par
+
 void PlayDemo (int demonumber)
 {
 	int length;
@@ -1082,6 +1100,8 @@ void PlayDemo (int demonumber)
 	SetupGameLevel ();
 	StartMusic ();
 	PM_CheckMainMem ();
+	if (tdpreload)
+		PM_Preload (TDPreloadUpdate);	// TIMEDEMO PRELOAD: what "Get Psyched" does
 	fizzlein = true;
 
 	PlayLoop ();

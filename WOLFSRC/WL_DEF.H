@@ -914,6 +914,7 @@ extern	long		tdlater;		// ...of which after its first frame (the fizzle-in)
 extern	long		tdmaxframes;	// QUICK: end each demo after this many frames
 #define	TDCRCMAX	8
 extern	boolean		tdcrc;			// CRC: checksum the view every 50 frames
+extern	boolean		tdpreload;		// PRELOAD: fill the page cache first, as play does
 extern	int			tdcrcs;
 extern	unsigned	tdcrclo[TDCRCMAX],tdcrchi[TDCRCMAX];
 void	ViewChecksum (void);

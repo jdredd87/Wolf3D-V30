@@ -53,6 +53,15 @@ typedef	struct
 		} EMSListStruct;
 
 extern	boolean			XMSPresent,EMSPresent;
+
+// TIMEDEMO's page-miss counters (StevenC & Claude): EMS remaps, copies in
+// from XMS, LRU evictions, reads from VSWAP -- zeroed at each play loop
+#define	PMC_EMSMAP	0
+#define	PMC_XMSIN	1
+#define	PMC_LRU		2
+#define	PMC_DISK	3
+#define	PMC_XMSOUT	4		// pages written out to XMS
+extern	unsigned long	pmcount[5];
 extern	word			XMSPagesAvail,EMSPagesAvail;
 
 extern	word			ChunksInFile,

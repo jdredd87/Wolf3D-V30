@@ -54,9 +54,12 @@ static	char		*ParmStrings[] = {"nomain","noems","noxms",nil};
 //
 //	PML_MapEMS() - Maps a logical page to a physical page
 //
+unsigned long	pmcount[5];		// TIMEDEMO page-miss counters (ID_PM.H)
+
 void
 PML_MapEMS(word logical,word physical)
 {
+	pmcount[PMC_EMSMAP]++;
 	_AL = physical;
 	_BX = logical;
 	_DX = EMSHandle;
@@ -253,6 +256,7 @@ PML_XMSCopy(boolean toxms,byte far *addr,word xmspage,word length)
 		longword	target_offset;
 	} copy;
 
+	pmcount[toxms ? PMC_XMSOUT : PMC_XMSIN]++;	// TIMEDEMO counters
 	if (!addr)
 		Quit("PML_XMSCopy: zero address");
 
@@ -468,6 +472,7 @@ PML_ShutdownMainMem(void)
 void
 PML_ReadFromFile(byte far *buf,long offset,word length)
 {
+	pmcount[PMC_DISK]++;
 	if (!buf)
 		Quit("PML_ReadFromFile: Null pointer");
 	if (!offset)
@@ -652,6 +657,7 @@ PML_GiveLRUPage(boolean mainonly)
 	// NEC V30 build (StevenC & Claude): the search over every page, which
 	// was 6% of a frame with a small main-memory cache, is PML_FindLRU in
 	// ID_PM_A.ASM -- the same test, first oldest page wins, as before.
+	pmcount[PMC_LRU]++;
 	lru = PML_FindLRU (mainonly);
 
 	if (lru == -1)

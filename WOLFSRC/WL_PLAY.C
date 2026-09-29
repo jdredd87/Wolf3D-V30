@@ -73,6 +73,7 @@ long		tdticks;
 long		tdlater;
 long		tdmaxframes;
 boolean		tdcrc;
+boolean		tdpreload;
 int			tdcrcs;
 unsigned	tdcrclo[TDCRCMAX],tdcrchi[TDCRCMAX];
 
@@ -1474,6 +1475,7 @@ void PlayLoop (void)
 	if (demoplayback)
 		IN_StartAck ();
 
+	memset (pmcount,0,sizeof(pmcount));	// TIMEDEMO: misses during play only
 	tdticks = BiosTicks ();
 	ProfStart ();
 	do

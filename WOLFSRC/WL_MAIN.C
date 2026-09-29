@@ -1452,10 +1452,12 @@ void TimeDemo (void)
 	int		i,played,ndemos,aborted;
 	int		maps[4];
 	long	frames[4],ticks[4],later[4],tf,tt,tl;
+	unsigned long	miss[4][5];
 	unsigned long	samples;
 
 	ndemos = 4;
 	tdcrc = MS_CheckParm ("crc");	// checksum the view every 50 frames
+	tdpreload = MS_CheckParm ("preload");	// fill the page cache first
 	if (MS_CheckParm ("quick"))
 	{
 		ndemos = 1;					// QUICK: demo 0, first 200 frames only --
@@ -1471,6 +1473,7 @@ void TimeDemo (void)
 		frames[played] = frameon;
 		ticks[played] = tdticks;
 		later[played] = tdlater;
+		memcpy (miss[played],pmcount,sizeof(pmcount));
 		if (playstate == ex_abort)
 		{
 			aborted = true;
@@ -1485,14 +1488,17 @@ void TimeDemo (void)
 	printf ("pages: %u in VSWAP  EMS %s %u  XMS %s %u  main %d\n",ChunksInFile,
 		EMSPresent ? "yes" : "no",EMSPagesAvail,
 		XMSPresent ? "yes" : "no",XMSPagesAvail,MainPagesAvail);
-	printf ("view %d x %d%s\n",viewwidth,viewheight,
-		tdmaxframes ? ", QUICK (demo 0, 200 frames)" : "");
+	printf ("view %d x %d%s%s\n",viewwidth,viewheight,
+		tdmaxframes ? ", QUICK (demo 0, 200 frames)" : "",
+		tdpreload ? ", PRELOAD" : "");
 	tf = tt = tl = 0;
 	for (i=0;i<played;i++)
 	{
 		printf ("demo %d  floor %2d  %5ld frames  %5ld ticks  %s",
 			i,maps[i]+1,frames[i],ticks[i],FpsString(frames[i],ticks[i]));
 		printf ("  | play %5ld ticks %s\n",later[i],FpsString(frames[i]-1,later[i]));
+		printf ("   page misses in play: EMS remaps %lu  from XMS %lu  to XMS %lu  LRU evictions %lu  disk reads %lu\n",
+			miss[i][PMC_EMSMAP],miss[i][PMC_XMSIN],miss[i][PMC_XMSOUT],miss[i][PMC_LRU],miss[i][PMC_DISK]);
 		tf += frames[i];
 		tt += ticks[i];
 		tl += later[i];
