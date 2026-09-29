@@ -1531,6 +1531,9 @@ void TimeDemo (void)
 		printf ("view checksum %d: %04X%04X\n",i+1,tdcrchi[i],tdcrclo[i]);
 	if (tdcrc)
 		printf ("(checksums cover the view every 50 frames; this run's timing includes them)\n");
+	if (tdfzdone)
+		printf ("fizzle copy: from %04X%04X  to %04X%04X  %s\n",tdfzsrc[1],tdfzsrc[0],tdfzdst[1],tdfzdst[0],
+			(tdfzsrc[0]==tdfzdst[0] && tdfzsrc[1]==tdfzdst[1]) ? "IDENTICAL" : "DIFFERENT");
 	if (aborted)
 		printf ("ABORTED by a key, mouse or joystick button during demo %d\n",played-1);
 	exit (aborted ? 2 : 0);

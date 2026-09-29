@@ -1219,6 +1219,8 @@ asm	rep stosw
 	if (fizzlein)
 	{
 		FizzleFade(bufferofs,displayofs+screenofs,viewwidth,viewheight,20,false);
+		if (tdcrc)
+			FizzleCheck (bufferofs,displayofs+screenofs);	// TIMEDEMO CRC
 		fizzlein = false;
 
 		lasttimecount = TimeCount = 0;		// don't make a big tic count

@@ -31,6 +31,8 @@ EXTRN	fzdone				:WORD	; set when the sequence is complete
 EXTRN	fzrnd				:DWORD	; the 17-bit random sequence
 
 fzmasks		db	1,2,4,8
+fzmode		db	?			; FizzleStep: the graphics mode to restore
+fzplane		db	?			; ...and the map mask last written
 
 	CODESEG
 
@@ -133,6 +135,14 @@ ENDP
 ;		copy the pixel at source+ylookup[y]+x/4 in plane x&3 to +delta
 ;		if (rnd == 1) done
 ;
+; Two things make it cheaper than a straight translation.  Most steps land
+; off screen, so y is tested first, from the low byte, before x is built.
+; And the pixel is copied through the VGA's latches: the read loads all four
+; planes, write mode 1 writes the latches back to whichever plane the map
+; mask enables -- so one register write a pixel instead of two, and none
+; when the plane is the one already set.  The graphics mode register is
+; read on entry and put back on exit.
+;
 ; rnd is AX (low word) and SI (its one high bit).
 ;
 ;=================
@@ -143,7 +153,18 @@ PUBLIC	FizzleStep
 	push	di
 	push	bp
 
-	mov	ax,SCREENSEG		; screenseg is always A000h in VGA mode
+	mov	dx,GC_INDEX
+	mov	al,GC_MODE
+	out	dx,al
+	inc	dx
+	in	al,dx
+	mov	[fzmode],al				; the mode to put back
+	and	al,0FCh
+	or	al,1					; write mode 1: write the latches
+	out	dx,al
+	mov	[fzplane],0FFh			; no plane selected yet
+
+	mov	ax,SCREENSEG			; screenseg is always A000h in VGA mode
 	mov	es,ax
 	mov	cx,[fzcount]
 	mov	ax,[WORD fzrnd]
@@ -152,50 +173,49 @@ PUBLIC	FizzleStep
 	jz	@@out
 
 @@pix:
-	mov	bl,al
-	dec	bl
-	xor	bh,bh				; BX = y
+	mov	bx,ax					; this step's coordinates, before advancing
 	mov	dx,si
-	mov	dh,dl
-	mov	dl,ah				; DX = x (9 bits)
-	mov	bp,dx
-
-	shr	si,1				; advance the sequence
+	shr	si,1					; advance the sequence
 	rcr	ax,1
 	jnc	@@noxor
 	xor	si,1
 	xor	ax,2000h
 @@noxor:
-	cmp	bp,[fzwidth]
-	ja	@@next				; off to the right
-	cmp	bx,[fzheight]
-	ja	@@next				; off the bottom
+	dec	bl						; y = low byte - 1
+	cmp	bl,[BYTE fzheight]		; (height < 256, so a byte compare is exact)
+	ja	@@next					; off the bottom
+	mov	dh,dl
+	mov	dl,bh					; DX = x (9 bits)
+	cmp	dx,[fzwidth]
+	ja	@@next					; off to the right
 
+	mov	bp,dx
+	xor	bh,bh
 	shl	bx,1
 	mov	di,[ylookup+bx]
 	add	di,[fzsource]
 	mov	bx,bp
 	shr	bx,1
 	shr	bx,1
-	add	di,bx				; drawofs = source+ylookup[y]+(x>>2)
+	add	di,bx					; drawofs = source+ylookup[y]+(x>>2)
 
-	and	bp,3				; plane
+	and	bp,3					; plane
+	mov	bl,[fzmasks+bp]
+	cmp	bl,[fzplane]
+	je	@@sameplane
+	mov	[fzplane],bl
 	push	ax
-	mov	dx,GC_INDEX
-	mov	ax,bp
-	mov	ah,al
-	mov	al,GC_READMAP
-	out	dx,ax				; read from that plane
 	mov	dx,SC_INDEX
-	mov	ah,[fzmasks+bp]
+	mov	ah,bl
 	mov	al,SC_MAPMASK
-	out	dx,ax				; write to it only
-	mov	al,[es:di]
-	add	di,[fzdelta]
-	mov	[es:di],al			; copy the pixel
+	out	dx,ax					; write that plane only
 	pop	ax
+@@sameplane:
+	mov	bl,[es:di]				; load the latches
+	add	di,[fzdelta]
+	mov	[es:di],bl				; write mode 1: the latched plane is copied
 
-	cmp	ax,1				; whole sequence done?
+	cmp	ax,1					; whole sequence done?
 	jne	@@next
 	or	si,si
 	jne	@@next
@@ -210,6 +230,10 @@ PUBLIC	FizzleStep
 @@out:
 	mov	[WORD fzrnd],ax
 	mov	[WORD fzrnd+2],si
+	mov	dx,GC_INDEX
+	mov	al,GC_MODE
+	mov	ah,[fzmode]
+	out	dx,ax					; the graphics mode as it was
 	pop	bp
 	pop	di
 	pop	si

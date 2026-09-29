@@ -93,15 +93,13 @@ unsigned	tdcrclo[TDCRCMAX],tdcrchi[TDCRCMAX];
 ===================
 */
 
-void ViewChecksum (void)
+static void SumView (unsigned base, unsigned *lo, unsigned *hi)
 {
 	byte		far *row;
 	unsigned	s1,s2,x,y,w;
 	int			plane;
 	byte		oldmode,oldmap;
 
-	if (tdcrcs >= TDCRCMAX)
-		return;
 	outportb (GC_INDEX,GC_MODE);
 	oldmode = inportb (GC_INDEX+1);
 	outportb (GC_INDEX,GC_READMAP);
@@ -117,7 +115,7 @@ void ViewChecksum (void)
 		outportb (GC_INDEX+1,plane);
 		for (y=0;y<viewheight;y++)
 		{
-			row = MK_FP(SCREENSEG,displayofs+screenofs+y*SCREENWIDTH);
+			row = MK_FP(SCREENSEG,base+y*SCREENWIDTH);
 			for (x=0;x<w;x++)
 			{
 				s1 += row[x];
@@ -130,9 +128,40 @@ void ViewChecksum (void)
 	outportb (GC_INDEX+1,oldmap);
 	outportb (GC_INDEX,GC_MODE);
 	outportb (GC_INDEX+1,oldmode);
-	tdcrclo[tdcrcs] = s1;
-	tdcrchi[tdcrcs] = s2;
+	*lo = s1;
+	*hi = s2;
+}
+
+void ViewChecksum (void)
+{
+	if (tdcrcs >= TDCRCMAX)
+		return;
+	SumView (displayofs+screenofs,&tdcrclo[tdcrcs],&tdcrchi[tdcrcs]);
 	tdcrcs++;
+}
+
+/*
+===================
+=
+= FizzleCheck
+=
+= TIMEDEMO CRC: right after the level-start fizzle, checksum the page it
+= copied from and the region it copied to.  A fizzle that copied every
+= pixel leaves them identical.  StevenC & Claude.
+=
+===================
+*/
+
+unsigned	tdfzsrc[2],tdfzdst[2];
+boolean		tdfzdone;
+
+void FizzleCheck (unsigned source, unsigned dest)
+{
+	if (tdfzdone)
+		return;
+	SumView (source,&tdfzsrc[0],&tdfzsrc[1]);
+	SumView (dest,&tdfzdst[0],&tdfzdst[1]);
+	tdfzdone = true;
 }
 
 /*
