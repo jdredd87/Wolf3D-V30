@@ -128,7 +128,9 @@ byte for byte.
 | 33 | `TransformActor` in asm, NEAR from `PlaceActors` | -1 | |
 | 34 | `CheckLine` (line of sight) in asm: the clamped long divide is one guarded `DIV` | -9 | |
 | 35 | the actor loop in asm: an actor asleep outside the player's areas is skipped without a call | -14 | |
-| - | steps 32-35 together, rebuilt without 31 | **905** | **4.00** |
+| - | steps 32-35 together, rebuilt without 31 | 905 | 4.00 |
+| - | the `VGAClearScreen` fix (CH cleared; see the findings) -- the new baseline | 903 | 4.01 |
+| 36 | `CalcHeight` for the ray loop's wall hits: a vertical wall's columns share `xintercept`, so `CalcHeightV` keeps `gxt` against its high word (`CalcHeightH` keeps `gyt`), each with its own patched immediates -- step 31's idea, narrowed to the product that repeats | **892** | **4.06** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract

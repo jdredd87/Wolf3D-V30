@@ -117,6 +117,12 @@ EXTRN	pluy:WORD
 EXTRN	pwallpos:WORD			; amound a pushable wall has been moved
 
 curquad		dw	0				; NEC V30 build: the quadrant the loop is patched for
+chvkey		dw	8000h			; CalcHeightV's last xintercept (high word) and gxt,
+chvgxlo		dw	0				; CalcHeightH's last yintercept and gyt; 8000h
+chvgxhi		dw	0				; matches no intercept, so a frame starts empty
+chhkey		dw	8000h
+chhgylo		dw	0
+chhgyhi		dw	0
 tsave		dw	0				; T, across a door or pushwall test
 clx1		dw	0				; CheckLine's working storage
 cly1		dw	0
@@ -368,6 +374,142 @@ chhnhi:
 	pop	di
 	pop	si
 	ret
+ENDP
+
+;
+; NEC V30 build: the same for the ray loop's wall hits, which know more.  A
+; vertical wall's columns all hit at one xintercept -- the wall's plane,
+; low word 0 -- so CalcHeightV remembers gxt against xintercept's high word
+; and a column along the same wall reuses it, two MULs fewer; CalcHeightH
+; does the same with gyt for a horizontal wall.  Each has its own patched
+; immediates, so neither calls anything.  AsmRefresh forgets both at the
+; start of every frame, as the view has changed.
+;
+PROC	CalcHeightV NEAR
+	push	si
+	push	di
+	mov	ax,[WORD xintercept+2]
+	cmp	ax,[chvkey]
+	jne	@@miss
+	mov	ax,[chvgxlo]			; dx:ax = gxt, as for the last column
+	mov	dx,[chvgxhi]
+@@have:
+	push	dx
+	push	ax
+
+	mov	ax,[WORD yintercept]
+	mov	dx,[WORD yintercept+2]
+cvvylo:
+	sub	ax,1234h				; viewy
+cvvyhi:
+	sbb	dx,1234h
+	FIXBYFRACI	cvsinsign,cvsinfrac	; dx:ax = gyt
+
+	pop	bx
+	pop	cx					; cx:bx = gxt
+	sub	bx,ax
+	sbb	cx,dx				; cx:bx = nx = gxt-gyt
+
+cvmdhi:
+	cmp	cx,1234h			; if (nx < mindist) nx = mindist -- signed (81 F9 iw)
+	jg	@@distok
+	jl	@@clamp
+cvmdlo:
+	cmp	bx,1234h			; (81 FB iw)
+	jae	@@distok
+@@clamp:
+cvmdlo2:
+	mov	bx,1234h			; (BB iw)
+cvmdhi2:
+	mov	cx,1234h			; (B9 iw)
+@@distok:
+	mov	bl,bh				; bx = bits 8-23 of nx, the word at nx+1
+	mov	bh,cl
+cvhnlo:
+	mov	ax,1234h			; heightnumerator (B8 iw)
+cvhnhi:
+	mov	dx,1234h			; (BA iw)
+	idiv	bx
+
+	pop	di
+	pop	si
+	ret
+
+@@miss:
+	mov	[chvkey],ax
+	mov	ax,[WORD xintercept]
+	mov	dx,[WORD xintercept+2]
+cvvxlo:
+	sub	ax,1234h				; viewx, low word (2D iw: at +1)
+cvvxhi:
+	sbb	dx,1234h				; high word (81 DA iw: at +2)
+	FIXBYFRACI	cvcossign,cvcosfrac	; dx:ax = gxt
+	mov	[chvgxlo],ax
+	mov	[chvgxhi],dx
+	jmp	@@have
+ENDP
+
+PROC	CalcHeightH NEAR
+	push	si
+	push	di
+	mov	ax,[WORD xintercept]
+	mov	dx,[WORD xintercept+2]
+czvxlo:
+	sub	ax,1234h				; viewx, low word (2D iw: at +1)
+czvxhi:
+	sbb	dx,1234h				; high word (81 DA iw: at +2)
+	FIXBYFRACI	czcossign,czcosfrac	; dx:ax = gxt
+	push	dx
+	push	ax
+
+	mov	ax,[WORD yintercept+2]
+	cmp	ax,[chhkey]
+	jne	@@miss
+	mov	ax,[chhgylo]			; dx:ax = gyt, as for the last column
+	mov	dx,[chhgyhi]
+@@have:
+	pop	bx
+	pop	cx					; cx:bx = gxt
+	sub	bx,ax
+	sbb	cx,dx				; cx:bx = nx = gxt-gyt
+
+czmdhi:
+	cmp	cx,1234h			; if (nx < mindist) nx = mindist -- signed (81 F9 iw)
+	jg	@@distok
+	jl	@@clamp
+czmdlo:
+	cmp	bx,1234h			; (81 FB iw)
+	jae	@@distok
+@@clamp:
+czmdlo2:
+	mov	bx,1234h			; (BB iw)
+czmdhi2:
+	mov	cx,1234h			; (B9 iw)
+@@distok:
+	mov	bl,bh				; bx = bits 8-23 of nx, the word at nx+1
+	mov	bh,cl
+czhnlo:
+	mov	ax,1234h			; heightnumerator (B8 iw)
+czhnhi:
+	mov	dx,1234h			; (BA iw)
+	idiv	bx
+
+	pop	di
+	pop	si
+	ret
+
+@@miss:
+	mov	[chhkey],ax
+	mov	ax,[WORD yintercept]
+	mov	dx,[WORD yintercept+2]
+czvylo:
+	sub	ax,1234h				; viewy
+czvyhi:
+	sbb	dx,1234h
+	FIXBYFRACI	czsinsign,czsinfrac	; dx:ax = gyt
+	mov	[chhgylo],ax
+	mov	[chhgyhi],dx
+	jmp	@@have
 ENDP
 
 PROC	CalcHeight
@@ -720,7 +862,7 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	[wallheight+bx],ax
 	ret
 @@newcol:
-	call	CalcHeightN
+	call	CalcHeightV
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
@@ -731,7 +873,7 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	[postx],ax
 	ret
 @@newwall:
-	call	CalcHeightN
+	call	CalcHeightV
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
@@ -811,7 +953,7 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	[wallheight+bx],ax
 	ret
 @@newcol:
-	call	CalcHeightN
+	call	CalcHeightH
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
@@ -822,7 +964,7 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	[postx],ax
 	ret
 @@newwall:
-	call	CalcHeightN
+	call	CalcHeightH
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
@@ -1327,32 +1469,63 @@ PUBLIC	AsmRefresh
 	mov	[BYTE cs:vspotop+4],al		; the two spotvis stores (C6 84 disp16 imm8)
 	mov	[BYTE cs:hspotop+4],al
 
-	mov	ax,[WORD viewx]			; and CalcHeight's constants for this frame
+	mov	ax,[WORD viewx]			; and CalcHeight's constants for this frame,
+								; in all three of its forms
 	mov	[WORD cs:chvxlo+1],ax
+	mov	[WORD cs:cvvxlo+1],ax
+	mov	[WORD cs:czvxlo+1],ax
 	mov	ax,[WORD viewx+2]
 	mov	[WORD cs:chvxhi+2],ax
+	mov	[WORD cs:cvvxhi+2],ax
+	mov	[WORD cs:czvxhi+2],ax
 	mov	ax,[WORD viewy]
 	mov	[WORD cs:chvylo+1],ax
+	mov	[WORD cs:cvvylo+1],ax
+	mov	[WORD cs:czvylo+1],ax
 	mov	ax,[WORD viewy+2]
 	mov	[WORD cs:chvyhi+2],ax
+	mov	[WORD cs:cvvyhi+2],ax
+	mov	[WORD cs:czvyhi+2],ax
 	mov	ax,[WORD viewcos+2]
 	mov	[WORD cs:chcossign+1],ax
+	mov	[WORD cs:cvcossign+1],ax
+	mov	[WORD cs:czcossign+1],ax
 	mov	ax,[WORD viewcos]
 	mov	[WORD cs:chcosfrac+1],ax
+	mov	[WORD cs:cvcosfrac+1],ax
+	mov	[WORD cs:czcosfrac+1],ax
 	mov	ax,[WORD viewsin+2]
 	mov	[WORD cs:chsinsign+1],ax
+	mov	[WORD cs:cvsinsign+1],ax
+	mov	[WORD cs:czsinsign+1],ax
 	mov	ax,[WORD viewsin]
 	mov	[WORD cs:chsinfrac+1],ax
+	mov	[WORD cs:cvsinfrac+1],ax
+	mov	[WORD cs:czsinfrac+1],ax
 	mov	ax,[WORD mindist+2]
 	mov	[WORD cs:chmdhi+2],ax
 	mov	[WORD cs:chmdhi2+1],ax
+	mov	[WORD cs:cvmdhi+2],ax
+	mov	[WORD cs:cvmdhi2+1],ax
+	mov	[WORD cs:czmdhi+2],ax
+	mov	[WORD cs:czmdhi2+1],ax
 	mov	ax,[WORD mindist]
 	mov	[WORD cs:chmdlo+2],ax
 	mov	[WORD cs:chmdlo2+1],ax
+	mov	[WORD cs:cvmdlo+2],ax
+	mov	[WORD cs:cvmdlo2+1],ax
+	mov	[WORD cs:czmdlo+2],ax
+	mov	[WORD cs:czmdlo2+1],ax
 	mov	ax,[WORD heightnumerator]
 	mov	[WORD cs:chhnlo+1],ax
+	mov	[WORD cs:cvhnlo+1],ax
+	mov	[WORD cs:czhnlo+1],ax
 	mov	ax,[WORD heightnumerator+2]
 	mov	[WORD cs:chhnhi+1],ax
+	mov	[WORD cs:cvhnhi+1],ax
+	mov	[WORD cs:czhnhi+1],ax
+	mov	[chvkey],8000h			; and the wall caches are empty
+	mov	[chhkey],8000h
 
 	mov	[curquad],0				; the first ray patches its quadrant in
 	mov	[pixx],0
