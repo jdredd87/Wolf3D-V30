@@ -26,6 +26,8 @@ EXTRN	HitVertDoor:FAR
 EXTRN	HitHorizPWall:FAR
 EXTRN	HitVertPWall:FAR
 EXTRN	ScaleShape:FAR
+EXTRN	TransformTile:FAR
+EXTRN	GetBonus:FAR
 
 
 DATASEG
@@ -54,6 +56,8 @@ EXTRN	vislist:WORD			; visobj_t vislist[]: viewx, viewheight, shapenum
 EXTRN	visptr:WORD
 EXTRN	visstep:WORD
 EXTRN	farthest:WORD
+EXTRN	statobjlist:WORD		; statobj_t statobjlist[], 8 bytes each
+EXTRN	laststatobj:WORD
 
 EXTRN	xpartialup:WORD
 EXTRN	ypartialup:WORD
@@ -354,6 +358,106 @@ PUBLIC	DrawVisList
 
 	mov	[visstep],di			; where the C loop left it
 @@done:
+	pop	di
+	pop	si
+	retf
+ENDP
+
+
+;============================
+;
+; PlaceStatics
+;
+; NEC V30 build, StevenC & Claude: the first loop of DrawScaleds, over every
+; static object on the level (up to 400), in registers.  It is game logic
+; as well as drawing -- GetBonus picks up an item the player is on -- so
+; TransformTile and GetBonus are called exactly when, and in the order,
+; the C called them:
+;
+;	visptr = &vislist[0];
+;	for (statptr = &statobjlist[0] ; statptr !=laststatobj ; statptr++)
+;	{
+;		if ((visptr->shapenum = statptr->shapenum) == -1)
+;			continue;						// object has been deleted
+;		if (!*statptr->visspot)
+;			continue;						// not visable
+;		if (TransformTile (statptr->tilex,statptr->tiley
+;			,&visptr->viewx,&visptr->viewheight) && statptr->flags & FL_BONUS)
+;		{
+;			GetBonus (statptr);
+;			continue;
+;		}
+;		if (!visptr->viewheight)
+;			continue;						// to close to the object
+;		if (visptr < &vislist[MAXVISABLE-1])	// don't let it overflow
+;			visptr++;
+;	}
+;
+; (The C also wrote shapenum into the spare slot for skipped objects; only
+; slots below visptr are ever read, so that write is left out.)
+;
+;============================
+
+ST_TILEX		=	0
+ST_TILEY		=	1
+ST_VISSPOT		=	2
+ST_SHAPENUM		=	4
+ST_FLAGS		=	6
+ST_SIZE			=	8
+FL_BONUS		=	2
+MAXVISABLE		=	50
+
+PROC	PlaceStatics
+PUBLIC	PlaceStatics
+	push	si
+	push	di
+
+	mov	di,OFFSET vislist			; DI = visptr
+	mov	si,OFFSET statobjlist		; SI = statptr
+	jmp	@@test
+
+@@loop:
+	mov	ax,[si+ST_SHAPENUM]
+	cmp	ax,-1
+	je	@@next						; deleted
+	mov	bx,[si+ST_VISSPOT]
+	cmp	[BYTE bx],0
+	je	@@next						; not visible
+	mov	[di+VIS_SHAPENUM],ax
+
+	lea	ax,[di+VIS_HEIGHT]
+	push	ax						; &visptr->viewheight
+	push	di						; &visptr->viewx
+	mov	al,[si+ST_TILEY]
+	xor	ah,ah
+	push	ax
+	mov	al,[si+ST_TILEX]
+	push	ax						; (AH still 0)
+	call	TransformTile
+	add	sp,8
+	or	ax,ax
+	jz	@@notbonus
+	test	[BYTE si+ST_FLAGS],FL_BONUS
+	jz	@@notbonus
+	push	si
+	call	GetBonus
+	add	sp,2
+	jmp	@@next
+
+@@notbonus:
+	cmp	[WORD di+VIS_HEIGHT],0
+	je	@@next						; too close
+	cmp	di,OFFSET vislist+(MAXVISABLE-1)*VIS_SIZE
+	jae	@@next						; don't let it overflow
+	add	di,VIS_SIZE
+
+@@next:
+	add	si,ST_SIZE
+@@test:
+	cmp	si,[laststatobj]
+	jne	@@loop
+
+	mov	[visptr],di
 	pop	di
 	pop	si
 	retf

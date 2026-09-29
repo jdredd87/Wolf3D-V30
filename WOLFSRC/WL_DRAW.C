@@ -113,6 +113,7 @@ int		horizwall[MAXWALLTILES],vertwall[MAXWALLTILES];
 
 void AsmRefresh (void);			// in WL_DR_A.ASM
 void DrawVisList (void);		// in WL_DR_A.ASM: DrawScaleds' drawing loop
+void PlaceStatics (void);		// in WL_DR_A.ASM: DrawScaleds' static objects
 
 /*
 ============================================================================
@@ -1059,32 +1060,13 @@ void DrawScaleds (void)
 	statobj_t	*statptr;
 	objtype		*obj;
 
-	visptr = &vislist[0];
-
 //
 // place static objects
 //
-	for (statptr = &statobjlist[0] ; statptr !=laststatobj ; statptr++)
-	{
-		if ((visptr->shapenum = statptr->shapenum) == -1)
-			continue;						// object has been deleted
-
-		if (!*statptr->visspot)
-			continue;						// not visable
-
-		if (TransformTile (statptr->tilex,statptr->tiley
-			,&visptr->viewx,&visptr->viewheight) && statptr->flags & FL_BONUS)
-		{
-			GetBonus (statptr);
-			continue;
-		}
-
-		if (!visptr->viewheight)
-			continue;						// to close to the object
-
-		if (visptr < &vislist[MAXVISABLE-1])	// don't let it overflow
-			visptr++;
-	}
+	// NEC V30 build (StevenC & Claude): PlaceStatics in WL_DR_A.ASM -- the
+	// same scan, TransformTile and GetBonus in the same order, in registers.
+	// It sets visptr.
+	PlaceStatics ();
 
 //
 // place active objects
