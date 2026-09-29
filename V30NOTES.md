@@ -138,6 +138,7 @@ byte for byte.
 | 41 | a byte less per tile step: `cmp [tilemap+si],bh` for id's `test ...,0FFh` (BH, xtile's high byte, is always 0); no screen ES loaded per ray (nothing reads it) | 853 | 4.25 |
 | 42 | `LDIV`'s normalisation shifts a whole byte first: `nx`, the usual divisor, has a high word under 256, which cost the bit loop 9 to 15 turns (now at most 7); `LDTEST` 100,473 pairs on the 486 and 20,473 on the V30, 0 mismatches | 851 | 4.26 |
 | 43 | the 700 Hz music interrupt's quiet tick, shorter: the effects counter counts down (`dec`/`jz`), `alTimeCount`'s high word carries only once in 65,536 ticks, and a quiet tick leaves inline with the common case (no BIOS chain) falling through; `MUSICLOG` hash unchanged (A92D) | **846** | **4.28** |
+| 44 | *(tried, reverted)* the music timer interrupting only on ticks that need it -- PIT mode 2, each interval queued two ahead, quiet ticks counted in bulk, `MUSICLOG` still A92D: 49,365 interrupts became 10,961 and the speed did not move (847.5 vs 848.0 over four rounds). See below | -- | -- |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -163,6 +164,8 @@ frames had been compared with id's picture; the frame counts staying
 whatever the game does with it.
 
 ## Findings worth keeping
+
+**What music costs, measured -- and what it does not.** `NOMUSIC` plays demo 0 about 3.4% faster (819 against 848 play ticks). Step 44 cut the timer interrupts 4.5-fold with no gain at all, so a quiet 700 Hz tick is next to free on this machine; the earlier estimate of ~100 us a tick was wrong. `OPLID` (id's 6+35 status reads a write, against the calibrated 2+9) costs 14.5 ticks: 30 extra reads at 4.02 us each put the music at ~140 OPL writes a second, far more than the 22 assumed at step 13, each costing 13 port accesses (~52 us). That accounts for roughly a fifth of music's cost; the rest is the full service on event and effects ticks and, it seems, the PicoMEM itself, whose AdLib is emulated in software on the card.
 
 **Two faults the view checksums could not see, found 2026-09-29.**
 
