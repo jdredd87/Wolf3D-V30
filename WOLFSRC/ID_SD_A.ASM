@@ -12,11 +12,15 @@
 DEBUG	=	0
 
 	EXTRN	SDL_DigitizedDone:FAR
-	EXTRN	alOut:FAR
 
 ;============================================================================
 
 DATASEG
+
+alDelayAddr	dw	6					; alOut's waits, in status-port reads:
+alDelayData	dw	35					; id's counts until SDL_TimeOPL runs
+	PUBLIC	alDelayAddr
+	PUBLIC	alDelayData
 
 	EXTRN	sqActive:WORD
 	EXTRN	ssSample:DWORD
@@ -523,4 +527,46 @@ extreme		dw	?
 
 	ENDP
 
-	END
+	
+;============================
+;
+; alOut (byte n, byte b) -- put b in AdLib register n
+;
+; NEC V30 build, StevenC & Claude: was C in ID_SD.C.  An OPL2 needs 3.3 us
+; after its address is written and 23 us after its data, and id waited by
+; reading the status port 6 and 35 times -- counts for a 1990 AT.  On this
+; V30 an IN takes ~4 us whatever the port, so every register write waited
+; ~170 us, and music cost 6% of the frame.  The two counts are now
+; alDelayAddr and alDelayData, which SD_Startup calibrates against the BIOS
+; clock (SDL_TimeOPL) to the chip's figures plus half again -- right on a
+; slow machine and on a fast one.  Until then they are id's 6 and 35.
+; The interrupt handling is id's: off from the address write to the data
+; write, back on for the long wait.
+;
+;============================
+
+PROC	alOut
+PUBLIC	alOut
+ARG		n:WORD, b:WORD
+	pushf
+	cli
+	mov	dx,388h
+	mov	al,[BYTE n]
+	out	dx,al
+	mov	cx,[alDelayAddr]
+@@waddr:
+	in	al,dx
+	loop	@@waddr
+	inc	dx
+	mov	al,[BYTE b]
+	out	dx,al
+	popf
+	dec	dx
+	mov	cx,[alDelayData]
+@@wdata:
+	in	al,dx
+	loop	@@wdata
+	ret
+ENDP
+
+END

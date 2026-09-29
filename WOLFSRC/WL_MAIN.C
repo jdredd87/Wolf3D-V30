@@ -1446,6 +1446,8 @@ char *FpsString (long frames, long ticks)
 }
 
 extern	int		MainPagesAvail;		// ID_PM.C, not in its header
+extern	unsigned	alDelayAddr,alDelayData;	// ID_SD_A.ASM
+extern	unsigned long	alReadNs;		// ID_SD.C
 
 void TimeDemo (void)
 {
@@ -1463,6 +1465,13 @@ void TimeDemo (void)
 		ndemos = 1;					// QUICK: demo 0, first 200 frames only --
 		tdmaxframes = 200;			// the same frames every run, for A/B timing
 	}
+
+	// NOMUSIC / NOSOUND: measure what the AdLib costs (the timer runs at 700 Hz
+	// for music, and every OPL write waits 41 port reads).  Not for playing.
+	if (MS_CheckParm ("nomusic") || MS_CheckParm ("nosound"))
+		SD_SetMusicMode (smm_Off);
+	if (MS_CheckParm ("nosound"))
+		SD_SetSoundMode (sdm_Off);
 
 	ProfInit ();
 	aborted = false;
@@ -1488,6 +1497,8 @@ void TimeDemo (void)
 	printf ("pages: %u in VSWAP  EMS %s %u  XMS %s %u  main %d\n",ChunksInFile,
 		EMSPresent ? "yes" : "no",EMSPagesAvail,
 		XMSPresent ? "yes" : "no",XMSPagesAvail,MainPagesAvail);
+	printf ("sound mode %d, music mode %d; OPL waits %u and %u reads, %lu ns each (id: 6 and 35)\n",
+		SoundMode,MusicMode,alDelayAddr,alDelayData,alReadNs);
 	printf ("view %d x %d%s%s\n",viewwidth,viewheight,
 		tdmaxframes ? ", QUICK (demo 0, 200 frames)" : "",
 		tdpreload ? ", PRELOAD" : "");

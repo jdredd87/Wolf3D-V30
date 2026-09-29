@@ -71,6 +71,20 @@ def main():
     shift, other, buckets = load_prof(args[0])
     segs, pubs = load_map(args[1])
     addrs = [a for a, _ in pubs]
+    code = [s for s in segs if s[3] == "CODE" and s[1] > s[0]]
+
+    def locate(addr):
+        """(segment name, symbol, symbol address) -- a symbol only from the
+        sample's own segment; code ahead of a segment's first public (id's
+        non-public helpers, say) is SEGMENT+offset, not the previous file's
+        last function."""
+        seg = next((s for s in code if s[0] <= addr < s[1]), None)
+        if not seg:
+            return "(not code)", "(not code)", addr
+        j = bisect.bisect_right(addrs, addr) - 1
+        if j >= 0 and pubs[j][0] >= seg[0]:
+            return seg[2], pubs[j][1], pubs[j][0]
+        return seg[2], seg[2], seg[0]
 
     total = sum(buckets) + sum(other)
     if not total:
@@ -79,11 +93,8 @@ def main():
     for i, n in enumerate(buckets):
         if not n:
             continue
-        addr = i << shift
-        j = bisect.bisect_right(addrs, addr) - 1
-        fn = pubs[j][1] if j >= 0 else "?"
+        seg, fn, _ = locate(i << shift)
         per_fn[fn] = per_fn.get(fn, 0) + n
-        seg = next((s[2] for s in segs if s[0] <= addr < s[1] and s[3] == "CODE"), "(not code)")
         per_seg[seg] = per_seg.get(seg, 0) + n
     per_seg["(heap: compiled scalers)"] = other[1]
     per_seg["(below program: DOS/TSRs)"] = other[0]
@@ -103,8 +114,7 @@ def main():
         hot = sorted(((n, i) for i, n in enumerate(buckets) if n), reverse=True)[:nbuckets]
         for n, i in hot:
             addr = i << shift
-            j = bisect.bisect_right(addrs, addr) - 1
-            fn, base = (pubs[j][1], pubs[j][0]) if j >= 0 else ("?", 0)
+            _, fn, base = locate(addr)
             print("  %6.2f%%  %6d  %05X  %s+%X" % (100.0 * n / total, n, addr, fn, addr - base))
 
 

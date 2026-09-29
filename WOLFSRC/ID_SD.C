@@ -1268,66 +1268,53 @@ SDL_SetupDigi(void)
 //	alOut(n,b) - Puts b in AdLib card register n
 //
 ///////////////////////////////////////////////////////////////////////////
-void
-alOut(byte n,byte b)
+// alOut is in ID_SD_A.ASM since the NEC V30 build (StevenC & Claude): the
+// same writes, with its two waits calibrated by SDL_TimeOPL below.
+
+extern	unsigned	alDelayAddr,alDelayData;	// ID_SD_A.ASM
+		unsigned long	alReadNs;				// what one status read took
+
+///////////////////////////////////////////////////////////////////////////
+//
+//	SDL_TimeOPL() - How long does one read of the AdLib status port take?
+//		Count passes of 64 reads over three BIOS ticks, and set alOut's
+//		waits to the OPL2's 3.3 us and 23 us plus half again.  Run before
+//		the timer is reprogrammed, so only the BIOS tick interrupts it --
+//		and anything that did would only make the reads look slower, and
+//		so shorten nothing it should not.  StevenC & Claude.
+//
+///////////////////////////////////////////////////////////////////////////
+static void
+SDL_TimeOPL(void)
 {
-asm	pushf
-asm	cli
+	unsigned long	start,passes;
+	unsigned long	far *bios = MK_FP(0x40,0x6c);
 
-asm	mov	dx,0x388
-asm	mov	al,[n]
-asm	out	dx,al
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	inc	dx
-asm	mov	al,[b]
-asm	out	dx,al
-
-asm	popf
-
-asm	dec	dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
-asm	in	al,dx
+	start = *bios;
+	while (*bios == start)
+		;
+	start = *bios;
+	passes = 0;
+	while (*bios - start < 3)
+	{
+asm		mov	dx,0x388
+asm		mov	cx,64
+reads:
+asm		in	al,dx
+asm		loop	reads
+		passes++;
+	}
+	if (!passes)
+		return;
+	alReadNs = 164775000L / (passes*64);		// 3 ticks = 164,775 us
+	if (!alReadNs)
+		alReadNs = 1;
+	alDelayAddr = (unsigned)((4950L + alReadNs - 1) / alReadNs);	// 3.3 us * 1.5
+	alDelayData = (unsigned)((34500L + alReadNs - 1) / alReadNs);	// 23 us * 1.5
+	if (!alDelayAddr)
+		alDelayAddr = 1;
+	if (alDelayData < 2)
+		alDelayData = 2;
 }
 
 #if 0
@@ -1873,6 +1860,8 @@ SD_Startup(void)
 		return;
 
 	SDL_SetDS();
+
+	SDL_TimeOPL();		// alOut's waits, before the timer is touched
 
 	ssIsTandy = false;
 	ssNoCheck = false;
