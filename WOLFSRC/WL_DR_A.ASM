@@ -4,6 +4,7 @@
 	JUMPS				; out-of-range Jcc become Jcc-around-JMP; in-range ones are untouched
 
 SCREENSEG	=	0a000h
+SC_INDEX	=	03c4h
 
 FINEANGLES	=	3600
 DEG90		=	900
@@ -29,7 +30,6 @@ EXTRN	HitVertDoor:FAR
 EXTRN	HitHorizPWall:FAR
 EXTRN	HitVertPWall:FAR
 EXTRN	ScaleShape:FAR
-EXTRN	FarScalePost:FAR
 EXTRN	PM_GetPage:FAR
 EXTRN	GetBonus:FAR
 EXTRN	TransformActor:FAR
@@ -92,6 +92,12 @@ EXTRN	ypartialdown:WORD
 EXTRN	tilehit:WORD
 EXTRN	pixx:WORD
 EXTRN	wallheight:WORD			; array of VIEWWIDTH entries
+EXTRN	maxscaleshl2:WORD
+EXTRN	fullscalefarcall:DWORD
+EXTRN	bufferofs:WORD
+EXTRN	mapmasks1:BYTE
+EXTRN	mapmasks2:BYTE
+EXTRN	mapmasks3:BYTE
 
 EXTRN	xtile:WORD
 EXTRN	ytile:WORD
@@ -559,6 +565,75 @@ ENDP
 
 ;============================
 ;
+; ScalePostA
+;
+; NEC V30 build, StevenC & Claude: WL_DRAW.C's ScalePost for the asm hit
+; routines, called NEAR.  They used to reach it through FarScalePost -- a far
+; call, a near call and a C frame for every post drawn.  The body is the
+; C's asm exactly: the scaler for the post's height, the column's map masks,
+; up to three bytes wide.  Keeps SI, DI and BP, as the C did.
+;
+;============================
+
+PROC	ScalePostA NEAR
+PUBLIC	ScalePostA					; public only so profiles can name it
+	push	si
+	push	di
+	push	bp
+
+	mov	bx,[postx]
+	mov	di,bx
+	shl	bx,1
+	mov	bp,[wallheight+bx]		; fractional height (low 3 bits frac)
+	and	bp,0fff8h				; bp = heightscaler*4
+	shr	bp,1
+	cmp	bp,[maxscaleshl2]
+	jle	@@heightok
+	mov	bp,[maxscaleshl2]
+@@heightok:
+	add	bp,OFFSET fullscalefarcall
+
+	mov	bx,di
+	shr	di,2					; X in bytes
+	add	di,[bufferofs]
+	and	bx,3
+	shl	bx,3
+	add	bx,[postwidth]			; bx = pixel*8+pixwidth
+
+	mov	al,[mapmasks1-1+bx]		; -1 because no widths of 0
+	mov	dx,SC_INDEX+1
+	out	dx,al					; set bit mask register
+	les	si,[postsource]			; ES:SI = the texture column
+	mov	cx,SCREENSEG
+	mov	ds,cx					; DS = the screen
+	call	[DWORD bp]				; SS:BP -- scale the line of pixels
+
+	mov	al,[ss:mapmasks2-1+bx]
+	or	al,al
+	jz	@@done
+	inc	di						; a strip that crosses two bytes
+	out	dx,al
+	call	[DWORD bp]
+
+	mov	al,[ss:mapmasks3-1+bx]
+	or	al,al
+	jz	@@done
+	inc	di						; three bytes
+	out	dx,al
+	call	[DWORD bp]
+
+@@done:
+	mov	ax,ss
+	mov	ds,ax
+	pop	bp
+	pop	di
+	pop	si
+	ret
+ENDP
+
+
+;============================
+;
 ; HitVertWall / HitHorizWall
 ;
 ; NEC V30 build, StevenC & Claude: WL_DRAW.C's two wall-hit routines,
@@ -642,7 +717,7 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
-	call	FarScalePost
+	call	ScalePostA
 	mov	[WORD postsource],si
 	mov	[postwidth],1
 	mov	ax,[pixx]
@@ -655,7 +730,7 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	[wallheight+bx],ax
 	cmp	[lastside],-1
 	je	@@first
-	call	FarScalePost
+	call	ScalePostA
 @@first:
 	mov	[lastside],1
 	mov	ax,[xtile]
@@ -733,7 +808,7 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
-	call	FarScalePost
+	call	ScalePostA
 	mov	[WORD postsource],si
 	mov	[postwidth],1
 	mov	ax,[pixx]
@@ -746,7 +821,7 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	[wallheight+bx],ax
 	cmp	[lastside],-1
 	je	@@first
-	call	FarScalePost
+	call	ScalePostA
 @@first:
 	mov	[lastside],0
 	mov	ax,[ytile]
