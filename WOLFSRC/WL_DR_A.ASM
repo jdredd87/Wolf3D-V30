@@ -19,13 +19,13 @@ OP_DECBP	=	04dh
 
 EXTRN	finetangent:DWORD	; far array, starts at offset 0
 
-EXTRN	HitHorizWall:FAR
-EXTRN	HitVertWall:FAR
 EXTRN	HitHorizDoor:FAR
 EXTRN	HitVertDoor:FAR
 EXTRN	HitHorizPWall:FAR
 EXTRN	HitVertPWall:FAR
 EXTRN	ScaleShape:FAR
+EXTRN	FarScalePost:FAR
+EXTRN	PM_GetPage:FAR
 EXTRN	TransformTile:FAR
 EXTRN	GetBonus:FAR
 
@@ -58,6 +58,15 @@ EXTRN	visstep:WORD
 EXTRN	farthest:WORD
 EXTRN	statobjlist:WORD		; statobj_t statobjlist[], 8 bytes each
 EXTRN	laststatobj:WORD
+EXTRN	lastside:WORD			; the wall-post state HitVertWall/HitHorizWall keep
+EXTRN	lastintercept:DWORD
+EXTRN	lasttilehit:WORD
+EXTRN	postsource:DWORD
+EXTRN	postx:WORD
+EXTRN	postwidth:WORD
+EXTRN	vertwall:WORD
+EXTRN	horizwall:WORD
+EXTRN	PMSpriteStart:WORD		; DOORWALL is PMSpriteStart-8
 
 EXTRN	xpartialup:WORD
 EXTRN	ypartialup:WORD
@@ -466,6 +475,233 @@ ENDP
 
 ;============================
 ;
+; HitVertWall / HitHorizWall
+;
+; NEC V30 build, StevenC & Claude: WL_DRAW.C's two wall-hit routines,
+; which AsmRefresh calls once per ray.  In C each was a far call with a
+; frame and its state compared through memory; here they are NEAR calls
+; from the ray loop.  Every register is free at the call -- AsmRefresh has
+; stored xtile, ytile and the intercepts and reloads everything at
+; nextpix -- so only SI and DI need keeping across the C calls made here.
+; Statement for statement the C (with CalcHeight skipped for a wide-scale
+; column, as the C now does):
+;
+;	texture = ((unsigned)yintercept>>4)&0xfc0;
+;	if (xtilestep == -1)
+;		texture = 0xfc0-texture, xintercept += TILEGLOBAL;
+;	if (lastside==1 && lastintercept == xtile && lasttilehit == tilehit)
+;	{
+;		if (texture == (unsigned)postsource)
+;			postwidth++, wallheight[pixx] = wallheight[pixx-1];	// wide scale
+;		else
+;		{
+;			wallheight[pixx] = CalcHeight();
+;			ScalePost ();
+;			(unsigned)postsource = texture; postwidth = 1; postx = pixx;
+;		}
+;	}
+;	else
+;	{
+;		wallheight[pixx] = CalcHeight();
+;		if (lastside != -1) ScalePost ();
+;		lastside = true; lastintercept = xtile; lasttilehit = tilehit;
+;		postx = pixx; postwidth = 1;
+;		if (tilehit & 0x40)			// check for adjacent doors
+;		{
+;			ytile = yintercept>>TILESHIFT;
+;			wallpic = tilemap[xtile-xtilestep][ytile]&0x80 ? DOORWALL+3
+;				: vertwall[tilehit & ~0x40];
+;		}
+;		else
+;			wallpic = vertwall[tilehit];
+;		postsource = PM_GetPage(wallpic):texture;
+;	}
+;
+; HitHorizWall is the same with x and y exchanged, lastside 0, DOORWALL+2,
+; horizwall[], and the texture mirrored when ytilestep is NOT -1.
+;
+;============================
+
+PROC	HitVertWallA NEAR
+	mov	si,[WORD yintercept]
+	shr	si,4
+	and	si,0fc0h				; SI = texture
+	cmp	[xtilestep],-1
+	jne	@@tex
+	mov	ax,0fc0h
+	sub	ax,si
+	mov	si,ax
+	inc	[WORD xintercept+2]		; xintercept += TILEGLOBAL
+@@tex:
+	cmp	[lastside],1
+	jne	@@newwall
+	mov	ax,[xtile]
+	cwd							; lastintercept is a long
+	cmp	ax,[WORD lastintercept]
+	jne	@@newwall
+	cmp	dx,[WORD lastintercept+2]
+	jne	@@newwall
+	mov	ax,[tilehit]
+	cmp	ax,[lasttilehit]
+	jne	@@newwall
+	cmp	si,[WORD postsource]
+	jne	@@newcol
+	inc	[postwidth]				; wide scale
+	mov	bx,[pixx]
+	shl	bx,1
+	mov	ax,[wallheight+bx-2]
+	mov	[wallheight+bx],ax
+	ret
+@@newcol:
+	call	CalcHeight
+	mov	bx,[pixx]
+	shl	bx,1
+	mov	[wallheight+bx],ax
+	call	FarScalePost
+	mov	[WORD postsource],si
+	mov	[postwidth],1
+	mov	ax,[pixx]
+	mov	[postx],ax
+	ret
+@@newwall:
+	call	CalcHeight
+	mov	bx,[pixx]
+	shl	bx,1
+	mov	[wallheight+bx],ax
+	cmp	[lastside],-1
+	je	@@first
+	call	FarScalePost
+@@first:
+	mov	[lastside],1
+	mov	ax,[xtile]
+	cwd
+	mov	[WORD lastintercept],ax
+	mov	[WORD lastintercept+2],dx
+	mov	bx,[tilehit]
+	mov	[lasttilehit],bx
+	mov	ax,[pixx]
+	mov	[postx],ax
+	mov	[postwidth],1
+	test	bl,40h
+	jz	@@plain
+	mov	ax,[WORD yintercept+2]	; ytile = yintercept>>TILESHIFT
+	mov	[ytile],ax
+	mov	di,[xtile]
+	sub	di,[xtilestep]
+	shl	di,6
+	add	di,ax
+	test	[BYTE tilemap+di],80h
+	jz	@@notdoor
+	mov	ax,[PMSpriteStart]
+	sub	ax,8-3					; DOORWALL+3
+	jmp	@@getpage
+@@notdoor:
+	and	bx,NOT 40h
+@@plain:
+	shl	bx,1
+	mov	ax,[vertwall+bx]
+@@getpage:
+	push	ax
+	call	PM_GetPage
+	add	sp,2
+	mov	[WORD postsource+2],ax
+	mov	[WORD postsource],si
+	ret
+ENDP
+
+
+PROC	HitHorizWallA NEAR
+	mov	si,[WORD xintercept]
+	shr	si,4
+	and	si,0fc0h				; SI = texture
+	cmp	[ytilestep],-1
+	jne	@@mirror
+	inc	[WORD yintercept+2]		; yintercept += TILEGLOBAL
+	jmp	@@tex
+@@mirror:
+	mov	ax,0fc0h
+	sub	ax,si
+	mov	si,ax
+@@tex:
+	cmp	[lastside],0
+	jne	@@newwall
+	mov	ax,[ytile]
+	cwd
+	cmp	ax,[WORD lastintercept]
+	jne	@@newwall
+	cmp	dx,[WORD lastintercept+2]
+	jne	@@newwall
+	mov	ax,[tilehit]
+	cmp	ax,[lasttilehit]
+	jne	@@newwall
+	cmp	si,[WORD postsource]
+	jne	@@newcol
+	inc	[postwidth]				; wide scale
+	mov	bx,[pixx]
+	shl	bx,1
+	mov	ax,[wallheight+bx-2]
+	mov	[wallheight+bx],ax
+	ret
+@@newcol:
+	call	CalcHeight
+	mov	bx,[pixx]
+	shl	bx,1
+	mov	[wallheight+bx],ax
+	call	FarScalePost
+	mov	[WORD postsource],si
+	mov	[postwidth],1
+	mov	ax,[pixx]
+	mov	[postx],ax
+	ret
+@@newwall:
+	call	CalcHeight
+	mov	bx,[pixx]
+	shl	bx,1
+	mov	[wallheight+bx],ax
+	cmp	[lastside],-1
+	je	@@first
+	call	FarScalePost
+@@first:
+	mov	[lastside],0
+	mov	ax,[ytile]
+	cwd
+	mov	[WORD lastintercept],ax
+	mov	[WORD lastintercept+2],dx
+	mov	bx,[tilehit]
+	mov	[lasttilehit],bx
+	mov	ax,[pixx]
+	mov	[postx],ax
+	mov	[postwidth],1
+	test	bl,40h
+	jz	@@plain
+	mov	ax,[WORD xintercept+2]	; xtile = xintercept>>TILESHIFT
+	mov	[xtile],ax
+	mov	di,ax
+	shl	di,6
+	add	di,[ytile]
+	sub	di,[ytilestep]			; tilemap[xtile][ytile-ytilestep]
+	test	[BYTE tilemap+di],80h
+	jz	@@notdoor
+	mov	ax,[PMSpriteStart]
+	sub	ax,8-2					; DOORWALL+2
+	jmp	@@getpage
+@@notdoor:
+	and	bx,NOT 40h
+@@plain:
+	shl	bx,1
+	mov	ax,[horizwall+bx]
+@@getpage:
+	push	ax
+	call	PM_GetPage
+	add	sp,2
+	mov	[WORD postsource+2],ax
+	mov	[WORD postsource],si
+	ret
+ENDP
+
+
+;============================
+;
 ; AsmRefresh
 ;
 ;
@@ -787,7 +1023,7 @@ notvertdoor:
 	mov	[xtile],bx
 	mov	[WORD yintercept+2],dx
 	mov	[ytile],dx
-	call FAR HitVertWall
+	call	HitVertWallA			; NEAR, WL_DR_A.ASM (was the far C routine)
 	jmp nextpix
 
 
@@ -828,7 +1064,7 @@ hithoriz:
 	mov	[WORD yintercept],0
 	mov	[WORD yintercept+2],bp
 	mov	[ytile],bp
-	call FAR HitHorizWall
+	call	HitHorizWallA			; NEAR, WL_DR_A.ASM (was the far C routine)
 	jmp nextpix
 
 ;---------------------------------------------------------------------------

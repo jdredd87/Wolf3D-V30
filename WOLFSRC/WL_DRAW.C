@@ -454,70 +454,8 @@ void  FarScalePost (void)				// just so other files can call
 ====================
 */
 
-void HitVertWall (void)
-{
-	int			wallpic;
-	unsigned	texture;
-
-	texture = ((unsigned)yintercept>>4)&0xfc0;	// low word only: no long shift
-	if (xtilestep == -1)
-	{
-		texture = 0xfc0-texture;
-		xintercept += TILEGLOBAL;
-	}
-	// NEC V30 build (StevenC & Claude): CalcHeight is not called for a wide-scale
-	// column, whose height id computed and then overwrote with the one before;
-	// the two branches that keep it compute it first thing.
-
-	if (lastside==1 && lastintercept == xtile && lasttilehit == tilehit)
-	{
-		// in the same wall type as last time, so check for optimized draw
-		if (texture == (unsigned)postsource)
-		{
-		// wide scale
-			postwidth++;
-			wallheight[pixx] = wallheight[pixx-1];
-			return;
-		}
-		else
-		{
-			wallheight[pixx] = CalcHeight();
-			ScalePost ();
-			(unsigned)postsource = texture;
-			postwidth = 1;
-			postx = pixx;
-		}
-	}
-	else
-	{
-		wallheight[pixx] = CalcHeight();
-	// new wall
-		if (lastside != -1)				// if not the first scaled post
-			ScalePost ();
-
-		lastside = true;
-		lastintercept = xtile;
-
-		lasttilehit = tilehit;
-		postx = pixx;
-		postwidth = 1;
-
-		if (tilehit & 0x40)
-		{								// check for adjacent doors
-			ytile = yintercept>>TILESHIFT;
-			if ( tilemap[xtile-xtilestep][ytile]&0x80 )
-				wallpic = DOORWALL+3;
-			else
-				wallpic = vertwall[tilehit & ~0x40];
-		}
-		else
-			wallpic = vertwall[tilehit];
-
-		*( ((unsigned *)&postsource)+1) = (unsigned)PM_GetPage(wallpic);
-		(unsigned)postsource = texture;
-
-	}
-}
+// HitVertWall is HitVertWallA in WL_DR_A.ASM since the NEC V30 build (StevenC & Claude):
+// the same routine, called NEAR from AsmRefresh's ray loop.
 
 
 /*
@@ -531,69 +469,8 @@ void HitVertWall (void)
 ====================
 */
 
-void HitHorizWall (void)
-{
-	int			wallpic;
-	unsigned	texture;
-
-	texture = ((unsigned)xintercept>>4)&0xfc0;	// low word only: no long shift
-	if (ytilestep == -1)
-		yintercept += TILEGLOBAL;
-	else
-		texture = 0xfc0-texture;
-	// NEC V30 build (StevenC & Claude): CalcHeight is not called for a wide-scale
-	// column, whose height id computed and then overwrote with the one before;
-	// the two branches that keep it compute it first thing.
-
-	if (lastside==0 && lastintercept == ytile && lasttilehit == tilehit)
-	{
-		// in the same wall type as last time, so check for optimized draw
-		if (texture == (unsigned)postsource)
-		{
-		// wide scale
-			postwidth++;
-			wallheight[pixx] = wallheight[pixx-1];
-			return;
-		}
-		else
-		{
-			wallheight[pixx] = CalcHeight();
-			ScalePost ();
-			(unsigned)postsource = texture;
-			postwidth = 1;
-			postx = pixx;
-		}
-	}
-	else
-	{
-		wallheight[pixx] = CalcHeight();
-	// new wall
-		if (lastside != -1)				// if not the first scaled post
-			ScalePost ();
-
-		lastside = 0;
-		lastintercept = ytile;
-
-		lasttilehit = tilehit;
-		postx = pixx;
-		postwidth = 1;
-
-		if (tilehit & 0x40)
-		{								// check for adjacent doors
-			xtile = xintercept>>TILESHIFT;
-			if ( tilemap[xtile][ytile-ytilestep]&0x80 )
-				wallpic = DOORWALL+2;
-			else
-				wallpic = horizwall[tilehit & ~0x40];
-		}
-		else
-			wallpic = horizwall[tilehit];
-
-		*( ((unsigned *)&postsource)+1) = (unsigned)PM_GetPage(wallpic);
-		(unsigned)postsource = texture;
-	}
-
-}
+// HitHorizWall is HitHorizWallA in WL_DR_A.ASM since the NEC V30 build (StevenC & Claude):
+// the same routine, called NEAR from AsmRefresh's ray loop.
 
 //==========================================================================
 
