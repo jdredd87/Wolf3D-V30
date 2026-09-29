@@ -259,47 +259,100 @@ pos:
 done:
 ENDM
 
-PROC	CalcHeight
-PUBLIC	CalcHeight
+; The same, with the fraction's two words as immediates that AsmRefresh
+; patches in once a frame (at signlab+1 and fraclab+1: BE iw, BB iw).
+MACRO	FIXBYFRACI	signlab,fraclab
+	LOCAL	pos,done
+	mov	cx,dx
+signlab:
+	mov	si,1234h
+	or	cx,cx
+	jns	pos
+	neg	cx
+	neg	ax
+	sbb	cx,0
+	xor	si,8000h
+pos:
+fraclab:
+	mov	bx,1234h
+	mul	bx
+	mov	di,dx
+	mov	ax,cx
+	mul	bx
+	add	ax,di
+	adc	dx,0
+	test	si,8000h
+	jz	done
+	neg	dx
+	neg	ax
+	sbb	dx,0
+done:
+ENDM
+
+; NEC V30 build: viewx, viewy, viewcos, viewsin, mindist and heightnumerator
+; do not change during a frame, so they are immediates here, patched in by
+; AsmRefresh before it traces the first ray (the 1234h placeholders force
+; the imm16 encodings being patched; the offsets are checked in the
+; listing).  The asm hit routines call CalcHeightN; id's C door and pushwall
+; routines, which are only ever called from inside AsmRefresh, call the FAR
+; CalcHeight.
+
+PROC	CalcHeightN NEAR
 	push	si
 	push	di
 
 	mov	ax,[WORD xintercept]
 	mov	dx,[WORD xintercept+2]
-	sub	ax,[WORD viewx]
-	sbb	dx,[WORD viewx+2]
-	FIXBYFRAC	viewcos			; dx:ax = gxt
+chvxlo:
+	sub	ax,1234h				; viewx, low word (2D iw: at +1)
+chvxhi:
+	sbb	dx,1234h				; high word (81 DA iw: at +2)
+	FIXBYFRACI	chcossign,chcosfrac	; dx:ax = gxt
 	push	dx
 	push	ax
 
 	mov	ax,[WORD yintercept]
 	mov	dx,[WORD yintercept+2]
-	sub	ax,[WORD viewy]
-	sbb	dx,[WORD viewy+2]
-	FIXBYFRAC	viewsin			; dx:ax = gyt
+chvylo:
+	sub	ax,1234h				; viewy
+chvyhi:
+	sbb	dx,1234h
+	FIXBYFRACI	chsinsign,chsinfrac	; dx:ax = gyt
 
 	pop	bx
 	pop	cx					; cx:bx = gxt
 	sub	bx,ax
 	sbb	cx,dx				; cx:bx = nx = gxt-gyt
 
-	cmp	cx,[WORD mindist+2]	; if (nx < mindist) nx = mindist -- signed
+chmdhi:
+	cmp	cx,1234h			; if (nx < mindist) nx = mindist -- signed (81 F9 iw)
 	jg	@@distok
 	jl	@@clamp
-	cmp	bx,[WORD mindist]
+chmdlo:
+	cmp	bx,1234h			; (81 FB iw)
 	jae	@@distok
 @@clamp:
-	mov	bx,[WORD mindist]
-	mov	cx,[WORD mindist+2]
+chmdlo2:
+	mov	bx,1234h			; (BB iw)
+chmdhi2:
+	mov	cx,1234h			; (B9 iw)
 @@distok:
 	mov	bl,bh				; bx = bits 8-23 of nx, the word at nx+1
 	mov	bh,cl
-	mov	ax,[WORD heightnumerator]
-	mov	dx,[WORD heightnumerator+2]
+chhnlo:
+	mov	ax,1234h			; heightnumerator (B8 iw)
+chhnhi:
+	mov	dx,1234h			; (BA iw)
 	idiv	bx
 
 	pop	di
 	pop	si
+	ret
+ENDP
+
+PROC	CalcHeight
+PUBLIC	CalcHeight
+	call	CalcHeightN
 	retf
 ENDP
 
@@ -578,7 +631,7 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	[wallheight+bx],ax
 	ret
 @@newcol:
-	call	CalcHeight
+	call	CalcHeightN
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
@@ -589,7 +642,7 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	[postx],ax
 	ret
 @@newwall:
-	call	CalcHeight
+	call	CalcHeightN
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
@@ -669,7 +722,7 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	[wallheight+bx],ax
 	ret
 @@newcol:
-	call	CalcHeight
+	call	CalcHeightN
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
@@ -680,7 +733,7 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	[postx],ax
 	ret
 @@newwall:
-	call	CalcHeight
+	call	CalcHeightN
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
@@ -1064,6 +1117,33 @@ PUBLIC	AsmRefresh
 	mov	al,[vismark]			; NEC V30 build: this frame's mark, patched into
 	mov	[BYTE cs:vspotop+4],al		; the two spotvis stores (C6 84 disp16 imm8)
 	mov	[BYTE cs:hspotop+4],al
+
+	mov	ax,[WORD viewx]			; and CalcHeight's constants for this frame
+	mov	[WORD cs:chvxlo+1],ax
+	mov	ax,[WORD viewx+2]
+	mov	[WORD cs:chvxhi+2],ax
+	mov	ax,[WORD viewy]
+	mov	[WORD cs:chvylo+1],ax
+	mov	ax,[WORD viewy+2]
+	mov	[WORD cs:chvyhi+2],ax
+	mov	ax,[WORD viewcos+2]
+	mov	[WORD cs:chcossign+1],ax
+	mov	ax,[WORD viewcos]
+	mov	[WORD cs:chcosfrac+1],ax
+	mov	ax,[WORD viewsin+2]
+	mov	[WORD cs:chsinsign+1],ax
+	mov	ax,[WORD viewsin]
+	mov	[WORD cs:chsinfrac+1],ax
+	mov	ax,[WORD mindist+2]
+	mov	[WORD cs:chmdhi+2],ax
+	mov	[WORD cs:chmdhi2+1],ax
+	mov	ax,[WORD mindist]
+	mov	[WORD cs:chmdlo+2],ax
+	mov	[WORD cs:chmdlo2+1],ax
+	mov	ax,[WORD heightnumerator]
+	mov	[WORD cs:chhnlo+1],ax
+	mov	ax,[WORD heightnumerator+2]
+	mov	[WORD cs:chhnhi+1],ax
 
 	mov	[pixx],0
 ;---------------------------------------------------------------------------
