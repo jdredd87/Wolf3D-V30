@@ -780,7 +780,7 @@ entry90:
 	neg	ax
 	sbb	dx,0
 	mov	[WORD ystep],ax
-	mov	[WORD cs:vyadd+4],ax	; patch ystep into the core loop
+	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
 	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = -finetangent[angle]
 
@@ -824,7 +824,7 @@ not90:
 	neg	ax
 	sbb	dx,0
 	mov	[WORD ystep],ax
-	mov	[WORD cs:vyadd+4],ax	; patch ystep into the core loop
+	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
 	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = -finetangent[DEG180-1-angle]
 
@@ -864,7 +864,7 @@ not180:
 	mov	ax,[es:bx-DEG180*4]
 	mov	dx,[es:bx+2-DEG180*4]
 	mov	[WORD ystep],ax
-	mov	[WORD cs:vyadd+4],ax	; patch ystep into the core loop
+	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
 	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = finetangent[angle-DEG180]
 
@@ -904,7 +904,7 @@ entry360:
 	mov	ax,[es:bx]
 	mov	dx,[es:bx+2]
 	mov	[WORD ystep],ax
-	mov	[WORD cs:vyadd+4],ax	; patch ystep into the core loop
+	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
 	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = finetangent[DEG360-1-angle]
 
@@ -958,6 +958,7 @@ initvars:
 	mov	dx,[WORD yintercept+2]
 	mov	ax,SCREENSEG
 	mov	es,ax						; faster than mov es,[screenseg]
+	mov	ax,[WORD yintercept]		; NEC V30 build: AX = low word of yintercept
 
 
 ;---------------------------------------------------------------------------
@@ -972,6 +973,9 @@ initvars:
 ; BX : xtile
 ; CX : high word of xintercept
 ; DX : high word of yintercept
+; AX : low word of yintercept -- NEC V30 build, StevenC & Claude: kept in
+;      AX while tracing instead of added to in memory every vertical step;
+;      stored back first thing at every hit, reloaded at every continue
 ; SI : xspot (yinttile<<6)+xtile (index into tilemap and spotvis)
 ; DI : yspot (xinttile<<6)+ytile (index into tilemap and spotvis)
 ; BP : ytile
@@ -1004,7 +1008,7 @@ passvert:
 vxtileop:
 	inc	bx							; xtile+=xtilestep: INC BX or DEC BX
 vyadd:
-	add	[WORD yintercept],1234h		; yintercept += ystep (low word at +4)
+	add	ax,1234h					; yintercept += ystep (low word at +1, in AX)
 vyadc:
 	adc	dx,1234h					; (high word at +2)
 	mov	si,bx
@@ -1014,6 +1018,7 @@ vyadc:
 
 	EVEN
 hitvert:
+	mov	[WORD yintercept],ax		; the low word back to memory first
 	mov	al,[BYTE tilemap+si]		; tilehit = *((byte *)tilemap+xspot);
 	mov	[BYTE tilehit],al
 	or	al,al						; set flags
@@ -1057,6 +1062,7 @@ hxadc:
 
 	EVEN
 hithoriz:
+	mov	[WORD yintercept],ax		; the low word back to memory first
 	mov	al,[BYTE tilemap+di]		; tilehit = *((byte *)tilemap+yspot);
 	mov	[BYTE tilehit],al
 	or	al,al						; set flags
@@ -1123,6 +1129,7 @@ horizdoor:
 continuehoriz:
 	mov	bx,[xtile]					; reload register variables
 	mov	dx,[WORD yintercept+2]
+	mov	ax,[WORD yintercept]		; AX = low word again
 	jmp	passhoriz					; continue tracing
 ;
 ; the trace hit the door plane at pixel position AX, see if the door is
@@ -1225,6 +1232,7 @@ vertdoor:
 continuevert:
 	mov	bx,[xtile]					; reload register variables
 	mov	dx,[WORD yintercept+2]
+	mov	ax,[WORD yintercept]		; AX = low word again
 	jmp	passvert					; continue tracing
 ;
 ; the trace hit the door plane at pixel position AX, see if the door is
