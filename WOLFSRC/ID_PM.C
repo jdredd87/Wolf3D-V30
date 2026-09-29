@@ -10,6 +10,9 @@
 //	Main Mem specific variables
 	boolean			MainPresent;
 	memptr			MainMemPages[PMMaxMainMem];
+	int				mainOwner[PMMaxMainMem];	// NEC V30 build (StevenC & Claude): the
+										// page each main-memory block holds, or
+										// -1, for PML_FindLRU (ID_PM_A.ASM)
 	PMBlockAttr		MainMemUsed[PMMaxMainMem];
 	int				MainPagesAvail;
 
@@ -369,6 +372,7 @@ PM_CheckMainMem(void)
 		{
 			if (!MainMemPages[n])			// Yep, was the block purged?
 			{
+				mainOwner[n] = -1;
 				page->mainPage = -1;		// Yes, mark page as purged & unlocked
 				page->locked = pml_Unlocked;
 			}
@@ -754,6 +758,8 @@ PML_TransferPageSpace(int orig,int new)
 	// Steal the address
 	newpage->emsPage = origpage->emsPage;
 	newpage->mainPage = origpage->mainPage;
+	if (newpage->mainPage != -1)
+		mainOwner[newpage->mainPage] = new;
 
 	// Mark replaced page as purged
 	origpage->mainPage = origpage->emsPage = -1;
@@ -805,6 +811,7 @@ PML_GetAPageBuffer(int pagenum,boolean mainonly)
 		if (!addr)
 			Quit("PML_GetPageBuffer: Purged main block");
 		page->mainPage = n;
+		mainOwner[n] = pagenum;
 		MainPagesUsed++;
 	}
 	else
@@ -1118,6 +1125,8 @@ PM_Reset(void)
 	EMSPhysicalPage = 0;
 
 	MainPagesUsed = EMSPagesUsed = XMSPagesUsed = 0;
+	for (i = 0;i < PMMaxMainMem;i++)
+		mainOwner[i] = -1;
 
 	PMPanicMode = false;
 

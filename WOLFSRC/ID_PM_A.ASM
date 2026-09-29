@@ -24,11 +24,16 @@
 	IDEAL
 	MODEL	MEDIUM,C
 	P186
+	JUMPS
 
 DATASEG
 
 EXTRN	PMPages:DWORD				; PageListStruct far *
 EXTRN	ChunksInFile:WORD
+EXTRN	EMSPagesUsed:WORD
+EXTRN	mainOwner:WORD				; int[PMMaxMainMem]: the page in each main block
+PMMAXMAIN	=	100				; PMMaxMainMem (ID_PM.H)
+lrubase		dw	0
 
 ; PageListStruct: offset dd, length dw, xmsPage dw, locked dw (enum),
 ;                 emsPage dw, mainPage dw, lastHit dd -- 18 bytes
@@ -52,7 +57,50 @@ ARG		mainonly:WORD
 	mov	dx,07FFFh				; last = MAXLONG
 	mov	bx,-1					; lru
 	xor	si,si					; i
-	jcxz	@@done
+	or	cx,cx
+	jz	@@done				; (no JCXZ: too far now, and JUMPS cannot stretch it)
+;
+; NEC V30 build (step 45): with nothing in EMS -- XMS, the default -- the
+; candidates are exactly the pages in main memory, so walk its 100 slots
+; through mainOwner instead of all 663 pages.  The slots are not in page
+; order, so the minimum is taken over (lastHit, page number): the same
+; page id's scan finds first.  A page whose lastHit equals the starting
+; MAXLONG is never taken, as id's strict < never took it.
+;
+	cmp	[EMSPagesUsed],0
+	jne	@@scan
+	mov	[lrubase],di
+	mov	cx,PMMAXMAIN
+	xor	si,si
+	EVEN
+@@oloop:
+	mov	di,[mainOwner+si]
+	inc	di
+	jz	@@onext						; a free slot
+	imul	di,[mainOwner+si],P_SIZE
+	add	di,[lrubase]
+	cmp	[es:di+P_LASTHIT+2],dx
+	ja	@@onext
+	jb	@@ocand
+	cmp	[es:di+P_LASTHIT],ax
+	ja	@@onext
+	jb	@@ocand
+	cmp	bx,-1						; equal lastHit: the lower page wins
+	je	@@onext
+	cmp	[mainOwner+si],bx
+	jae	@@onext
+@@ocand:
+	cmp	[WORD es:di+P_LOCKED],0
+	jne	@@onext
+	mov	ax,[es:di+P_LASTHIT]
+	mov	dx,[es:di+P_LASTHIT+2]
+	mov	bx,[mainOwner+si]
+@@onext:
+	add	si,2
+	loop	@@oloop
+	jmp	@@done
+
+@@scan:
 	cmp	[mainonly],0
 	jne	@@mainloop
 

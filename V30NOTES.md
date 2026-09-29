@@ -137,8 +137,9 @@ byte for byte.
 | 40 | a ray in the last ray's quadrant goes straight to its body: `cmp`/`cmp`/`jmp` with the range and target patched in on a change of quadrant (the target's rel16 computed at run time: TASM's label arithmetic across `JUMPS`' passes came out 6 bytes off); id's test chain for the rest | 856 | 4.23 |
 | 41 | a byte less per tile step: `cmp [tilemap+si],bh` for id's `test ...,0FFh` (BH, xtile's high byte, is always 0); no screen ES loaded per ray (nothing reads it) | 853 | 4.25 |
 | 42 | `LDIV`'s normalisation shifts a whole byte first: `nx`, the usual divisor, has a high word under 256, which cost the bit loop 9 to 15 turns (now at most 7); `LDTEST` 100,473 pairs on the 486 and 20,473 on the V30, 0 mismatches | 851 | 4.26 |
-| 43 | the 700 Hz music interrupt's quiet tick, shorter: the effects counter counts down (`dec`/`jz`), `alTimeCount`'s high word carries only once in 65,536 ticks, and a quiet tick leaves inline with the common case (no BIOS chain) falling through; `MUSICLOG` hash unchanged (A92D) | **846** | **4.28** |
+| 43 | the 700 Hz music interrupt's quiet tick, shorter: the effects counter counts down (`dec`/`jz`), `alTimeCount`'s high word carries only once in 65,536 ticks, and a quiet tick leaves inline with the common case (no BIOS chain) falling through; `MUSICLOG` hash unchanged (A92D) | 846 | 4.28 |
 | 44 | *(tried, reverted)* the music timer interrupting only on ticks that need it -- PIT mode 2, each interval queued two ahead, quiet ticks counted in bulk, `MUSICLOG` still A92D: 49,365 interrupts became 10,961 and the speed did not move (847.5 vs 848.0 over four rounds). See below | -- | -- |
+| 45 | the page manager's LRU search walks the 100 main-memory slots (an owner table kept by the four places that change residency) instead of all 663 pages, whenever nothing is in EMS; minimum over (lastHit, page), so the same page as id's; page-miss counts unchanged | **839** | **4.32** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
