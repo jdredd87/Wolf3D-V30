@@ -1582,30 +1582,60 @@ entry90:
 	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_DECDX		; T += ytilestep
 @@q1:
+;
+; ystep = -finetangent[...]: stored, patched in, and times xpartialup for
+; yintercept
+;
+	mov	bx,cx
+	shl	bx,2
+	mov	ax,[es:bx]			; the tangent, positive
+	mov	di,[es:bx+2]
+	mov	si,ax
+	mov	dx,di
+	neg	dx
+	neg	si
+	sbb	dx,0				; dx:si = ystep
+	mov	[WORD ystep],si
+	mov	[WORD cs:vyadd+1],si
+	mov	[WORD ystep+2],dx
+	add	dx,64				; its high word plus xtilestep<<6
+	mov	[WORD cs:vyadc+2],dx
+	mov	bp,[xpartialup]
+	mul	bp
+	mov	si,dx
+	mov	ax,di
+	mul	bp
+	add	ax,si
+	adc	dx,0				; dx:ax = xpartialup * the tangent, >>16
+	mov	bx,[WORD viewy]		; viewy minus it: id added the negated product
+	mov	si,[WORD viewy+2]
+	sub	bx,ax
+	sbb	si,dx
+	mov	[WORD yintercept],bx
+	mov	[WORD yintercept+2],si
+;
+; xstep = finetangent[...], and times ypartialdown for xintercept
+;
 	mov	bx,DEG90-1
 	sub	bx,cx
 	shl	bx,2
 	mov	ax,[es:bx]
-	mov	dx,[es:bx+2]
+	mov	di,[es:bx+2]
 	mov	[WORD xstep],ax
-	mov	[WORD cs:hxadd+4],ax	; patch xstep into the core loop
-	mov	[WORD cs:hxadc+2],dx
-	mov	[WORD xstep+2],dx		; xstep = finetangent[DEG90-1-angle]
-	mov	bx,cx
-	shl	bx,2
-	mov	ax,[es:bx]
-	mov	dx,[es:bx+2]
-	neg	dx
-	neg	ax
-	sbb	dx,0
-	mov	[WORD ystep],ax
-	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
-	mov	[WORD ystep+2],dx		; ystep = -finetangent[angle]
-	add	dx,64					; its high word plus xtilestep<<6: see the loop
-	mov	[WORD cs:vyadc+2],dx
-
-	mov	bx,[xpartialup]			; xpartial = xpartialup
-	mov	bp,[ypartialdown]		; ypartial = ypartialdown
+	mov	[WORD cs:hxadd+4],ax
+	mov	[WORD xstep+2],di
+	mov	[WORD cs:hxadc+2],di
+	mov	bp,[ypartialdown]
+	mul	bp
+	mov	si,dx
+	mov	ax,di
+	mul	bp
+	add	ax,si
+	adc	dx,0
+	add	ax,[WORD viewx]
+	adc	dx,[WORD viewx+2]
+	mov	[WORD xintercept],ax
+	mov	cx,dx				; CX = xinttile
 	jmp	initvars
 
 not90:
@@ -1630,34 +1660,66 @@ not90:
 	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_DECDX
 @@q2:
-
-	mov	bx,cx
-	shl	bx,2
-	mov	ax,[es:bx-DEG90*4]
-	mov	dx,[es:bx+2-DEG90*4]
-	neg	dx
-	neg	ax
-	sbb	dx,0
-	mov	[WORD xstep],ax
-	mov	[WORD cs:hxadd+4],ax	; patch xstep into the core loop
-	mov	[WORD cs:hxadc+2],dx
-	mov	[WORD xstep+2],dx		; xstep = -finetangent[angle-DEG90]
+;
+; ystep = -finetangent[...]: stored, patched in, and times xpartialdown for
+; yintercept
+;
 	mov	bx,DEG180-1
 	sub	bx,cx
 	shl	bx,2
-	mov	ax,[es:bx]
-	mov	dx,[es:bx+2]
+	mov	ax,[es:bx]			; the tangent, positive
+	mov	di,[es:bx+2]
+	mov	si,ax
+	mov	dx,di
 	neg	dx
-	neg	ax
-	sbb	dx,0
-	mov	[WORD ystep],ax
-	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
-	mov	[WORD ystep+2],dx		; ystep = -finetangent[DEG180-1-angle]
-	sub	dx,64
+	neg	si
+	sbb	dx,0				; dx:si = ystep
+	mov	[WORD ystep],si
+	mov	[WORD cs:vyadd+1],si
+	mov	[WORD ystep+2],dx
+	sub	dx,64				; its high word plus xtilestep<<6
 	mov	[WORD cs:vyadc+2],dx
-
-	mov	bx,[xpartialdown]		; xpartial = xpartialdown
-	mov	bp,[ypartialdown]		; ypartial = ypartialdown
+	mov	bp,[xpartialdown]
+	mul	bp
+	mov	si,dx
+	mov	ax,di
+	mul	bp
+	add	ax,si
+	adc	dx,0				; dx:ax = xpartialdown * the tangent, >>16
+	mov	bx,[WORD viewy]		; viewy minus it: id added the negated product
+	mov	si,[WORD viewy+2]
+	sub	bx,ax
+	sbb	si,dx
+	mov	[WORD yintercept],bx
+	mov	[WORD yintercept+2],si
+;
+; xstep = -finetangent[...], and times ypartialdown for xintercept
+;
+	mov	bx,cx
+	shl	bx,2
+	mov	ax,[es:bx-DEG90*4]
+	mov	di,[es:bx+2-DEG90*4]
+	mov	si,ax
+	mov	dx,di
+	neg	dx
+	neg	si
+	sbb	dx,0				; dx:si = xstep
+	mov	[WORD xstep],si
+	mov	[WORD cs:hxadd+4],si
+	mov	[WORD xstep+2],dx
+	mov	[WORD cs:hxadc+2],dx
+	mov	bp,[ypartialdown]
+	mul	bp
+	mov	si,dx
+	mov	ax,di
+	mul	bp
+	add	ax,si
+	adc	dx,0
+	mov	bx,[WORD viewx]
+	mov	cx,[WORD viewx+2]
+	sub	bx,ax
+	sbb	cx,dx
+	mov	[WORD xintercept],bx	; CX = xinttile
 	jmp	initvars
 
 not180:
@@ -1681,33 +1743,61 @@ not180:
 	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_INCDX
 @@q3:
-
+;
+; ystep = finetangent[...]: stored, patched in, and times xpartialdown for
+; yintercept
+;
+	mov	bx,cx
+	shl	bx,2
+	mov	ax,[es:bx-DEG180*4]			; the tangent, positive
+	mov	di,[es:bx+2-DEG180*4]
+	mov	[WORD ystep],ax
+	mov	[WORD cs:vyadd+1],ax
+	mov	[WORD ystep+2],di
+	mov	dx,di
+	sub	dx,64				; its high word plus xtilestep<<6
+	mov	[WORD cs:vyadc+2],dx
+	mov	bp,[xpartialdown]
+	mul	bp
+	mov	si,dx
+	mov	ax,di
+	mul	bp
+	add	ax,si
+	adc	dx,0				; dx:ax = xpartialdown * the tangent, >>16
+	add	ax,[WORD viewy]
+	adc	dx,[WORD viewy+2]
+	mov	[WORD yintercept],ax
+	mov	[WORD yintercept+2],dx
+;
+; xstep = -finetangent[...], and times ypartialup for xintercept
+;
 	mov	bx,DEG270-1
 	sub	bx,cx
 	shl	bx,2
 	mov	ax,[es:bx]
-	mov	dx,[es:bx+2]
+	mov	di,[es:bx+2]
+	mov	si,ax
+	mov	dx,di
 	neg	dx
-	neg	ax
-	sbb	dx,0
-	mov	[WORD xstep],ax
-	mov	[WORD cs:hxadd+4],ax	; patch xstep into the core loop
+	neg	si
+	sbb	dx,0				; dx:si = xstep
+	mov	[WORD xstep],si
+	mov	[WORD cs:hxadd+4],si
+	mov	[WORD xstep+2],dx
 	mov	[WORD cs:hxadc+2],dx
-	mov	[WORD xstep+2],dx		; xstep = -finetangent[DEG270-1-angle]
-	mov	bx,cx
-	shl	bx,2
-	mov	ax,[es:bx-DEG180*4]
-	mov	dx,[es:bx+2-DEG180*4]
-	mov	[WORD ystep],ax
-	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
-	mov	[WORD ystep+2],dx		; ystep = finetangent[angle-DEG180]
-	sub	dx,64
-	mov	[WORD cs:vyadc+2],dx
-
-	mov	bx,[xpartialdown]		; xpartial = xpartialdown
-	mov	bp,[ypartialup]			; ypartial = ypartialup
+	mov	bp,[ypartialup]
+	mul	bp
+	mov	si,dx
+	mov	ax,di
+	mul	bp
+	add	ax,si
+	adc	dx,0
+	mov	bx,[WORD viewx]
+	mov	cx,[WORD viewx+2]
+	sub	bx,ax
+	sbb	cx,dx
+	mov	[WORD xintercept],bx	; CX = xinttile
 	jmp	initvars
-
 
 not270:
 	cmp	cx,DEG360
@@ -1732,30 +1822,55 @@ entry360:
 	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_INCDX
 @@q4:
-
-	mov	bx,cx
-	shl	bx,2
-	mov	ax,[es:bx-DEG270*4]
-	mov	dx,[es:bx+2-DEG270*4]
-	mov	[WORD xstep],ax
-	mov	[WORD cs:hxadd+4],ax	; patch xstep into the core loop
-	mov	[WORD cs:hxadc+2],dx
-	mov	[WORD xstep+2],dx		; xstep = finetangent[angle-DEG270]
+;
+; ystep = finetangent[...]: stored, patched in, and times xpartialup for
+; yintercept
+;
 	mov	bx,DEG360-1
 	sub	bx,cx
 	shl	bx,2
-	mov	ax,[es:bx]
-	mov	dx,[es:bx+2]
+	mov	ax,[es:bx]			; the tangent, positive
+	mov	di,[es:bx+2]
 	mov	[WORD ystep],ax
-	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
-	mov	[WORD ystep+2],dx		; ystep = finetangent[DEG360-1-angle]
-	add	dx,64
+	mov	[WORD cs:vyadd+1],ax
+	mov	[WORD ystep+2],di
+	mov	dx,di
+	add	dx,64				; its high word plus xtilestep<<6
 	mov	[WORD cs:vyadc+2],dx
-
-	mov	bx,[xpartialup]			; xpartial = xpartialup
-	mov	bp,[ypartialup]			; ypartial = ypartialup
+	mov	bp,[xpartialup]
+	mul	bp
+	mov	si,dx
+	mov	ax,di
+	mul	bp
+	add	ax,si
+	adc	dx,0				; dx:ax = xpartialup * the tangent, >>16
+	add	ax,[WORD viewy]
+	adc	dx,[WORD viewy+2]
+	mov	[WORD yintercept],ax
+	mov	[WORD yintercept+2],dx
+;
+; xstep = finetangent[...], and times ypartialup for xintercept
+;
+	mov	bx,cx
+	shl	bx,2
+	mov	ax,[es:bx-DEG270*4]
+	mov	di,[es:bx+2-DEG270*4]
+	mov	[WORD xstep],ax
+	mov	[WORD cs:hxadd+4],ax
+	mov	[WORD xstep+2],di
+	mov	[WORD cs:hxadc+2],di
+	mov	bp,[ypartialup]
+	mul	bp
+	mov	si,dx
+	mov	ax,di
+	mul	bp
+	add	ax,si
+	adc	dx,0
+	add	ax,[WORD viewx]
+	adc	dx,[WORD viewx+2]
+	mov	[WORD xintercept],ax
+	mov	cx,dx				; CX = xinttile
 	jmp	initvars
-
 
 not360:
 ;----------
@@ -1770,88 +1885,29 @@ not360:
 ;
 ; initialise variables for intersection testing
 ;
+; NEC V30 build, StevenC & Claude: each quadrant above knows the signs of
+; its steps, so it multiplies the positive tangent and adds the product to
+; viewy/viewx or subtracts it -- the same 32-bit result as id's, which
+; negated the tangent, tested its sign here, negated it back, multiplied
+; and negated the product.  The partial is in a register for both MULs,
+; and xtile<<6 is made once for xspot and T.  In: yintercept and
+; xintercept's low word stored, CX = xinttile.
+;
 ;---------------------------------------------------------------------------
 initvars:
-;	xpartialbyystep, inlined (NEC V30 build: one call and return fewer a ray)
-	mov	ax,[WORD ystep]
-	mov	cx,[WORD ystep+2]
-	or	cx,cx
-	jns	@@ixpos
-	neg	cx
-	neg	ax
-	sbb	cx,0
-	mul	bx
-	mov	di,dx
-	mov	ax,cx
-	mul	bx
-	add	ax,di
-	adc	dx,0
-	neg	dx
-	neg	ax
-	sbb	dx,0
-	jmp	@@ixdone
-@@ixpos:
-	mul	bx
-	mov	di,dx
-	mov	ax,cx
-	mul	bx
-	add	ax,di
-	adc	dx,0
-@@ixdone:
-	add	ax,[WORD viewy]
-	adc	dx,[WORD viewy+2]
-	mov	[WORD yintercept],ax
-	mov	[WORD yintercept+2],dx
-
 	mov	si,[focaltx]
 	add	si,[xtilestep]
 	mov	[xtile],si					; xtile = focaltx+xtilestep
+	mov	bx,si
 	shl	si,6
-	add	si,dx						; xspot = (xtile<<6) + yinttile
-
-
-;	ypartialbyxstep, inlined
-	mov	ax,[WORD xstep]
-	mov	cx,[WORD xstep+2]
-	or	cx,cx
-	jns	@@iypos
-	neg	cx
-	neg	ax
-	sbb	cx,0
-	mul	bp
-	mov	di,dx
-	mov	ax,cx
-	mul	bp
-	add	ax,di
-	adc	dx,0
-	neg	dx
-	neg	ax
-	sbb	dx,0
-	jmp	@@iydone
-@@iypos:
-	mul	bp
-	mov	di,dx
-	mov	ax,cx
-	mul	bp
-	add	ax,di
-	adc	dx,0
-@@iydone:
-	add	ax,[WORD viewx]
-	adc	dx,[WORD viewx+2]
-	mov	[WORD xintercept],ax
-	mov	cx,dx
-
-	mov	bx,[focalty]
-	add	bx,[ytilestep]
-	mov	bp,bx						; ytile = focalty+ytilestep
-	mov	di,dx
-	shl	di,6
-	add	di,bx						; yspot = (xinttile<<6) + ytile
-
-	mov	bx,[xtile]
-	mov	dx,bx
-	shl	dx,6
+	mov	dx,si
+	add	si,[WORD yintercept+2]		; xspot = (xtile<<6) + yinttile
+	mov	bp,[focalty]
+	add	bp,[ytilestep]				; ytile = focalty+ytilestep
 	add	dx,bp						; T = (xtile<<6)+ytile
+	mov	di,cx
+	shl	di,6
+	add	di,bp						; yspot = (xinttile<<6) + ytile
 	mov	ax,SCREENSEG
 	mov	es,ax						; faster than mov es,[screenseg]
 	mov	ax,[WORD yintercept]		; NEC V30 build: AX = low word of yintercept

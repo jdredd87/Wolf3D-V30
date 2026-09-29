@@ -130,8 +130,9 @@ byte for byte.
 | 35 | the actor loop in asm: an actor asleep outside the player's areas is skipped without a call | -14 | |
 | - | steps 32-35 together, rebuilt without 31 | 905 | 4.00 |
 | - | the `VGAClearScreen` fix (CH cleared; see the findings) -- the new baseline | 903 | 4.01 |
-| 36 | `CalcHeight` for the ray loop's wall hits: a vertical wall's columns share `xintercept`, so `CalcHeightV` keeps `gxt` against its high word (`CalcHeightH` keeps `gyt`), each with its own patched immediates -- step 31's idea, narrowed to the product that repeats | **892** | **4.06** |
-
+| 36 | `CalcHeight` for the ray loop's wall hits: a vertical wall's columns share `xintercept`, so `CalcHeightV` keeps `gxt` against its high word (`CalcHeightH` keeps `gyt`), each with its own patched immediates -- step 31's idea, narrowed to the product that repeats | 892 | 4.06 |
+
+| 37 | per-ray setup specialised per quadrant: each block multiplies the positive tangent and adds or subtracts the product (id negated the tangent, tested the sign, negated back, multiplied, negated the product); the partial in a register; `xtile<<6` once for `xspot` and `T` | **879** | **4.12** |
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
 loop (`TIMEDEMO PRELOAD NOEMS`, all four demos, 5,386 frames) ran at 3.88 fps
