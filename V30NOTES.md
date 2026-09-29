@@ -135,7 +135,8 @@ byte for byte.
 | 38 | no `JUMPS`-expanded branches on the common paths: TASM made each out-of-range `jb`/`jle`/`ja`/`jge` a jump the other way over a `JMP`, so `ScaleShape`'s column walk took two jumps a column and `PlaceActors` one per unseen actor; short hops to a nearby `JMP` instead | 870 | 4.16 |
 | 39 | no per-ray `xstep`/`ystep` stores: the door and pushwall paths read the values from the loop's own patch sites (`ystep`'s high word less `xtilestep<<6`, kept in `yadj`); id's two dead multiply helpers removed | 863 | 4.20 |
 | 40 | a ray in the last ray's quadrant goes straight to its body: `cmp`/`cmp`/`jmp` with the range and target patched in on a change of quadrant (the target's rel16 computed at run time: TASM's label arithmetic across `JUMPS`' passes came out 6 bytes off); id's test chain for the rest | 856 | 4.23 |
-| 41 | a byte less per tile step: `cmp [tilemap+si],bh` for id's `test ...,0FFh` (BH, xtile's high byte, is always 0); no screen ES loaded per ray (nothing reads it) | **853** | **4.25** |
+| 41 | a byte less per tile step: `cmp [tilemap+si],bh` for id's `test ...,0FFh` (BH, xtile's high byte, is always 0); no screen ES loaded per ray (nothing reads it) | 853 | 4.25 |
+| 42 | `LDIV`'s normalisation shifts a whole byte first: `nx`, the usual divisor, has a high word under 256, which cost the bit loop 9 to 15 turns (now at most 7); `LDTEST` 100,473 pairs on the 486 and 20,473 on the V30, 0 mismatches | **851** | **4.26** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract

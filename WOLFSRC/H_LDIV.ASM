@@ -191,6 +191,13 @@ big@ldiv:
 	push    cx                      ; v high
 	push    bx                      ; v low
 	xor     si,si                   ; n = leading zeros of v's high word
+	or      ch,ch                   ; NEC V30 build: a whole byte first.  The
+	jnz     norm@ldiv               ; usual divisor is nx, a distance in the
+	mov     ch,cl                   ; 64-tile map, whose high word is under
+	mov     cl,bh                   ; 256: the bit loop below took 9 to 15
+	mov     bh,bl                   ; turns for it, and now takes at most 7.
+	xor     bl,bl                   ; The same shift, so the same result
+	mov     si,8
 norm@ldiv:
 	or      cx,cx
 	js      normed@ldiv

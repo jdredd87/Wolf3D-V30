@@ -106,6 +106,7 @@ int main (int argc, char **argv)
 		check (rnd32 (), rnd32 () & 0xFFFFUL);				/* small divisor */
 		check (rnd32 () >> (rnd32 () & 31), rnd32 ());		/* any sizes */
 		check (rnd32 () & 0x7FFFFFFFUL, 0x5800UL + (rnd32 () & 0x7FFFFFFUL));	/* ny*scale/nx */
+		check (rnd32 (), 0x10000UL + (rnd32 () & 0xFEFFFFUL));	/* high word 1-255: step 42's byte shift */
 	}
 
 	printf ("%ld operand pairs, 4 operations each: %ld mismatches\n", checked, failures);
