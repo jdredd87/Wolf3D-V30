@@ -104,7 +104,17 @@ byte for byte.
 | 11 | `HitVertWall`/`HitHorizWall` in asm, NEAR from the ray loop | 1105 | 3.27 |
 | 12 | `SimpleScaleShape` (the weapon) in asm -- within noise | 1104 | 3.28 |
 | 13 | `alOut` in asm, OPL2 waits calibrated in real time | 1099 | 3.29 |
-| 14 | music ISR skips its full service when nothing is due | **1081** | **3.35** |
+| 14 | music ISR skips its full service when nothing is due | 1081 | 3.35 |
+| 15 | compiled scalers store without a segment prefix (screen in DS, texture in ES) | 1062 | 3.41 |
+| 16 | ray loop keeps `yintercept`'s low word in AX (no read-modify-write per step) | 1055 | 3.43 |
+| 17 | FizzleFade through the VGA latches, `y` tested first -- fizzle 3.7 -> 3.2 s, play unchanged | 1055 | 3.43 |
+| 18 | *(tried, reverted)* branchless fizzle step -- slower: see below | -- | -- |
+| 19 | every communal word-aligned; `spotvis` carries a frame stamp, cleared every 255 frames | **1050** | **3.45** |
+
+Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
+1183 ticks, **2.39 -> 3.07 fps, 28% faster**. The whole attract loop
+(`TIMEDEMO PRELOAD NOEMS`, all four demos, 5,386 frames) runs at **3.88 fps**;
+demo 0 alone went from 2.75 fps at the start to 3.59.
 
 ## Findings worth keeping
 
@@ -139,6 +149,32 @@ draws entirely in fixed point.
 converting to assembly pays where the C keeps loop state in memory (steps 2,
 7, 8), not where it is merely C.
 
+**Data alignment matters on the V30, and Borland does not give it.** A word
+at an odd address costs two bus cycles on its 16-bit bus. Each module's
+`_DATA` and `_BSS` start even, but with `-Fc` every uninitialized global is a
+communal, and TLINK packs all 40 KB of them with *no* alignment -- one
+odd-sized communal shifts every one after it. Found the hard way: a one-byte
+global added in step 19 put `actorat` (and all that followed) on odd
+addresses and cost **3%**, with the pictures identical. id's own byte globals
+had already left 113 communals odd, including `ScaleLine`'s. `aligncheck.py`
+reads the map and lists them; after step 19 there are none. **Declare any new
+global as a word, or initialize it.**
+
+**A taken jump is expensive, but so is fetching code.** The V30 flushes its
+6-byte prefetch queue on every taken jump, which is why the fizzle's reject
+path was slow. But replacing the sequence step's 50/50 `JNC` with a
+branchless six-instruction `SBB`/`AND`/`XOR` (step 18) made it *slower*: on
+a 16-bit bus the extra instruction bytes cost more than half a flushed queue.
+Measure both ways.
+
+**What is left of the music interrupt's cost: ~4%** (`NOMUSIC` 1007 vs 1050
+play ticks). The fast path is ~450 clocks, 700 times a second: interrupt
+entry and `IRET`, id's common prologue (DS through a CS override), four
+memory counters, the end-of-interrupt `OUT` (~4 us here). A countdown of
+"ticks until anything is due" could halve it, but id's C music routines write
+the sequencer state with interrupts off and would have to invalidate it --
+a glitch at a song's start if one were missed. Parked, not forgotten.
+
 ## Verified tools
 
 * `ldivmodel.py` -- instruction-exact model of step 4's divide, 1.2 million
@@ -158,11 +194,15 @@ wall and sprite scalers 24%, `ScaleLine` 7.9%, `ScalePost` 2.9%,
 
 ## Next
 
-1. The compiled scalers (24%): swap the segments so the store, the more
-   frequent operation on near walls, loses its prefix byte -- needs
-   `ScalePost`, `ScaleLine` and the weapon changed together.
-2. The ray loop: keep `xtile*64` in AX so the vertical loop loses its shift.
-3. The music ISR's remaining cost: its fast path still enters and leaves
-   through id's full prologue.
-4. FizzleFade: skip off-screen steps faster, and copy through the VGA latches.
-5. `VGAClearScreen` overdraw, `ScaleLine`'s per-post overhead.
+What is left is spread thin: every candidate is worth roughly 0.5-1%.
+
+1. `ScaleLine`'s per-post overhead (~9%): the RETF patch, two segment
+   switches and a far call for every post of every sprite column.
+2. The music interrupt's fast path (~4% in all): a countdown, with id's C
+   music routines invalidating it.
+3. id's per-ray multiply helpers (3%): inline them into `initvars`.
+4. `VGAClearScreen` overdraw (~3%): fill only rows no wall covers -- needs the
+   walls cast before they are drawn, and the page manager kept from evicting
+   a wall's texture in between.
+5. `EVEN`-align the hot loops in the new assembly (taken jumps to odd
+   addresses cost a bus cycle).
