@@ -447,70 +447,7 @@ static	long		longtemp;
 =======================
 */
 
-void SimpleScaleShape (int xcenter, int shapenum, unsigned height)
-{
-	t_compshape	_seg *shape;
-	t_compscale _seg *comptable;
-	unsigned	scale,srcx,stopx,tempx;
-	int			t;
-	unsigned	far *cmdptr;
-	boolean		leftvis,rightvis;
-
-
-	shape = PM_GetSpritePage (shapenum);
-
-	scale = height>>1;
-	comptable = scaledirectory[scale];
-
-	*(((unsigned *)&linescale)+1)=(unsigned)comptable;	// seg of far call
-	*(((unsigned *)&linecmds)+1)=(unsigned)shape;		// seg of shape
-
-//
-// scale to the left (from pixel 31 to shape->leftpix)
-//
-	srcx = 32;
-	slinex = xcenter;
-	stopx = shape->leftpix;
-	cmdptr = &shape->dataofs[31-stopx];
-
-	while ( --srcx >=stopx )
-	{
-		(unsigned)linecmds = *cmdptr--;
-		if ( !(slinewidth = comptable->width[srcx]) )
-			continue;
-
-		slinex -= slinewidth;
-		ScaleLine ();
-	}
-
-
-//
-// scale to the right
-//
-	slinex = xcenter;
-	stopx = shape->rightpix;
-	if (shape->leftpix<31)
-	{
-		srcx = 31;
-		cmdptr = &shape->dataofs[32-shape->leftpix];
-	}
-	else
-	{
-		srcx = shape->leftpix-1;
-		cmdptr = &shape->dataofs[0];
-	}
-	slinewidth = 0;
-
-	while ( ++srcx <= stopx )
-	{
-		(unsigned)linecmds = *cmdptr++;
-		if ( !(slinewidth = comptable->width[srcx]) )
-			continue;
-
-		ScaleLine ();
-		slinex+=slinewidth;
-	}
-}
+// SimpleScaleShape is in WL_SC_A.ASM since the NEC V30 build (StevenC & Claude).
 
 
 

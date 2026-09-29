@@ -330,6 +330,105 @@ PUBLIC	ScaleShape
 	ret
 ENDP
 
+
+;============================
+;
+; SimpleScaleShape (int xcenter, int shapenum, unsigned height)
+;
+; NEC V30 build, StevenC & Claude: WL_SCALE.C's unclipped scaler, used for
+; the player's weapon every frame.  The same column walk as ScaleShape
+; without the wall tests; note the right half moves slinex AFTER drawing,
+; and scale is height>>1 with no range check -- both as in the C:
+;
+;	srcx = 32; slinex = xcenter; stopx = shape->leftpix;
+;	while ( --srcx >=stopx )
+;		if ( (slinewidth = comptable->width[srcx]) )
+;			slinex -= slinewidth, ScaleLine ();
+;	slinex = xcenter; stopx = shape->rightpix;
+;	srcx = shape->leftpix<31 ? 31 : shape->leftpix-1;
+;	slinewidth = 0;
+;	while ( ++srcx <= stopx )
+;		if ( (slinewidth = comptable->width[srcx]) )
+;			ScaleLine (), slinex+=slinewidth;
+;
+;============================
+
+PROC	SimpleScaleShape FAR
+PUBLIC	SimpleScaleShape
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+
+	mov	ax,[PMSpriteStart]
+	add	ax,[bp+8]				; shapenum
+	push	ax
+	call	PM_GetPage
+	add	sp,2
+	mov	[shapeseg],ax
+	mov	[WORD linecmds+2],ax
+
+	mov	di,[bp+6]				; slinex = xcenter
+	mov	[xcent],di
+	mov	bx,[bp+10]
+	shr	bx,1					; scale = height>>1
+	shl	bx,1
+	mov	ax,[scaledirectory+bx]
+	mov	[WORD linescale+2],ax
+	mov	es,[shapeseg]
+	mov	cx,[es:0]				; stopx = shape->leftpix
+	mov	[leftpix],cx
+	mov	bx,[es:2]
+	mov	[rightpix],bx
+	mov	es,ax					; ES = comptable
+
+	mov	si,32
+@@lloop:
+	dec	si
+	cmp	si,cx
+	jb	@@lend					; unsigned
+	mov	bx,si
+	shl	bx,1
+	mov	dx,[es:bx+WIDTHS]
+	or	dx,dx
+	jz	@@lloop
+	sub	di,dx					; slinex -= slinewidth
+	call	CallScaleLine
+	jmp	@@lloop
+@@lend:
+
+	mov	di,[xcent]
+	mov	cx,[rightpix]
+	mov	si,31
+	mov	ax,[leftpix]
+	cmp	ax,31
+	jb	@@rstart
+	mov	si,ax
+	dec	si
+@@rstart:
+	xor	dx,dx					; slinewidth = 0
+@@rloop:
+	inc	si
+	cmp	si,cx
+	ja	@@done
+	mov	bx,si
+	shl	bx,1
+	mov	dx,[es:bx+WIDTHS]
+	or	dx,dx
+	jz	@@rloop
+	call	CallScaleLine
+	add	di,dx					; slinex += slinewidth, after drawing
+	jmp	@@rloop
+
+@@done:
+	mov	[slinex],di
+	mov	[slinewidth],dx
+	pop	di
+	pop	si
+	pop	bp
+	ret
+ENDP
+
 ENDS
 
 	END

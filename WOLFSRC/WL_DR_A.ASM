@@ -523,6 +523,7 @@ ENDP
 ;============================
 
 PROC	HitVertWallA NEAR
+PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	si,[WORD yintercept]
 	shr	si,4
 	and	si,0fc0h				; SI = texture
@@ -611,6 +612,7 @@ ENDP
 
 
 PROC	HitHorizWallA NEAR
+PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	si,[WORD xintercept]
 	shr	si,4
 	and	si,0fc0h				; SI = texture
