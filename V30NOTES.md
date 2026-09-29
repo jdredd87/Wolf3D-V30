@@ -118,7 +118,8 @@ byte for byte.
 | 24 | `PlaceActors`/`PlaceStatics` laid out so an unseen object takes no jump; `vismark` an immediate | 1005 | 3.60 |
 | 25 | music ISR counts down the ticks until the next event (`sqQuiet`), cleared by every C change to the sequencer | 1002 | 3.61 |
 | 26 | `objtype` word-aligned (pad bytes after `flags` and `areanumber`) -- only 0.2%: game logic reads actors less than expected | 1000 | 3.62 |
-| 27 | `CalcHeight`'s per-frame constants (`viewx`/`viewy`, `viewcos`/`viewsin`, `mindist`, `heightnumerator`) patched in as immediates by `AsmRefresh`; NEAR entry for the asm hit routines | **988** | **3.66** |
+| 27 | `CalcHeight`'s per-frame constants (`viewx`/`viewy`, `viewcos`/`viewsin`, `mindist`, `heightnumerator`) patched in as immediates by `AsmRefresh`; NEAR entry for the asm hit routines | 988 | 3.66 |
+| 28 | `ScaleLine` and the glue that called it merged into one asm routine, `ScaleSpan`: the span stays in registers, one table lookup picks the one-byte case, the post loop tests at the bottom | **957** | **3.78** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -127,6 +128,13 @@ after step 19 and **4.05 fps after step 24**; demo 0 alone went from 4,575
 ticks (2.75 fps) at the start to **3,328 (3.78 fps), 1.37x**.
 
 ## Findings worth keeping
+
+**`ScaleLine`'s `OUT`s cost nothing measurable.** Replacing all six with `NOP`s
+(same size, wrong picture) timed identically, 988 against 989 play ticks.
+The VGA card's ports are fast; the ~4 us `IN` measured for the OPL2 is the
+PicoMEM's emulated port, not this bus. What the profile charged to
+`ScaleLine` (10.3%, with the non-public `CallScaleLine` folded in) was its
+per-span setup and per-post bookkeeping, which step 28 cut.
 
 **Memory: use `NOEMS`.** With EMS the page manager remaps its 4-slot frame
 through INT 67h nine times a frame, ~1.3 ms each on this card. With XMS it

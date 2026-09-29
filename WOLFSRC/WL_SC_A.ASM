@@ -17,9 +17,8 @@
 ; srcx but computed when it is needed: in both halves it is
 ; dataofs[srcx-leftpix].
 ;
-; It sits in WL_SCALE_TEXT, WL_SCALE.C's own code segment, because
-; ScaleLine is a NEAR function there.  ScaleLine keeps SI, DI and BP and
-; returns with DS = SS; it destroys AX, BX, CX, DX and ES.
+; It sits in WL_SCALE_TEXT, WL_SCALE.C's own code segment.  ScaleSpan, below,
+; is WL_SCALE.C's ScaleLine and the glue that called it, in one routine.
 ;
 ; Registers in the loops:
 ;	SI	srcx			DI	slinex			DX	slinewidth
@@ -41,6 +40,13 @@ EXTRN	slinex:WORD
 EXTRN	slinewidth:WORD
 EXTRN	linecmds:DWORD
 EXTRN	linescale:DWORD
+EXTRN	bufferofs:WORD
+EXTRN	mapmasks1:BYTE
+EXTRN	mapmasks2:BYTE
+EXTRN	mapmasks3:BYTE
+EXTRN	mask1:BYTE
+EXTRN	mask2:BYTE
+EXTRN	mask3:BYTE
 
 shapeseg	dw	?					; segment of this shape's page
 leftpix		dw	?
@@ -49,41 +55,181 @@ xcent		dw	?
 
 WIDTHS		=	130					; offset of t_compscale.width[]
 DATAOFS		=	4					; offset of t_compshape.dataofs[]
+SC_INDEX	=	3C4h
+SCREENSEG	=	0A000h
+OP_RETF		=	0CBh
 
 
 SEGMENT	WL_SCALE_TEXT WORD PUBLIC 'CODE'	; WORD, so EVEN below is a real even address
 	ASSUME	cs:WL_SCALE_TEXT, ds:DGROUP
 
-EXTRN	ScaleLine:NEAR				; WL_SCALE.C, same segment
 EXTRN	PM_GetPage:FAR
 
 
 ;============================
 ;
-; CallScaleLine
+; ScaleSpan
 ;
-; Hand ScaleLine the current span: slinex, slinewidth and the column's
-; command list, dataofs[srcx-leftpix] in the shape.
+; Draw one span of a shape: the source column srcx (SI) scaled into the
+; screen columns slinex (DI) to slinex+slinewidth-1 (DX), through the
+; compiled scaler whose segment is in ES.  Keeps every register but AX and
+; BX, and returns with DS = SS.
+;
+; This was WL_SCALE.C's ScaleLine and CallScaleLine, which handed it the
+; span through slinex, slinewidth and linecmds -- two stores and four reloads
+; and a C frame per span.  Here the span stays in registers, the one-byte
+; case (every span of a distant sprite) is decided by one table lookup, and
+; the post loop tests at the bottom.  The work is ScaleLine's exactly: the
+; same masks from the same tables, the same RETF patch and the same calls.
+;
+; While a scaler runs, the shape is in ES and the screen in DS (see
+; BuildCompScale); the scalers change only AL.
+;
+;	CX	the scaler's segment	BP	the column's post list
+;	DX	SCREENSEG (one byte), the map mask port (two and three)
+;	AH	the byte the RETF replaced
 ;
 ;============================
 
-PROC	CallScaleLine NEAR
-	mov	[slinex],di
-	mov	[slinewidth],dx
+PROC	ScaleSpan NEAR
+	push	si
+	push	di
+	push	dx
+	push	cx
+	push	bp
+
+	mov	cx,es					; CX = the scaler
 	mov	bx,si
 	sub	bx,[leftpix]
 	shl	bx,1
-	push	es
-	mov	es,[shapeseg]
-	mov	ax,[es:bx+DATAOFS]
-	mov	[WORD linecmds],ax
-	push	cx
-	push	dx
-	call	ScaleLine
-	pop	dx
+	mov	es,[shapeseg]			; ES = the shape
+	mov	bp,[es:bx+DATAOFS]		; its post list for srcx
+
+	mov	bx,di
+	shr	di,2					; X in bytes
+	add	di,[bufferofs]
+	and	bx,3
+	shl	bx,3
+	add	bx,dx					; bx = pixel*8+width
+	mov	al,[mapmasks2-1+bx]		; -1 because a width of 1 is first
+	or	al,al
+	jnz	@@multi					; more than one byte
+
+	mov	al,[mapmasks1-1+bx]
+	mov	dx,SC_INDEX+1
+	out	dx,al					; set map mask register
+	mov	dx,SCREENSEG
+	mov	ds,cx					; DS = the scaler
+	mov	bx,[es:bp]				; table location of the rtl to patch
+	or	bx,bx
+	jz	@@done					; 0 ends the post list
+
+	EVEN
+@@spost:
+	mov	bx,[bx]
+	mov	ah,[bx]					; save old value
+	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	mov	si,[es:bp+4]			; table location of entry spot
+	mov	si,[si]
+	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+2]			; corrected top of shape for this post
+	add	bp,6					; next post
+	mov	ds,dx					; DS = the screen
+	call	[DWORD ss:linescale]	; scale the post
+	mov	ds,cx					; DS = the scaler
+	mov	[bx],ah					; unpatch the RETF
+	mov	bx,[es:bp]
+	or	bx,bx
+	jnz	@@spost
+
+@@done:
+	mov	ax,ss
+	mov	ds,ax
+	mov	es,cx					; ES = the scaler again, for the caller
+	pop	bp
 	pop	cx
-	pop	es
+	pop	dx
+	pop	di
+	pop	si
 	ret
+
+;
+; two and three bytes: the masks in mask1..mask3, DX the map mask port
+;
+@@multi:
+	mov	[mask2],al
+	mov	al,[mapmasks1-1+bx]
+	mov	[mask1],al
+	mov	al,[mapmasks3-1+bx]
+	mov	[mask3],al
+	mov	dx,SC_INDEX+1
+	mov	ds,cx					; DS = the scaler
+	or	al,al
+	jnz	@@triple
+
+	mov	bx,[es:bp]
+	or	bx,bx
+	jz	@@done
+@@dpost:
+	mov	bx,[bx]
+	mov	ah,[bx]
+	mov	[BYTE bx],OP_RETF
+	mov	si,[es:bp+4]
+	mov	si,[si]
+	mov	[WORD ss:linescale],si
+	mov	si,[es:bp+2]
+	add	bp,6
+	push	SCREENSEG
+	pop	ds						; DS = the screen
+	mov	al,[ss:mask1]
+	out	dx,al
+	call	[DWORD ss:linescale]
+	inc	di
+	mov	al,[ss:mask2]
+	out	dx,al
+	call	[DWORD ss:linescale]
+	dec	di
+	mov	ds,cx
+	mov	[bx],ah
+	mov	bx,[es:bp]
+	or	bx,bx
+	jnz	@@dpost
+	jmp	@@done
+
+@@triple:
+	mov	bx,[es:bp]
+	or	bx,bx
+	jz	@@done
+@@tpost:
+	mov	bx,[bx]
+	mov	ah,[bx]
+	mov	[BYTE bx],OP_RETF
+	mov	si,[es:bp+4]
+	mov	si,[si]
+	mov	[WORD ss:linescale],si
+	mov	si,[es:bp+2]
+	add	bp,6
+	push	SCREENSEG
+	pop	ds
+	mov	al,[ss:mask1]
+	out	dx,al
+	call	[DWORD ss:linescale]
+	inc	di
+	mov	al,[ss:mask2]
+	out	dx,al
+	call	[DWORD ss:linescale]
+	inc	di
+	mov	al,[ss:mask3]
+	out	dx,al
+	call	[DWORD ss:linescale]
+	dec	di
+	dec	di
+	mov	ds,cx
+	mov	[bx],ah
+	mov	bx,[es:bp]
+	or	bx,bx
+	jnz	@@tpost
+	jmp	@@done
 ENDP
 
 
@@ -166,7 +312,7 @@ PUBLIC	ScaleShape
 	shl	bx,1
 	cmp	[wallheight+bx],bp
 	jae	@@lloop					; obscured by a closer wall
-	call	CallScaleLine
+	call	ScaleSpan
 	jmp	@@lloop
 
 @@lmulti:
@@ -201,7 +347,7 @@ PUBLIC	ScaleShape
 	cmp	[wallheight+bx],bp
 	jae	@@lshrink
 @@ldraw:
-	call	CallScaleLine
+	call	ScaleSpan
 	jmp	@@lloop
 
 @@lnotleft:
@@ -218,7 +364,7 @@ PUBLIC	ScaleShape
 	add	bx,2
 	cmp	[wallheight+bx],bp
 	jae	@@lgrow
-	call	CallScaleLine
+	call	ScaleSpan
 										; break: the rest of the shape is gone
 @@lend:
 
@@ -263,7 +409,7 @@ PUBLIC	ScaleShape
 	shl	bx,1
 	cmp	[wallheight+bx],bp
 	jae	@@rloop
-	call	CallScaleLine
+	call	ScaleSpan
 	jmp	@@rloop
 
 @@rmulti:
@@ -299,10 +445,10 @@ PUBLIC	ScaleShape
 	sub	bx,2
 	cmp	[wallheight+bx],bp
 	jae	@@rshrink
-	call	CallScaleLine
+	call	ScaleSpan
 	jmp	@@done					; break: the rest of the shape is gone
 @@rdraw:
-	call	CallScaleLine
+	call	ScaleSpan
 	jmp	@@rloop
 
 @@rnotleft:
@@ -319,7 +465,7 @@ PUBLIC	ScaleShape
 	add	bx,2
 	cmp	[wallheight+bx],bp
 	jae	@@rgrow
-	call	CallScaleLine
+	call	ScaleSpan
 	jmp	@@rloop
 
 @@done:
@@ -396,7 +542,7 @@ PUBLIC	SimpleScaleShape
 	or	dx,dx
 	jz	@@lloop
 	sub	di,dx					; slinex -= slinewidth
-	call	CallScaleLine
+	call	ScaleSpan
 	jmp	@@lloop
 @@lend:
 
@@ -420,7 +566,7 @@ PUBLIC	SimpleScaleShape
 	mov	dx,[es:bx+WIDTHS]
 	or	dx,dx
 	jz	@@rloop
-	call	CallScaleLine
+	call	ScaleSpan
 	add	di,dx					; slinex += slinewidth, after drawing
 	jmp	@@rloop
 
