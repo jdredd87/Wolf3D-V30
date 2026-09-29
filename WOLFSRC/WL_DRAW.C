@@ -112,6 +112,7 @@ int		horizwall[MAXWALLTILES],vertwall[MAXWALLTILES];
 
 
 void AsmRefresh (void);			// in WL_DR_A.ASM
+void DrawVisList (void);		// in WL_DR_A.ASM: DrawScaleds' drawing loop
 
 /*
 ============================================================================
@@ -1139,25 +1140,10 @@ void DrawScaleds (void)
 	if (!numvisable)
 		return;									// no visable objects
 
-	for (i = 0; i<numvisable; i++)
-	{
-		least = 32000;
-		for (visstep=&vislist[0] ; visstep<visptr ; visstep++)
-		{
-			height = visstep->viewheight;
-			if (height < least)
-			{
-				least = height;
-				farthest = visstep;
-			}
-		}
-		//
-		// draw farthest
-		//
-		ScaleShape(farthest->viewx,farthest->shapenum,farthest->viewheight);
-
-		farthest->viewheight = 32000;
-	}
+	// NEC V30 build (StevenC & Claude): the back-to-front selection loop is
+	// DrawVisList in WL_DR_A.ASM -- same order, first smallest viewheight
+	// each pass, with its state in registers instead of memory.
+	DrawVisList ();
 
 }
 

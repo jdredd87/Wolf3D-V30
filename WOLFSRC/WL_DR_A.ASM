@@ -25,6 +25,7 @@ EXTRN	HitHorizDoor:FAR
 EXTRN	HitVertDoor:FAR
 EXTRN	HitHorizPWall:FAR
 EXTRN	HitVertPWall:FAR
+EXTRN	ScaleShape:FAR
 
 
 DATASEG
@@ -49,6 +50,10 @@ EXTRN	viewcos:DWORD			; sign-magnitude: bit 31 sign, low word fraction
 EXTRN	viewsin:DWORD
 EXTRN	mindist:DWORD
 EXTRN	heightnumerator:DWORD
+EXTRN	vislist:WORD			; visobj_t vislist[]: viewx, viewheight, shapenum
+EXTRN	visptr:WORD
+EXTRN	visstep:WORD
+EXTRN	farthest:WORD
 
 EXTRN	xpartialup:WORD
 EXTRN	ypartialup:WORD
@@ -268,6 +273,87 @@ PUBLIC	CalcHeight
 	mov	dx,[WORD heightnumerator+2]
 	idiv	bx
 
+	pop	di
+	pop	si
+	retf
+ENDP
+
+
+;============================
+;
+; DrawVisList
+;
+; NEC V30 build, StevenC & Claude: the end of DrawScaleds, which draws the
+; visible sprites back to front.  Profiled, its selection loop was a third
+; of DrawScaleds -- the compiler kept visstep, height and least in memory,
+; so each comparison was several memory round trips.  Same algorithm, same
+; order: each pass takes the FIRST entry with the smallest viewheight (a
+; strict <, starting from 32000), draws it with ScaleShape, and marks it
+; 32000.  If a pass found none, farthest would stay as it was, as in C.
+;
+;	for (i = 0; i<numvisable; i++)
+;	{
+;		least = 32000;
+;		for (visstep=&vislist[0] ; visstep<visptr ; visstep++)
+;			if (visstep->viewheight < least)
+;				least = visstep->viewheight, farthest = visstep;
+;		ScaleShape(farthest->viewx,farthest->shapenum,farthest->viewheight);
+;		farthest->viewheight = 32000;
+;	}
+;
+;============================
+
+VIS_VIEWX		=	0
+VIS_HEIGHT		=	2
+VIS_SHAPENUM	=	4
+VIS_SIZE		=	6
+
+PROC	DrawVisList
+PUBLIC	DrawVisList
+	push	si
+	push	di
+
+	mov	ax,[visptr]
+	sub	ax,OFFSET vislist
+	mov	cl,VIS_SIZE
+	div	cl						; AL = numvisable (at most MAXVISABLE, 50)
+	xor	ah,ah
+	mov	cx,ax
+	jcxz	@@done
+	mov	di,[visptr]
+	mov	bx,[farthest]
+
+@@pass:
+	mov	si,OFFSET vislist
+	mov	dx,32000				; least
+	cmp	si,di
+	jae	@@found
+@@scan:
+	mov	ax,[si+VIS_HEIGHT]
+	cmp	ax,dx
+	jge	@@next					; signed, as the C compares ints
+	mov	dx,ax
+	mov	bx,si					; farthest = visstep
+@@next:
+	add	si,VIS_SIZE
+	cmp	si,di
+	jb	@@scan
+
+@@found:
+	mov	[farthest],bx
+	push	cx
+	push	[WORD bx+VIS_HEIGHT]
+	push	[WORD bx+VIS_SHAPENUM]
+	push	[WORD bx+VIS_VIEWX]
+	call	ScaleShape
+	add	sp,6
+	pop	cx
+	mov	bx,[farthest]
+	mov	[WORD bx+VIS_HEIGHT],32000
+	loop	@@pass
+
+	mov	[visstep],di			; where the C loop left it
+@@done:
 	pop	di
 	pop	si
 	retf

@@ -44,9 +44,16 @@ def load_map(path):
         elif mode == "pubs":
             m = re.match(r"\s*([0-9A-F]{4}):([0-9A-F]{4})\s+(?:idle\s+)?(\S+)\s*$", line)
             if m and "Abs" not in line:
-                pubs.append((int(m[1], 16) * 16 + int(m[2], 16), m[3]))
-    pubs.sort()
-    return segs, pubs
+                seg = int(m[1], 16)
+                pubs.append((seg * 16 + int(m[2], 16), m[3], seg))
+    # A public counts only if it lies inside a real segment whose frame is its
+    # own segment value.  The 8087 emulator's fix-up constants (FIARQQ,
+    # FJCRQQ, __floatconvert) are listed as 0000:xxxx numbers, not code, and
+    # would otherwise steal the samples of whatever function they land in.
+    frames = [(s >> 4, s, e) for s, e, _, _ in segs]
+    kept = sorted((addr, name) for addr, name, seg in pubs
+                  if any(f == seg and s <= addr < e for f, s, e in frames))
+    return segs, kept
 
 
 def main():
