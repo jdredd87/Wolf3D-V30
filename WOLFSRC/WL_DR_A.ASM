@@ -33,6 +33,7 @@ EXTRN	ScaleShape:FAR
 EXTRN	PM_GetPage:FAR
 EXTRN	GetBonus:FAR
 EXTRN	CalcRotate:FAR
+EXTRN	DoActor:FAR
 EXTRN	NOLANGUAGE F_LDIV@:FAR		; Borland's signed long divide (H_LDIV.ASM)
 
 
@@ -109,6 +110,7 @@ EXTRN	ystep:DWORD
 
 EXTRN	doorposition:WORD		; table of door position values
 EXTRN	plux:WORD				; the player's x and y in 1/256 tiles
+EXTRN	areabyplayer:WORD		; boolean[NUMAREAS] -- enums are words here
 EXTRN	pluy:WORD
 
 
@@ -914,6 +916,7 @@ OB_TILEY		=	26					; TransformActor
 OB_VIEWX		=	30
 OB_VIEWHEIGHT	=	32
 OB_X			=	16
+OB_AREANUMBER	=	28
 OB_Y			=	20
 OB_TRANSX		=	34
 OB_TRANSY		=	38
@@ -2272,6 +2275,50 @@ PROC	StepDiv NEAR
 	jns	@@done
 	neg	ax
 @@done:
+	ret
+ENDP
+
+
+;============================
+;
+; DoActors -- for (obj = player;obj;obj = obj->next) DoActor (obj);
+;
+; NEC V30 build, StevenC & Claude: PlayLoop's actor loop.  Most actors on a
+; level are asleep in an area the player is not in, and id's DoActor
+; returned at its first test for each of them -- after a far call and a C
+; frame, every frame.  That test is made here instead,
+;
+;	if (!ob->active && !areabyplayer[ob->areanumber]) skip;
+;
+; and DoActor, unchanged, is called for the rest.  ob->next is read after
+; the call, as the C for loop read it.
+;
+;============================
+
+PROC	DoActors
+PUBLIC	DoActors
+	push	si
+	mov	si,[player]
+	or	si,si
+	jz	@@done
+@@loop:
+	cmp	[WORD si+OB_ACTIVE],0
+	jne	@@do
+	mov	bl,[si+OB_AREANUMBER]
+	xor	bh,bh
+	shl	bx,1
+	cmp	[areabyplayer+bx],0
+	je	@@next
+@@do:
+	push	si
+	call	DoActor
+	add	sp,2
+@@next:
+	mov	si,[si+OB_NEXT]
+	or	si,si
+	jnz	@@loop
+@@done:
+	pop	si
 	ret
 ENDP
 

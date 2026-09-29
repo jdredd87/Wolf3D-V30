@@ -1391,6 +1391,8 @@ void FinishPaletteShifts (void)
 =====================
 */
 
+void DoActors (void);		// WL_DR_A.ASM
+
 void DoActor (objtype *ob)
 {
 	void (*think)(objtype *);
@@ -1543,8 +1545,8 @@ void PlayLoop (void)
 		MoveDoors ();
 		MovePWalls ();
 
-		for (obj = player;obj;obj = obj->next)
-			DoActor (obj);
+		DoActors ();			// NEC V30 build: the same loop in WL_DR_A.ASM,
+								// idle actors skipped without a call
 
 		UpdatePaletteShifts ();
 
