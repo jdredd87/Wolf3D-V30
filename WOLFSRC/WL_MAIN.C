@@ -1476,6 +1476,17 @@ void TimeDemo (void)
 		SD_SetMusicMode (smm_Off);
 	if (MS_CheckParm ("nosound"))
 		SD_SetSoundMode (sdm_Off);
+	// CRC: sound effects off, AdLib and digitised.  The game is not
+	// deterministic with them on: UpdateFace skips its US_RndT calls while
+	// the gatling pickup sound plays, and a sound lasts real time while an
+	// unpaced demo's frames do not -- so every build of a different speed
+	// played a different game from that point on, and no two full runs
+	// could be compared.  Music never touches the game, so it stays.
+	if (tdcrc)
+	{
+		SD_SetSoundMode (sdm_Off);
+		SD_SetDigiDevice (sds_Off);
+	}
 	if (MS_CheckParm ("oplid"))
 	{
 		alDelayAddr = 6;		// OPLID: id's fixed OPL waits, for A/B listening
