@@ -17,6 +17,17 @@ DEBUG	=	0
 
 DATASEG
 
+mlogon		dw	0					; MUSICLOG (TIMEDEMO): hash the sequencer's writes
+mlogn		dw	0
+mlogsum		dw	0
+mlogstart	dw	0
+	PUBLIC	mlogon
+	PUBLIC	mlogn
+	PUBLIC	mlogsum
+	PUBLIC	mlogstart
+
+sqQuiet		dw	0					; ticks certainly without a music event:
+	PUBLIC	sqQuiet					;  see SDL_t0FastAsmService
 alDelayAddr	dw	6					; alOut's waits, in status-port reads:
 alDelayData	dw	35					; id's counts until SDL_TimeOPL runs
 	PUBLIC	alDelayAddr
@@ -361,6 +372,23 @@ extreme		dw	?
 	cmp	[count_fx],5
 	jae	@@dofull
 
+;
+; NEC V30 build, StevenC & Claude: sqQuiet is how many coming ticks are
+; certain to have no music event -- set by the full service below, and
+; cleared by every C routine that changes the sequencer or starts a sample.
+; On such a tick there is nothing to do but what the full service would do
+; there: alTimeCount++.
+;
+	mov	ax,[sqQuiet]
+	or	ax,ax
+	jz	@@notquiet
+	dec	ax
+	mov	[sqQuiet],ax
+	add	[WORD PTR alTimeCount],1
+	adc	[WORD PTR alTimeCount+2],0
+	jmp	@@nosave
+@@notquiet:
+
 	mov	ax,[WORD PTR ssSample]			; Is there a sample for the Sound Src?
 	or	ax,[WORD PTR ssSample+2]
 	jnz	@@dofull
@@ -432,6 +460,25 @@ extreme		dw	?
 	mov	[WORD PTR sqHackTime+2],ax
 
 	mov	ax,[es:di]						; Get register/value pair
+	cmp	[mlogon],0					; MUSICLOG: hash register, value and tick
+	je	@@nolog
+	cmp	[mlogn],1000
+	jae	@@nolog
+	inc	[mlogn]
+	mov	cx,[mlogsum]
+	mov	dx,cx
+	shl	cx,1
+	shl	cx,1
+	shl	cx,1
+	shl	cx,1
+	shl	cx,1
+	add	cx,dx						; hash*33
+	add	cx,ax						; + register and value
+	mov	dx,[HackCount]
+	sub	dx,[mlogstart]
+	add	cx,dx						; + tick since the song started
+	mov	[mlogsum],cx
+@@nolog:
 	xor	bh,bh
 	mov	bl,ah
 	xor	ah,ah
@@ -464,6 +511,32 @@ extreme		dw	?
 	mov	[WORD PTR sqHackTime],ax
 	mov	[WORD PTR sqHackTime+2],ax
 @@nosq:
+;
+; How many coming ticks are certain to be quiet?  Only counted when the high
+; words of sqHackTime and alTimeCount agree and no sample is playing: then
+; id's test -- high word, then low word -- first finds the event due when
+; alTimeCount's low word reaches sqHackTime's, sqHackTime-alTimeCount ticks
+; from now, and the low word cannot wrap before that.  Anything else is 0,
+; which leaves every tick to the full test.
+;
+	mov	[sqQuiet],0
+	mov	ax,[sqActive]
+	or	ax,ax
+	jz	@@qdone
+	mov	ax,[sqHackLen]
+	or	ax,ax
+	jz	@@qdone
+	mov	ax,[WORD PTR ssSample]
+	or	ax,[WORD PTR ssSample+2]
+	jnz	@@qdone
+	mov	ax,[WORD PTR sqHackTime+2]
+	cmp	ax,[WORD PTR alTimeCount+2]
+	jne	@@qdone
+	mov	ax,[WORD PTR sqHackTime]
+	sub	ax,[WORD PTR alTimeCount]
+	jbe	@@qdone
+	mov	[sqQuiet],ax
+@@qdone:
 
 	les	di,[ssSample]			; Get pointer to Sound Source sample
 	mov	ax,es

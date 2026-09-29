@@ -167,6 +167,8 @@ static	ActiveTrack		*tracks[sqMaxTracks],
 static	word			sqMode,sqFadeStep;
 		word			far *sqHack,far *sqHackPtr,sqHackLen,sqHackSeqLen;
 		long			sqHackTime;
+extern	unsigned	sqQuiet;		// ID_SD_A.ASM: cleared wherever the sequencer or a
+								// sample changes, with interrupts off (NEC V30 build)
 
 //	Internal routines
 		void			SDL_DigitizedDone(void);
@@ -217,6 +219,8 @@ SDL_SetTimerSpeed(void)
 {
 	word	rate;
 	void interrupt	(*isr)(void);
+
+	sqQuiet = 0;			// whichever service comes next starts from the full test
 
 	if ((DigiMode == sds_PC) && DigiPlaying)
 	{
@@ -707,6 +711,7 @@ asm	cli
 
 	ssLengthLeft = len;
 	ssSample = (volatile byte far *)data;
+	sqQuiet = 0;
 
 asm	popf
 }
@@ -1910,6 +1915,7 @@ SD_Startup(void)
 	t0OldService = getvect(8);	// Get old timer 0 ISR
 
 	LocalTime = TimeCount = alTimeCount = 0;
+	sqQuiet = 0;
 
 	SD_SetSoundMode(sdm_Off);
 	SD_SetMusicMode(smm_Off);
@@ -2264,7 +2270,11 @@ SD_WaitSoundDone(void)
 void
 SD_MusicOn(void)
 {
+asm	pushf
+asm	cli
+	sqQuiet = 0;
 	sqActive = true;
+asm	popf
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -2287,7 +2297,11 @@ SD_MusicOff(void)
 			alOut(alFreqH + i + 1,0);
 		break;
 	}
+asm	pushf
+asm	cli
+	sqQuiet = 0;
 	sqActive = false;
+asm	popf
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -2308,6 +2322,11 @@ asm	cli
 		sqHackSeqLen = sqHackLen = music->length;
 		sqHackTime = 0;
 		alTimeCount = 0;
+		{
+		extern word mlogstart;			// MUSICLOG: ticks count from here
+		mlogstart = HackCount;
+		}
+		sqQuiet = 0;
 		SD_MusicOn();
 	}
 

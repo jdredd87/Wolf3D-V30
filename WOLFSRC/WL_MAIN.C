@@ -1459,6 +1459,10 @@ void TimeDemo (void)
 
 	ndemos = 4;
 	tdcrc = MS_CheckParm ("crc");	// checksum the view every 50 frames
+	{
+	extern word mlogon;
+	mlogon = MS_CheckParm ("musiclog");	// hash the music's first 1000 writes
+	}
 	tdpreload = MS_CheckParm ("preload");	// fill the page cache first
 	if (MS_CheckParm ("quick"))
 	{
@@ -1527,6 +1531,11 @@ void TimeDemo (void)
 	printf ("(play = after each demo's first frame, which carries the fizzle-in)\n");
 	if (profiling)
 		printf ("PROFILE: %lu samples in PROF.BIN\n",samples);
+	{
+	extern word mlogon,mlogn,mlogsum;
+	if (mlogon)
+		printf ("music log: %u writes, hash %04X\n",mlogn,mlogsum);
+	}
 	for (i=0;i<tdcrcs;i++)
 		printf ("view checksum %d: %04X%04X\n",i+1,tdcrchi[i],tdcrclo[i]);
 	if (tdcrc)

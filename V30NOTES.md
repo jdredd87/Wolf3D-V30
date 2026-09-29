@@ -47,6 +47,7 @@ emulator (it drives the V30's 8087), `-Fc` for id's communal globals.
 | `... CRC` | checksum the rendered view at frames 50/100/150/200 by reading all four VGA planes back |
 | `... PROFILE` | sample CS:IP on every timer interrupt into `PROF.BIN`; `profmap.py` maps it to modules, functions and 16-byte buckets |
 | `... NOMUSIC` / `NOSOUND` / `OPLID` | measure what the AdLib costs; `OPLID` restores id's fixed OPL waits for A/B listening |
+| `... MUSICLOG` | hash the music sequencer's first 1,000 writes with their ticks: two builds with one hash play the same music |
 | `NOEMS` / `NOXMS` | id's switches: which memory the page manager may use |
 
 The report also counts page-cache misses during play (EMS remaps, copies from
@@ -114,7 +115,8 @@ byte for byte.
 | 21 | `ScaleLine` keeps the screen segment in DX; id's per-ray multiply helpers inlined; hot loop tops `EVEN` | 1038 | 3.49 |
 | 22 | `DrawScaleds`' actor loop in asm (`PlaceActors`) -- game logic: wakes actors, sets `FL_VISABLE`, same order | 1024 | 3.53 |
 | 23 | `TransformTile` in asm: four `FixedByFrac`s and the long multiply inline, Borland's `LDIV@` kept for the divide | 1016 | 3.56 |
-| 24 | `PlaceActors`/`PlaceStatics` laid out so an unseen object takes no jump; `vismark` an immediate | **1005** | **3.60** |
+| 24 | `PlaceActors`/`PlaceStatics` laid out so an unseen object takes no jump; `vismark` an immediate | 1005 | 3.60 |
+| 25 | music ISR counts down the ticks until the next event (`sqQuiet`), cleared by every C change to the sequencer | **1002** | **3.61** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -139,7 +141,14 @@ its full path every tick at ~100 us. Step 14 recovered a third of it. Your
 `CONFIG.WL6` has **sound effects off** (music on); with effects on, step 13
 matters more.
 
-**Checked by ear, as far as a capture stick can.** The HDMI capture carries
+**The music is proven identical, not just heard.** `TIMEDEMO MUSICLOG`
+hashes the first 1,000 register writes the sequencer makes, each with its
+value and the timer tick it happened on (from the song's start). id's
+original interrupt code (built from before step 13, with the log added by
+`musiclog.py`), step 14's fast path and step 25's countdown all give
+**A92D**: the same music, note for note and tick for tick.
+
+**Also checked by ear, as far as a capture stick can.** The HDMI capture carries
 the AdLib: the same notes appear with the calibrated waits and with id's
 (`OPLID`), none with `NOMUSIC`, and the broadband clicks in all three are the
 capture path's own.
