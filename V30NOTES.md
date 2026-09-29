@@ -49,6 +49,7 @@ emulator (it drives the V30's 8087), `-Fc` for id's communal globals.
 | `... NOMUSIC` / `NOSOUND` / `OPLID` | measure what the AdLib costs; `OPLID` restores id's fixed OPL waits for A/B listening |
 | `... MUSICLOG` | hash the music sequencer's first 1,000 writes with their ticks: two builds with one hash play the same music |
 | `NOEMS` / `NOXMS` | id's switches: which memory the page manager may use |
+| `EMS` | id's original EMS+XMS setup; since step 29 the default is XMS, with EMS only where there is no XMS |
 
 The report also counts page-cache misses during play (EMS remaps, copies from
 and to XMS, LRU evictions, disk reads), and gives a *play* figure that leaves
@@ -120,6 +121,7 @@ byte for byte.
 | 26 | `objtype` word-aligned (pad bytes after `flags` and `areanumber`) -- only 0.2%: game logic reads actors less than expected | 1000 | 3.62 |
 | 27 | `CalcHeight`'s per-frame constants (`viewx`/`viewy`, `viewcos`/`viewsin`, `mindist`, `heightnumerator`) patched in as immediates by `AsmRefresh`; NEAR entry for the asm hit routines | 988 | 3.66 |
 | 28 | `ScaleLine` and the glue that called it merged into one asm routine, `ScaleSpan`: the span stays in registers, one table lookup picks the one-byte case, the post loop tests at the bottom | **957** | **3.78** |
+| 29 | XMS the default memory (what `NOEMS` bought, without the switch): no switch 957, `EMS` 1009, `NOXMS` 1012. `EMS` keeps id's EMS-first order, because XMSSC serves XMS out of EMS and an XMS-first start leaves EMS nothing | 957 | 3.78 |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -136,7 +138,7 @@ PicoMEM's emulated port, not this bus. What the profile charged to
 `ScaleLine` (10.3%, with the non-public `CallScaleLine` folded in) was its
 per-span setup and per-post bookkeeping, which step 28 cut.
 
-**Memory: use `NOEMS`.** With EMS the page manager remaps its 4-slot frame
+**Memory: XMS, the default since step 29 (`NOEMS` before).** With EMS the page manager remaps its 4-slot frame
 through INT 67h nine times a frame, ~1.3 ms each on this card. With XMS it
 copies a page into its conventional-memory cache once and reads it there; the
 copies go straight to the PicoMEM. A smaller cache thrashes: at 32 pages

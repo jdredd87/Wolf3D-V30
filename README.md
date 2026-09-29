@@ -36,13 +36,15 @@ were a test suite.
 On the V30, in `C:\WOLF3D` beside the game data:
 
 ```
-WOLF3DV NOEMS
+WOLF3DV
 ```
 
-`NOEMS` is id's own switch and the fastest memory setup on this machine: the
-page manager then keeps textures in conventional memory and XMS (served by
-XMSSC over the PicoMEM's EMS) instead of remapping EMS pages every frame.
-Everything else is the game as id made it.
+**Memory: XMS is the default, and the fastest setup on this machine** (step
+29). The page manager keeps textures in conventional memory and XMS (served
+by XMSSC over the PicoMEM's EMS) instead of remapping EMS pages every frame:
+3.78 fps against 3.59 for id's EMS+XMS. EMS is used only when there is no
+XMS, or when `EMS` asks for id's original setup; id's `NOEMS` and `NOXMS`
+still work. Everything else is the game as id made it.
 
 For measuring, `WOLF3DV TIMEDEMO QUICK PRELOAD NOEMS` plays demo 0's first 200
 frames flat out and prints the frame rate; `CRC` adds checksums of the picture,

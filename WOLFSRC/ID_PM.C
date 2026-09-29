@@ -43,7 +43,7 @@
 	PageListStruct	far *PMPages,
 					_seg *PMSegPages;
 
-static	char		*ParmStrings[] = {"nomain","noems","noxms",nil};
+static	char		*ParmStrings[] = {"nomain","noems","noxms","ems",nil};
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -1137,13 +1137,13 @@ PM_Reset(void)
 void
 PM_Startup(void)
 {
-	boolean	nomain,noems,noxms;
+	boolean	nomain,noems,noxms,useems;
 	int		i;
 
 	if (PMStarted)
 		return;
 
-	nomain = noems = noxms = false;
+	nomain = noems = noxms = useems = false;
 	for (i = 1;i < _argc;i++)
 	{
 		switch (US_CheckParm(_argv[i],ParmStrings))
@@ -1157,15 +1157,30 @@ PM_Startup(void)
 		case 2:
 			noxms = true;
 			break;
+		case 3:
+			useems = true;
+			break;
 		}
 	}
 
 	PML_OpenPageFile();
 
-	if (!noems)
+//
+// NEC V30 build (StevenC & Claude): XMS first, and EMS only where there is
+// no XMS -- or when EMS asks for id's original setup, both at once.  With
+// EMS the page manager remaps its page frame through INT 67h about nine
+// times a frame (~1.3 ms each on the V30's PicoMEM); with XMS it copies a
+// page into main memory once and reads it there.  What NOEMS used to buy,
+// by default; NOEMS and NOXMS still work as id wrote them.  EMS keeps id's
+// order, EMS first: an XMS driver that serves XMS out of EMS (XMSSC) would
+// otherwise hand the page manager's XMS request every EMS page there is.
+//
+	if (useems && !noems)
 		PML_StartupEMS();
 	if (!noxms)
 		PML_StartupXMS();
+	if (!useems && !noems && !XMSPresent)
+		PML_StartupEMS();
 
 	if (nomain && !EMSPresent)
 		Quit("PM_Startup: No main or EMS");
