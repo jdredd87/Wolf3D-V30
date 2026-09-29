@@ -17,6 +17,10 @@ OP_INCBX	=	043h			; NEC V30 build: the tile steps, patched per ray
 OP_DECBX	=	04bh
 OP_INCBP	=	045h
 OP_DECBP	=	04dh
+OP_JG		=	07fh			; the loop-bottom tests, the inverse of OP_JLE/OP_JGE
+OP_JL		=	07ch
+OP_INCDX	=	042h			; T += ytilestep in the horizontal step
+OP_DECDX	=	04ah
 
 EXTRN	finetangent:DWORD	; far array, starts at offset 0
 
@@ -102,6 +106,9 @@ EXTRN	doorposition:WORD		; table of door position values
 
 
 EXTRN	pwallpos:WORD			; amound a pushable wall has been moved
+
+curquad		dw	0				; NEC V30 build: the quadrant the loop is patched for
+tsave		dw	0				; T, across a door or pushwall test
 
 CODESEG
 
@@ -1145,6 +1152,7 @@ PUBLIC	AsmRefresh
 	mov	ax,[WORD heightnumerator+2]
 	mov	[WORD cs:chhnhi+1],ax
 
+	mov	[curquad],0				; the first ray patches its quadrant in
 	mov	[pixx],0
 ;---------------------------------------------------------------------------
 ;
@@ -1186,12 +1194,19 @@ not0:
 ;
 ;----------
 entry90:
+	cmp	[curquad],1				; NEC V30 build: the loop is patched for a
+	je	@@q1					; quadrant, and only a change of quadrant --
+	mov	[curquad],1				; twice a frame at most -- patches it again
 	mov	[xtilestep],1			; xtilestep = 1
 	mov	[ytilestep],-1			; ytilestep = -1
-	mov	[BYTE cs:horizop],OP_JGE	; patch a jge in
 	mov	[BYTE cs:vertop],OP_JLE		; patch a jle in
+	mov	[BYTE cs:vertop2],OP_JG		; and its inverse at the loop's bottom
+	mov	[BYTE cs:horizop2],OP_JL	; (id's horizop was jge: its inverse)
 	mov	[BYTE cs:vxtileop],OP_INCBX	; xtile += xtilestep
+	mov	[BYTE cs:vtop+2],64			; T += xtilestep<<6
 	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
+	mov	[BYTE cs:htop],OP_DECDX		; T += ytilestep
+@@q1:
 	mov	bx,DEG90-1
 	sub	bx,cx
 	shl	bx,2
@@ -1210,8 +1225,9 @@ entry90:
 	sbb	dx,0
 	mov	[WORD ystep],ax
 	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
-	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = -finetangent[angle]
+	add	dx,64					; its high word plus xtilestep<<6: see the loop
+	mov	[WORD cs:vyadc+2],dx
 
 	mov	bx,[xpartialup]			; xpartial = xpartialup
 	mov	bp,[ypartialdown]		; ypartial = ypartialdown
@@ -1225,13 +1241,20 @@ not90:
 ; 90-179 degree arc
 ;
 ;----------
+	cmp	[curquad],2
+	je	@@q2
+	mov	[curquad],2
 	mov	ax,-1
 	mov	[xtilestep],ax			; xtilestep = -1
 	mov	[ytilestep],ax			; ytilestep = -1
-	mov	[BYTE cs:horizop],OP_JLE	; patch a jle in
 	mov	[BYTE cs:vertop],OP_JLE		; patch a jle in
+	mov	[BYTE cs:vertop2],OP_JG
+	mov	[BYTE cs:horizop2],OP_JG	; (id's horizop was jle)
 	mov	[BYTE cs:vxtileop],OP_DECBX	; xtile += xtilestep
+	mov	[BYTE cs:vtop+2],-64
 	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
+	mov	[BYTE cs:htop],OP_DECDX
+@@q2:
 
 	mov	bx,cx
 	shl	bx,2
@@ -1254,8 +1277,9 @@ not90:
 	sbb	dx,0
 	mov	[WORD ystep],ax
 	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
-	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = -finetangent[DEG180-1-angle]
+	sub	dx,64
+	mov	[WORD cs:vyadc+2],dx
 
 	mov	bx,[xpartialdown]		; xpartial = xpartialdown
 	mov	bp,[ypartialdown]		; ypartial = ypartialdown
@@ -1269,12 +1293,19 @@ not180:
 ; 180-269 degree arc
 ;
 ;----------
+	cmp	[curquad],3
+	je	@@q3
+	mov	[curquad],3
 	mov	[xtilestep],-1			; xtilestep = -1
 	mov	[ytilestep],1			; ytilestep = 1
-	mov	[BYTE cs:horizop],OP_JLE	; patch a jle in
 	mov	[BYTE cs:vertop],OP_JGE		; patch a jge in
+	mov	[BYTE cs:vertop2],OP_JL
+	mov	[BYTE cs:horizop2],OP_JG	; (id's horizop was jle)
 	mov	[BYTE cs:vxtileop],OP_DECBX	; xtile += xtilestep
+	mov	[BYTE cs:vtop+2],-64
 	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
+	mov	[BYTE cs:htop],OP_INCDX
+@@q3:
 
 	mov	bx,DEG270-1
 	sub	bx,cx
@@ -1294,8 +1325,9 @@ not180:
 	mov	dx,[es:bx+2-DEG180*4]
 	mov	[WORD ystep],ax
 	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
-	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = finetangent[angle-DEG180]
+	sub	dx,64
+	mov	[WORD cs:vyadc+2],dx
 
 	mov	bx,[xpartialdown]		; xpartial = xpartialdown
 	mov	bp,[ypartialup]			; ypartial = ypartialup
@@ -1311,13 +1343,20 @@ not270:
 ;
 ;----------
 entry360:
+	cmp	[curquad],4
+	je	@@q4
+	mov	[curquad],4
 	mov	ax,1
 	mov	[xtilestep],ax			; xtilestep = 1
 	mov	[ytilestep],ax			; ytilestep = 1
-	mov	[BYTE cs:horizop],OP_JGE	; patch a jge in
 	mov	[BYTE cs:vertop],OP_JGE		; patch a jge in
+	mov	[BYTE cs:vertop2],OP_JL
+	mov	[BYTE cs:horizop2],OP_JL	; (id's horizop was jge)
 	mov	[BYTE cs:vxtileop],OP_INCBX	; xtile += xtilestep
+	mov	[BYTE cs:vtop+2],64
 	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
+	mov	[BYTE cs:htop],OP_INCDX
+@@q4:
 
 	mov	bx,cx
 	shl	bx,2
@@ -1334,8 +1373,9 @@ entry360:
 	mov	dx,[es:bx+2]
 	mov	[WORD ystep],ax
 	mov	[WORD cs:vyadd+1],ax	; patch ystep into the core loop
-	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = finetangent[DEG360-1-angle]
+	add	dx,64
+	mov	[WORD cs:vyadc+2],dx
 
 	mov	bx,[xpartialup]			; xpartial = xpartialup
 	mov	bp,[ypartialup]			; ypartial = ypartialup
@@ -1434,7 +1474,9 @@ initvars:
 	add	di,bx						; yspot = (xinttile<<6) + ytile
 
 	mov	bx,[xtile]
-	mov	dx,[WORD yintercept+2]
+	mov	dx,bx
+	shl	dx,6
+	add	dx,bp						; T = (xtile<<6)+ytile
 	mov	ax,SCREENSEG
 	mov	es,ax						; faster than mov es,[screenseg]
 	mov	ax,[WORD yintercept]		; NEC V30 build: AX = low word of yintercept
@@ -1448,17 +1490,30 @@ initvars:
 ;
 ; All variables are killed when a wall is hit
 ;
-; AX : scratch
-; BX : xtile
-; CX : high word of xintercept
-; DX : high word of yintercept
 ; AX : low word of yintercept -- NEC V30 build, StevenC & Claude: kept in
 ;      AX while tracing instead of added to in memory every vertical step;
 ;      stored back first thing at every hit, reloaded at every continue
-; SI : xspot (yinttile<<6)+xtile (index into tilemap and spotvis)
+; BX : xtile
+; CX : high word of xintercept
+; DX : T = (xtile<<6)+ytile -- NEC V30 build (was the high word of
+;      yintercept, which is now computed only at a hit: yinttile = xspot -
+;      (xtile<<6))
+; SI : xspot (xtile<<6)+yinttile (index into tilemap and spotvis)
 ; DI : yspot (xinttile<<6)+ytile (index into tilemap and spotvis)
 ; BP : ytile
 ; ES : screenseg
+;
+; NEC V30 build: id's vertical test compared yinttile with ytile.  xspot and
+; T carry the same xtile<<6, so xspot-T is exactly yinttile-ytile and the
+; loop compares those instead -- which lets a vertical step move xspot
+; directly: xtile+=xtilestep and yintercept+=ystep together add ystep's
+; high word, the carry and xtilestep<<6 to it, one ADC with the sum patched
+; in per ray, where id rebuilt xspot with a shift of six (13 clocks on a
+; V30).  Nothing overflows: |yinttile| stays within a step (at most ~1146
+; tiles, finetangent[899]) of the map.  The horizontal side keeps id's test,
+; because there xinttile can run a thousand tiles past the map and
+; xinttile<<6 would not fit.  Both loops test at the bottom, with the
+; inverse condition patched in beside id's.
 ;
 ;---------------------------------------------------------------------------
 
@@ -1468,11 +1523,11 @@ initvars:
 ;
 ;-----------
 
-	EVEN
 vertcheck:
-	cmp	dx,bp
+	cmp	si,dx						; yinttile against ytile, via xspot and T
 vertop:								; 0x7e = jle (ytilestep==-1)
 	jle	horizentry					; 0x7d = jge (ytilestep==1)
+	EVEN
 vertentry:
 	test [BYTE tilemap+si],0ffh		; tilehit = *((byte *)tilemap+xspot);
 	jnz	hitvert
@@ -1480,21 +1535,49 @@ passvert:
 vspotop:
 	mov	[BYTE spotvis+si],1			; = vismark, patched in at +4 per frame
 ;
-; NEC V30 build, StevenC & Claude: the three steps below are patched in per
-; ray by the quadrant code above, as id already patches vertop/horizop, so a
-; tile step no longer reads xtilestep and both words of ystep from memory.
-; The 1234h placeholders force the full imm16 encodings being patched.
+; The steps below are patched in per ray by the quadrant code above, as id
+; already patched vertop/horizop.  The 1234h placeholders force the full
+; imm16 encodings being patched.
 ;
 vxtileop:
 	inc	bx							; xtile+=xtilestep: INC BX or DEC BX
+vtop:
+	add	dx,64						; T += xtilestep<<6 (imm8 at +2: 64 or -64)
 vyadd:
 	add	ax,1234h					; yintercept += ystep (low word at +1, in AX)
 vyadc:
-	adc	dx,1234h					; (high word at +2)
-	mov	si,bx
-	shl	si,6
-	add	si,dx						; xspot = (xtile<<6)+yinttile
-	jmp	vertcheck
+	adc	si,1234h					; xspot += ystep's high word + xtilestep<<6 (at +2)
+	cmp	si,dx
+vertop2:							; the inverse of vertop: 0x7f = jg, 0x7c = jl
+	jg	vertentry
+
+;-----------
+;
+; check intersections with horizontal walls
+;
+;-----------
+	EVEN
+horizentry:
+	test [BYTE tilemap+di],0ffh		; tilehit = *((byte *)tilemap+yspot);
+	jnz	hithoriz
+passhoriz:
+hspotop:
+	mov	[BYTE spotvis+di],1			; = vismark, patched in at +4 per frame
+hytileop:
+	inc	bp							; ytile+=ytilestep: INC BP or DEC BP, patched
+htop:
+	inc	dx							; T += ytilestep: INC DX or DEC DX, patched
+hxadd:
+	add	[WORD xintercept],1234h		; xintercept += xstep (low word at +4)
+hxadc:
+	adc	cx,1234h					; (high word at +2)
+	mov	di,cx
+	shl	di,6
+	add	di,bp						; yspot = (xinttile<<6)+ytile
+	cmp	cx,bx
+horizop2:							; the inverse of id's horizop (jle/jge
+	jl	horizentry					; on xtilestep): 0x7f = jg, 0x7c = jl
+	jmp	vertentry
 
 	EVEN
 hitvert:
@@ -1508,38 +1591,15 @@ notvertdoor:
 	mov	[WORD xintercept],0
 	mov	[WORD xintercept+2],bx
 	mov	[xtile],bx
+	mov	dx,bx
+	shl	dx,6
+	neg	dx
+	add	dx,si						; yinttile = xspot-(xtile<<6)
 	mov	[WORD yintercept+2],dx
 	mov	[ytile],dx
 	call	HitVertWallA			; NEAR, WL_DR_A.ASM (was the far C routine)
 	jmp nextpix
 
-
-;-----------
-;
-; check intersections with horizontal walls
-;
-;-----------
-	EVEN
-horizcheck:
-	cmp	cx,bx
-horizop:							; 0x7e = jle (xtilestep==-1)
-	jle	vertentry					; 0x7d = jge (xtilestep==1)
-horizentry:
-	test [BYTE tilemap+di],0ffh		; tilehit = *((byte *)tilemap+yspot);
-	jnz	hithoriz
-passhoriz:
-hspotop:
-	mov	[BYTE spotvis+di],1			; = vismark, patched in at +4 per frame
-hytileop:
-	inc	bp							; ytile+=ytilestep: INC BP or DEC BP, patched
-hxadd:
-	add	[WORD xintercept],1234h		; xintercept += xstep (low word at +4)
-hxadc:
-	adc	cx,1234h					; (high word at +2)
-	mov	di,cx
-	shl	di,6
-	add	di,bp						; yspot = (xinttile<<6)+ytile
-	jmp	horizcheck
 
 	EVEN
 hithoriz:
@@ -1585,7 +1645,7 @@ done:
 ;=============
 horizdoor:
 	mov	[xtile],bx					; save off live register variables
-	mov	[WORD yintercept+2],dx
+	mov	[tsave],dx					; T
 
 	test al,040h      				; both high bits set == pushable wall
 	jnz	horizpushwall
@@ -1609,7 +1669,7 @@ horizdoor:
 ;
 continuehoriz:
 	mov	bx,[xtile]					; reload register variables
-	mov	dx,[WORD yintercept+2]
+	mov	dx,[tsave]
 	mov	ax,[WORD yintercept]		; AX = low word again
 	jmp	passhoriz					; continue tracing
 ;
@@ -1688,6 +1748,11 @@ horizpushwall:
 ;=============
 vertdoor:
 	mov	[xtile],bx					; save off live register variables
+	mov	[tsave],dx					; T
+	mov	dx,bx
+	shl	dx,6
+	neg	dx
+	add	dx,si						; yinttile = xspot-(xtile<<6)
 	mov	[WORD yintercept+2],dx
 
 	test al,040h      				; both high bits set == pushable wall
@@ -1712,7 +1777,7 @@ vertdoor:
 ;
 continuevert:
 	mov	bx,[xtile]					; reload register variables
-	mov	dx,[WORD yintercept+2]
+	mov	dx,[tsave]
 	mov	ax,[WORD yintercept]		; AX = low word again
 	jmp	passvert					; continue tracing
 ;

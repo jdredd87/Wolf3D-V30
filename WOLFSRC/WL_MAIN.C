@@ -1539,7 +1539,12 @@ void TimeDemo (void)
 	for (i=0;i<tdcrcs;i++)
 		printf ("view checksum %d: %04X%04X\n",i+1,tdcrchi[i],tdcrclo[i]);
 	if (tdcrc)
+	{
+		extern int tdcrcn;
+		extern unsigned tdcrcall[2];
+		printf ("view checksum, all %d: %04X%04X\n",tdcrcn,tdcrcall[1],tdcrcall[0]);
 		printf ("(checksums cover the view every 50 frames; this run's timing includes them)\n");
+	}
 	if (tdfzdone)
 		printf ("fizzle copy: from %04X%04X  to %04X%04X  %s\n",tdfzsrc[1],tdfzsrc[0],tdfzdst[1],tdfzdst[0],
 			(tdfzsrc[0]==tdfzdst[0] && tdfzsrc[1]==tdfzdst[1]) ? "IDENTICAL" : "DIFFERENT");

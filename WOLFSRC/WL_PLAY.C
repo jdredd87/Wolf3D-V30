@@ -82,6 +82,8 @@ boolean		tdcrc;
 boolean		tdpreload;
 int			tdcrcs;
 unsigned	tdcrclo[TDCRCMAX],tdcrchi[TDCRCMAX];
+int			tdcrcn;					// every checkpoint, folded into tdcrcall:
+unsigned	tdcrcall[2];			// a whole run's pictures in one number
 
 /*
 ===================
@@ -140,9 +142,16 @@ static void SumView (unsigned base, unsigned *lo, unsigned *hi)
 
 void ViewChecksum (void)
 {
+	unsigned	lo,hi;
+
+	SumView (displayofs+screenofs,&lo,&hi);
+	tdcrcn++;
+	tdcrcall[0] = (tdcrcall[0]*33) ^ lo;
+	tdcrcall[1] = (tdcrcall[1]*33) ^ hi ^ tdcrcn;
 	if (tdcrcs >= TDCRCMAX)
 		return;
-	SumView (displayofs+screenofs,&tdcrclo[tdcrcs],&tdcrchi[tdcrcs]);
+	tdcrclo[tdcrcs] = lo;
+	tdcrchi[tdcrcs] = hi;
 	tdcrcs++;
 }
 
