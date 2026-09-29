@@ -1586,6 +1586,33 @@ entry90:
 	mov	[yadj],64
 	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_DECDX		; T += ytilestep
+;
+; NEC V30 build (step 47): the frame's constants, into this quadrant's
+; body and into initvars -- this runs on the first ray of every frame
+; (curquad is reset) and whenever a ray changes quadrant
+;
+	mov	ax,[xpartialup]
+	mov	[WORD cs:q1a+1],ax
+	mov	ax,[ypartialdown]
+	mov	[WORD cs:q1b+1],ax
+	mov	ax,[WORD viewy]
+	mov	[WORD cs:q1y+1],ax
+	mov	ax,[WORD viewy+2]
+	mov	[WORD cs:q1z+1],ax
+	mov	ax,[WORD viewx]
+	mov	[WORD cs:q1x+1],ax
+	mov	ax,[WORD viewx+2]
+	mov	[WORD cs:q1w+2],ax
+	mov	ax,[focaltx]
+	inc	ax
+	mov	[WORD cs:ivxt+1],ax	; xtile = focaltx+xtilestep
+	shl	ax,6
+	mov	[WORD cs:ivx64+1],ax	; xtile<<6
+	mov	dx,[focalty]
+	dec	dx
+	mov	[WORD cs:ivyt+1],dx	; ytile = focalty+ytilestep
+	add	ax,dx
+	mov	[WORD cs:ivt+1],ax		; T = (xtile<<6)+ytile
 @@q1:
 ;
 ; ystep = -finetangent[...]: stored, patched in, and times xpartialup for
@@ -1603,15 +1630,18 @@ entry90:
 	mov	[WORD cs:vyadd+1],si
 	add	dx,64				; its high word plus xtilestep<<6
 	mov	[WORD cs:vyadc+2],dx
-	mov	bp,[xpartialup]
+q1a:
+	mov	bp,1234h			; xpartialup, patched in per frame
 	mul	bp
 	mov	si,dx
 	mov	ax,di
 	mul	bp
 	add	ax,si
 	adc	dx,0				; dx:ax = xpartialup * the tangent, >>16
-	mov	bx,[WORD viewy]		; viewy minus it: id added the negated product
-	mov	si,[WORD viewy+2]
+q1y:
+	mov	bx,1234h			; viewy, patched in per frame
+q1z:
+	mov	si,1234h
 	sub	bx,ax
 	sbb	si,dx
 	mov	[WORD yintercept],bx
@@ -1626,15 +1656,18 @@ entry90:
 	mov	di,[es:bx+2]
 	mov	[WORD cs:hxadd+4],ax
 	mov	[WORD cs:hxadc+2],di
-	mov	bp,[ypartialdown]
+q1b:
+	mov	bp,1234h			; ypartialdown, patched in per frame
 	mul	bp
 	mov	si,dx
 	mov	ax,di
 	mul	bp
 	add	ax,si
 	adc	dx,0
-	add	ax,[WORD viewx]
-	adc	dx,[WORD viewx+2]
+q1x:
+	add	ax,1234h			; viewx, patched in per frame
+q1w:
+	adc	dx,1234h
 	mov	[WORD xintercept],ax
 	mov	cx,dx				; CX = xinttile
 	jmp	initvars
@@ -1666,6 +1699,33 @@ not90:
 	mov	[yadj],-64
 	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_DECDX
+;
+; NEC V30 build (step 47): the frame's constants, into this quadrant's
+; body and into initvars -- this runs on the first ray of every frame
+; (curquad is reset) and whenever a ray changes quadrant
+;
+	mov	ax,[xpartialdown]
+	mov	[WORD cs:q2a+1],ax
+	mov	ax,[ypartialdown]
+	mov	[WORD cs:q2b+1],ax
+	mov	ax,[WORD viewy]
+	mov	[WORD cs:q2y+1],ax
+	mov	ax,[WORD viewy+2]
+	mov	[WORD cs:q2z+1],ax
+	mov	ax,[WORD viewx]
+	mov	[WORD cs:q2x+1],ax
+	mov	ax,[WORD viewx+2]
+	mov	[WORD cs:q2w+1],ax
+	mov	ax,[focaltx]
+	dec	ax
+	mov	[WORD cs:ivxt+1],ax	; xtile = focaltx+xtilestep
+	shl	ax,6
+	mov	[WORD cs:ivx64+1],ax	; xtile<<6
+	mov	dx,[focalty]
+	dec	dx
+	mov	[WORD cs:ivyt+1],dx	; ytile = focalty+ytilestep
+	add	ax,dx
+	mov	[WORD cs:ivt+1],ax		; T = (xtile<<6)+ytile
 @@q2:
 ;
 ; ystep = -finetangent[...]: stored, patched in, and times xpartialdown for
@@ -1684,15 +1744,18 @@ not90:
 	mov	[WORD cs:vyadd+1],si
 	sub	dx,64				; its high word plus xtilestep<<6
 	mov	[WORD cs:vyadc+2],dx
-	mov	bp,[xpartialdown]
+q2a:
+	mov	bp,1234h			; xpartialdown, patched in per frame
 	mul	bp
 	mov	si,dx
 	mov	ax,di
 	mul	bp
 	add	ax,si
 	adc	dx,0				; dx:ax = xpartialdown * the tangent, >>16
-	mov	bx,[WORD viewy]		; viewy minus it: id added the negated product
-	mov	si,[WORD viewy+2]
+q2y:
+	mov	bx,1234h			; viewy, patched in per frame
+q2z:
+	mov	si,1234h
 	sub	bx,ax
 	sbb	si,dx
 	mov	[WORD yintercept],bx
@@ -1711,15 +1774,18 @@ not90:
 	sbb	dx,0				; dx:si = xstep
 	mov	[WORD cs:hxadd+4],si
 	mov	[WORD cs:hxadc+2],dx
-	mov	bp,[ypartialdown]
+q2b:
+	mov	bp,1234h			; ypartialdown, patched in per frame
 	mul	bp
 	mov	si,dx
 	mov	ax,di
 	mul	bp
 	add	ax,si
 	adc	dx,0
-	mov	bx,[WORD viewx]
-	mov	cx,[WORD viewx+2]
+q2x:
+	mov	bx,1234h			; viewx, patched in per frame
+q2w:
+	mov	cx,1234h
 	sub	bx,ax
 	sbb	cx,dx
 	mov	[WORD xintercept],bx	; CX = xinttile
@@ -1751,6 +1817,33 @@ not180:
 	mov	[yadj],-64
 	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_INCDX
+;
+; NEC V30 build (step 47): the frame's constants, into this quadrant's
+; body and into initvars -- this runs on the first ray of every frame
+; (curquad is reset) and whenever a ray changes quadrant
+;
+	mov	ax,[xpartialdown]
+	mov	[WORD cs:q3a+1],ax
+	mov	ax,[ypartialup]
+	mov	[WORD cs:q3b+1],ax
+	mov	ax,[WORD viewy]
+	mov	[WORD cs:q3y+1],ax
+	mov	ax,[WORD viewy+2]
+	mov	[WORD cs:q3z+2],ax
+	mov	ax,[WORD viewx]
+	mov	[WORD cs:q3x+1],ax
+	mov	ax,[WORD viewx+2]
+	mov	[WORD cs:q3w+1],ax
+	mov	ax,[focaltx]
+	dec	ax
+	mov	[WORD cs:ivxt+1],ax	; xtile = focaltx+xtilestep
+	shl	ax,6
+	mov	[WORD cs:ivx64+1],ax	; xtile<<6
+	mov	dx,[focalty]
+	inc	dx
+	mov	[WORD cs:ivyt+1],dx	; ytile = focalty+ytilestep
+	add	ax,dx
+	mov	[WORD cs:ivt+1],ax		; T = (xtile<<6)+ytile
 @@q3:
 ;
 ; ystep = finetangent[...]: stored, patched in, and times xpartialdown for
@@ -1764,15 +1857,18 @@ not180:
 	mov	dx,di
 	sub	dx,64				; its high word plus xtilestep<<6
 	mov	[WORD cs:vyadc+2],dx
-	mov	bp,[xpartialdown]
+q3a:
+	mov	bp,1234h			; xpartialdown, patched in per frame
 	mul	bp
 	mov	si,dx
 	mov	ax,di
 	mul	bp
 	add	ax,si
 	adc	dx,0				; dx:ax = xpartialdown * the tangent, >>16
-	add	ax,[WORD viewy]
-	adc	dx,[WORD viewy+2]
+q3y:
+	add	ax,1234h			; viewy, patched in per frame
+q3z:
+	adc	dx,1234h
 	mov	[WORD yintercept],ax
 	mov	[WORD yintercept+2],dx
 ;
@@ -1790,15 +1886,18 @@ not180:
 	sbb	dx,0				; dx:si = xstep
 	mov	[WORD cs:hxadd+4],si
 	mov	[WORD cs:hxadc+2],dx
-	mov	bp,[ypartialup]
+q3b:
+	mov	bp,1234h			; ypartialup, patched in per frame
 	mul	bp
 	mov	si,dx
 	mov	ax,di
 	mul	bp
 	add	ax,si
 	adc	dx,0
-	mov	bx,[WORD viewx]
-	mov	cx,[WORD viewx+2]
+q3x:
+	mov	bx,1234h			; viewx, patched in per frame
+q3w:
+	mov	cx,1234h
 	sub	bx,ax
 	sbb	cx,dx
 	mov	[WORD xintercept],bx	; CX = xinttile
@@ -1832,6 +1931,33 @@ entry360:
 	mov	[yadj],64
 	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_INCDX
+;
+; NEC V30 build (step 47): the frame's constants, into this quadrant's
+; body and into initvars -- this runs on the first ray of every frame
+; (curquad is reset) and whenever a ray changes quadrant
+;
+	mov	ax,[xpartialup]
+	mov	[WORD cs:q4a+1],ax
+	mov	ax,[ypartialup]
+	mov	[WORD cs:q4b+1],ax
+	mov	ax,[WORD viewy]
+	mov	[WORD cs:q4y+1],ax
+	mov	ax,[WORD viewy+2]
+	mov	[WORD cs:q4z+2],ax
+	mov	ax,[WORD viewx]
+	mov	[WORD cs:q4x+1],ax
+	mov	ax,[WORD viewx+2]
+	mov	[WORD cs:q4w+2],ax
+	mov	ax,[focaltx]
+	inc	ax
+	mov	[WORD cs:ivxt+1],ax	; xtile = focaltx+xtilestep
+	shl	ax,6
+	mov	[WORD cs:ivx64+1],ax	; xtile<<6
+	mov	dx,[focalty]
+	inc	dx
+	mov	[WORD cs:ivyt+1],dx	; ytile = focalty+ytilestep
+	add	ax,dx
+	mov	[WORD cs:ivt+1],ax		; T = (xtile<<6)+ytile
 @@q4:
 ;
 ; ystep = finetangent[...]: stored, patched in, and times xpartialup for
@@ -1846,15 +1972,18 @@ entry360:
 	mov	dx,di
 	add	dx,64				; its high word plus xtilestep<<6
 	mov	[WORD cs:vyadc+2],dx
-	mov	bp,[xpartialup]
+q4a:
+	mov	bp,1234h			; xpartialup, patched in per frame
 	mul	bp
 	mov	si,dx
 	mov	ax,di
 	mul	bp
 	add	ax,si
 	adc	dx,0				; dx:ax = xpartialup * the tangent, >>16
-	add	ax,[WORD viewy]
-	adc	dx,[WORD viewy+2]
+q4y:
+	add	ax,1234h			; viewy, patched in per frame
+q4z:
+	adc	dx,1234h
 	mov	[WORD yintercept],ax
 	mov	[WORD yintercept+2],dx
 ;
@@ -1866,15 +1995,18 @@ entry360:
 	mov	di,[es:bx+2-DEG270*4]
 	mov	[WORD cs:hxadd+4],ax
 	mov	[WORD cs:hxadc+2],di
-	mov	bp,[ypartialup]
+q4b:
+	mov	bp,1234h			; ypartialup, patched in per frame
 	mul	bp
 	mov	si,dx
 	mov	ax,di
 	mul	bp
 	add	ax,si
 	adc	dx,0
-	add	ax,[WORD viewx]
-	adc	dx,[WORD viewx+2]
+q4x:
+	add	ax,1234h			; viewx, patched in per frame
+q4w:
+	adc	dx,1234h
 	mov	[WORD xintercept],ax
 	mov	cx,dx				; CX = xinttile
 	jmp	initvars
@@ -1902,16 +2034,21 @@ not360:
 ;
 ;---------------------------------------------------------------------------
 initvars:
-	mov	si,[focaltx]
-	add	si,[xtilestep]
-	mov	[xtile],si					; xtile = focaltx+xtilestep
+;
+; NEC V30 build (step 47): xtile, xtile<<6, ytile and T are the same for
+; every ray of a quadrant in a frame, so the quadrant code patches them in.
+;
+ivxt:
+	mov	si,1234h					; xtile = focaltx+xtilestep (BE iw: at +1)
+	mov	[xtile],si
 	mov	bx,si
-	shl	si,6
-	mov	dx,si
+ivx64:
+	mov	si,1234h					; xtile<<6
 	add	si,[WORD yintercept+2]		; xspot = (xtile<<6) + yinttile
-	mov	bp,[focalty]
-	add	bp,[ytilestep]				; ytile = focalty+ytilestep
-	add	dx,bp						; T = (xtile<<6)+ytile
+ivyt:
+	mov	bp,1234h					; ytile = focalty+ytilestep
+ivt:
+	mov	dx,1234h					; T = (xtile<<6)+ytile
 	mov	di,cx
 	shl	di,6
 	add	di,bp						; yspot = (xinttile<<6) + ytile
