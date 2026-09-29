@@ -1500,6 +1500,15 @@ PUBLIC	AsmRefresh
 	mov	[curquad],0				; the first ray patches its quadrant in
 	mov	[WORD cs:qlo+2],7FFFh	; and takes id's chain to get there
 	mov	[pixx],0
+;
+; A taken jump, so the patch just made to qlo -- some 25 bytes ahead -- is
+; what runs: a 486 may already hold the old CMP in its 32-byte prefetch
+; queue, and then, as a timer interrupt happened to fall, the frame's first
+; ray took last frame's quadrant without its patch block.  (A V30 prefetches
+; 6 bytes and never did.)  Found when step 47 put per-frame values in that
+; block: the whole-loop CRC on the 486 differed, and moved with the layout.
+;
+	jmp	pixxloop
 ;---------------------------------------------------------------------------
 ;
 ; Setup to trace a ray through pixx view pixel
