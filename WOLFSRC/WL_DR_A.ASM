@@ -124,119 +124,13 @@ chhkey		dw	8000h
 chhgylo		dw	0
 chhgyhi		dw	0
 tsave		dw	0				; T, across a door or pushwall test
+yadj		dw	64				; xtilestep<<6, as added into vyadc's word
 clx1		dw	0				; CheckLine's working storage
 cly1		dw	0
 clhalf		dw	0
 clend		dw	0
 
 CODESEG
-
-;-------------------
-;
-; xpartialbyystep
-;
-; multiplies long [ystep] (possibly negative), by word [xpartial] (in BX)
-;
-; returns dx:ax
-; trashes bx,cx,di
-;
-;-------------------
-
-PROC xpartialbyystep NEAR
-;
-; setup
-;
-	mov	ax,[WORD ystep]
-	mov	cx,[WORD ystep+2]
-	or	cx,cx               ; is ystep negatice?
-	jns	@@multpos
-;
-; multiply negative cx:ax by bx
-;
-	neg	cx
-	neg	ax
-	sbb	cx,0
-
-	mul	bx					; fraction*fraction
-	mov	di,dx				; di is low word of result
-	mov	ax,cx				;
-	mul	bx					; units*fraction
-	add	ax,di
-	adc	dx,0
-
-	neg	dx
-	neg	ax
-	sbb	dx,0
-	ret
-;
-; multiply positive cx:ax by bx
-;
-EVEN
-@@multpos:
-	mul	bx					; fraction*fraction
-	mov	di,dx				; di is low word of result
-	mov	ax,cx				;
-	mul	bx					; units*fraction
-	add	ax,di
-	adc	dx,0
-
-	ret
-
-ENDP
-
-
-
-;-------------------
-;
-; ypartialbyxstep
-;
-; multiplies long [xstep] (possibly negative), by word [ypartial] (in BP)
-;
-; returns dx:ax
-; trashes cx,di,bp
-;
-;-------------------
-
-PROC ypartialbyxstep NEAR
-;
-; setup
-;
-	mov	ax,[WORD xstep]
-	mov	cx,[WORD xstep+2]
-	or	cx,cx               ; is ystep negatice?
-	jns	@@multpos
-;
-; multiply negative cx:ax by bx
-;
-	neg	cx
-	neg	ax
-	sbb	cx,0
-
-	mul	bp					; fraction*fraction
-	mov	di,dx				; di is low word of result
-	mov	ax,cx				;
-	mul	bp					; units*fraction
-	add	ax,di
-	adc	dx,0
-
-	neg	dx
-	neg	ax
-	sbb	dx,0
-	ret
-;
-; multiply positive cx:ax by bx
-;
-EVEN
-@@multpos:
-	mul	bp					; fraction*fraction
-	mov	di,dx				; di is low word of result
-	mov	ax,cx				;
-	mul	bp					; units*fraction
-	add	ax,di
-	adc	dx,0
-	ret
-
-ENDP
 
 
 ;============================
@@ -1587,6 +1481,7 @@ entry90:
 	mov	[BYTE cs:horizop2],OP_JL	; (id's horizop was jge: its inverse)
 	mov	[BYTE cs:vxtileop],OP_INCBX	; xtile += xtilestep
 	mov	[BYTE cs:vtop+2],64			; T += xtilestep<<6
+	mov	[yadj],64
 	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_DECDX		; T += ytilestep
 @@q1:
@@ -1603,9 +1498,7 @@ entry90:
 	neg	dx
 	neg	si
 	sbb	dx,0				; dx:si = ystep
-	mov	[WORD ystep],si
 	mov	[WORD cs:vyadd+1],si
-	mov	[WORD ystep+2],dx
 	add	dx,64				; its high word plus xtilestep<<6
 	mov	[WORD cs:vyadc+2],dx
 	mov	bp,[xpartialup]
@@ -1629,9 +1522,7 @@ entry90:
 	shl	bx,2
 	mov	ax,[es:bx]
 	mov	di,[es:bx+2]
-	mov	[WORD xstep],ax
 	mov	[WORD cs:hxadd+4],ax
-	mov	[WORD xstep+2],di
 	mov	[WORD cs:hxadc+2],di
 	mov	bp,[ypartialdown]
 	mul	bp
@@ -1665,6 +1556,7 @@ not90:
 	mov	[BYTE cs:horizop2],OP_JG	; (id's horizop was jle)
 	mov	[BYTE cs:vxtileop],OP_DECBX	; xtile += xtilestep
 	mov	[BYTE cs:vtop+2],-64
+	mov	[yadj],-64
 	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_DECDX
 @@q2:
@@ -1682,9 +1574,7 @@ not90:
 	neg	dx
 	neg	si
 	sbb	dx,0				; dx:si = ystep
-	mov	[WORD ystep],si
 	mov	[WORD cs:vyadd+1],si
-	mov	[WORD ystep+2],dx
 	sub	dx,64				; its high word plus xtilestep<<6
 	mov	[WORD cs:vyadc+2],dx
 	mov	bp,[xpartialdown]
@@ -1712,9 +1602,7 @@ not90:
 	neg	dx
 	neg	si
 	sbb	dx,0				; dx:si = xstep
-	mov	[WORD xstep],si
 	mov	[WORD cs:hxadd+4],si
-	mov	[WORD xstep+2],dx
 	mov	[WORD cs:hxadc+2],dx
 	mov	bp,[ypartialdown]
 	mul	bp
@@ -1748,6 +1636,7 @@ not180:
 	mov	[BYTE cs:horizop2],OP_JG	; (id's horizop was jle)
 	mov	[BYTE cs:vxtileop],OP_DECBX	; xtile += xtilestep
 	mov	[BYTE cs:vtop+2],-64
+	mov	[yadj],-64
 	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_INCDX
 @@q3:
@@ -1759,9 +1648,7 @@ not180:
 	shl	bx,2
 	mov	ax,[es:bx-DEG180*4]			; the tangent, positive
 	mov	di,[es:bx+2-DEG180*4]
-	mov	[WORD ystep],ax
 	mov	[WORD cs:vyadd+1],ax
-	mov	[WORD ystep+2],di
 	mov	dx,di
 	sub	dx,64				; its high word plus xtilestep<<6
 	mov	[WORD cs:vyadc+2],dx
@@ -1789,9 +1676,7 @@ not180:
 	neg	dx
 	neg	si
 	sbb	dx,0				; dx:si = xstep
-	mov	[WORD xstep],si
 	mov	[WORD cs:hxadd+4],si
-	mov	[WORD xstep+2],dx
 	mov	[WORD cs:hxadc+2],dx
 	mov	bp,[ypartialup]
 	mul	bp
@@ -1827,6 +1712,7 @@ entry360:
 	mov	[BYTE cs:horizop2],OP_JL	; (id's horizop was jge)
 	mov	[BYTE cs:vxtileop],OP_INCBX	; xtile += xtilestep
 	mov	[BYTE cs:vtop+2],64
+	mov	[yadj],64
 	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_INCDX
 @@q4:
@@ -1839,9 +1725,7 @@ entry360:
 	shl	bx,2
 	mov	ax,[es:bx]			; the tangent, positive
 	mov	di,[es:bx+2]
-	mov	[WORD ystep],ax
 	mov	[WORD cs:vyadd+1],ax
-	mov	[WORD ystep+2],di
 	mov	dx,di
 	add	dx,64				; its high word plus xtilestep<<6
 	mov	[WORD cs:vyadc+2],dx
@@ -1863,9 +1747,7 @@ entry360:
 	shl	bx,2
 	mov	ax,[es:bx-DEG270*4]
 	mov	di,[es:bx+2-DEG270*4]
-	mov	[WORD xstep],ax
 	mov	[WORD cs:hxadd+4],ax
-	mov	[WORD xstep+2],di
 	mov	[WORD cs:hxadc+2],di
 	mov	bp,[ypartialup]
 	mul	bp
@@ -2093,8 +1975,8 @@ horizdoor:
 	and	bx,7fh						; strip high bit
 	shl	bx,1                        ; index into word width door table
 
-	mov	ax,[WORD xstep]
-	mov	dx,[WORD xstep+2]
+	mov	ax,[WORD cs:hxadd+4]		; xstep, as patched into the loop (NEC V30 build:
+	mov	dx,[WORD cs:hxadc+2]		; the rays no longer store it)
 	sar	dx,1
 	rcr ax,1						; half a step gets to door position
 
@@ -2137,10 +2019,10 @@ hithmid:
 ;============
 
 horizpushwall:
-	mov	ax,[WORD xstep+2]			; multiply xstep by pwallmove (0-63)
+	mov	ax,[WORD cs:hxadc+2]		; multiply xstep by pwallmove (0-63)
 	mul	[pwallpos]
 	mov	bx,ax
-	mov	ax,[WORD xstep]
+	mov	ax,[WORD cs:hxadd+4]
 	mul	[pwallpos]
 	add	dx,bx
 
@@ -2201,8 +2083,9 @@ vertdoor:
 	and	bx,7fh						; strip high bit
 	shl	bx,1                        ; index into word width doorposition
 
-	mov	ax,[WORD ystep]
-	mov	dx,[WORD ystep+2]
+	mov	ax,[WORD cs:vyadd+1]		; ystep, as patched into the loop, less
+	mov	dx,[WORD cs:vyadc+2]		; the xtilestep<<6 added to its high word
+	sub	dx,[yadj]
 	sar	dx,1
 	rcr ax,1						; half a step gets to door position
 
@@ -2244,10 +2127,11 @@ hitvmid:
 ;============
 
 vertpushwall:
-	mov	ax,[WORD ystep+2]			; multiply ystep by pwallmove (0-63)
+	mov	ax,[WORD cs:vyadc+2]		; multiply ystep by pwallmove (0-63)
+	sub	ax,[yadj]
 	mul	[pwallpos]
 	mov	bx,ax
-	mov	ax,[WORD ystep]
+	mov	ax,[WORD cs:vyadd+1]
 	mul	[pwallpos]
 	add	dx,bx
 
