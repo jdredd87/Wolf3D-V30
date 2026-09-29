@@ -26,7 +26,7 @@ were a test suite.
 | | |
 |---|---|
 | runs on the V30 | yes -- `WOLF3DV.EXE`, alongside the registered 1.4 WL6 data |
-| speed | **3.60 fps** in play (QUICK PRELOAD NOEMS); like for like with the start, 2.39 -> 3.07 fps, 28% faster; all four demos 3.88 fps |
+| speed | **4.05 fps** over all four demos (was 3.88 mid-way); demo 0 in full **2.75 -> 3.78 fps, 1.37x**; the 200-frame benchmark 3.60 fps in play |
 | picture | identical to id's renderer at every checked frame |
 | optimisations | 24 steps so far -- see [V30NOTES.md](V30NOTES.md) |
 

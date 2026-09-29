@@ -117,9 +117,10 @@ byte for byte.
 | 24 | `PlaceActors`/`PlaceStatics` laid out so an unseen object takes no jump; `vismark` an immediate | **1005** | **3.60** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
-1183 ticks, **2.39 -> 3.07 fps, 28% faster**. The whole attract loop
-(`TIMEDEMO PRELOAD NOEMS`, all four demos, 5,386 frames) runs at **3.88 fps**;
-demo 0 alone went from 2.75 fps at the start to 3.59.
+1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
+loop (`TIMEDEMO PRELOAD NOEMS`, all four demos, 5,386 frames) ran at 3.88 fps
+after step 19 and **4.05 fps after step 24**; demo 0 alone went from 4,575
+ticks (2.75 fps) at the start to **3,328 (3.78 fps), 1.37x**.
 
 ## Findings worth keeping
 
