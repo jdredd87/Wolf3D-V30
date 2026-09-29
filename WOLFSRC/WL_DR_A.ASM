@@ -12,6 +12,10 @@ DEG360		=	3600
 
 OP_JLE		=	07eh
 OP_JGE		=	07dh
+OP_INCBX	=	043h			; NEC V30 build: the tile steps, patched per ray
+OP_DECBX	=	04bh
+OP_INCBP	=	045h
+OP_DECBP	=	04dh
 
 EXTRN	finetangent:DWORD	; far array, starts at offset 0
 
@@ -329,12 +333,16 @@ entry90:
 	mov	[ytilestep],-1			; ytilestep = -1
 	mov	[BYTE cs:horizop],OP_JGE	; patch a jge in
 	mov	[BYTE cs:vertop],OP_JLE		; patch a jle in
+	mov	[BYTE cs:vxtileop],OP_INCBX	; xtile += xtilestep
+	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
 	mov	bx,DEG90-1
 	sub	bx,cx
 	shl	bx,2
 	mov	ax,[es:bx]
 	mov	dx,[es:bx+2]
 	mov	[WORD xstep],ax
+	mov	[WORD cs:hxadd+4],ax	; patch xstep into the core loop
+	mov	[WORD cs:hxadc+2],dx
 	mov	[WORD xstep+2],dx		; xstep = finetangent[DEG90-1-angle]
 	mov	bx,cx
 	shl	bx,2
@@ -344,6 +352,8 @@ entry90:
 	neg	ax
 	sbb	dx,0
 	mov	[WORD ystep],ax
+	mov	[WORD cs:vyadd+4],ax	; patch ystep into the core loop
+	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = -finetangent[angle]
 
 	mov	bx,[xpartialup]			; xpartial = xpartialup
@@ -363,6 +373,8 @@ not90:
 	mov	[ytilestep],ax			; ytilestep = -1
 	mov	[BYTE cs:horizop],OP_JLE	; patch a jle in
 	mov	[BYTE cs:vertop],OP_JLE		; patch a jle in
+	mov	[BYTE cs:vxtileop],OP_DECBX	; xtile += xtilestep
+	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
 
 	mov	bx,cx
 	shl	bx,2
@@ -372,6 +384,8 @@ not90:
 	neg	ax
 	sbb	dx,0
 	mov	[WORD xstep],ax
+	mov	[WORD cs:hxadd+4],ax	; patch xstep into the core loop
+	mov	[WORD cs:hxadc+2],dx
 	mov	[WORD xstep+2],dx		; xstep = -finetangent[angle-DEG90]
 	mov	bx,DEG180-1
 	sub	bx,cx
@@ -382,6 +396,8 @@ not90:
 	neg	ax
 	sbb	dx,0
 	mov	[WORD ystep],ax
+	mov	[WORD cs:vyadd+4],ax	; patch ystep into the core loop
+	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = -finetangent[DEG180-1-angle]
 
 	mov	bx,[xpartialdown]		; xpartial = xpartialdown
@@ -400,6 +416,8 @@ not180:
 	mov	[ytilestep],1			; ytilestep = 1
 	mov	[BYTE cs:horizop],OP_JLE	; patch a jle in
 	mov	[BYTE cs:vertop],OP_JGE		; patch a jge in
+	mov	[BYTE cs:vxtileop],OP_DECBX	; xtile += xtilestep
+	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
 
 	mov	bx,DEG270-1
 	sub	bx,cx
@@ -410,12 +428,16 @@ not180:
 	neg	ax
 	sbb	dx,0
 	mov	[WORD xstep],ax
+	mov	[WORD cs:hxadd+4],ax	; patch xstep into the core loop
+	mov	[WORD cs:hxadc+2],dx
 	mov	[WORD xstep+2],dx		; xstep = -finetangent[DEG270-1-angle]
 	mov	bx,cx
 	shl	bx,2
 	mov	ax,[es:bx-DEG180*4]
 	mov	dx,[es:bx+2-DEG180*4]
 	mov	[WORD ystep],ax
+	mov	[WORD cs:vyadd+4],ax	; patch ystep into the core loop
+	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = finetangent[angle-DEG180]
 
 	mov	bx,[xpartialdown]		; xpartial = xpartialdown
@@ -437,12 +459,16 @@ entry360:
 	mov	[ytilestep],ax			; ytilestep = 1
 	mov	[BYTE cs:horizop],OP_JGE	; patch a jge in
 	mov	[BYTE cs:vertop],OP_JGE		; patch a jge in
+	mov	[BYTE cs:vxtileop],OP_INCBX	; xtile += xtilestep
+	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
 
 	mov	bx,cx
 	shl	bx,2
 	mov	ax,[es:bx-DEG270*4]
 	mov	dx,[es:bx+2-DEG270*4]
 	mov	[WORD xstep],ax
+	mov	[WORD cs:hxadd+4],ax	; patch xstep into the core loop
+	mov	[WORD cs:hxadc+2],dx
 	mov	[WORD xstep+2],dx		; xstep = finetangent[angle-DEG270]
 	mov	bx,DEG360-1
 	sub	bx,cx
@@ -450,6 +476,8 @@ entry360:
 	mov	ax,[es:bx]
 	mov	dx,[es:bx+2]
 	mov	[WORD ystep],ax
+	mov	[WORD cs:vyadd+4],ax	; patch ystep into the core loop
+	mov	[WORD cs:vyadc+2],dx
 	mov	[WORD ystep+2],dx		; ystep = finetangent[DEG360-1-angle]
 
 	mov	bx,[xpartialup]			; xpartial = xpartialup
@@ -539,10 +567,18 @@ vertentry:
 	jnz	hitvert
 passvert:
 	mov	[BYTE spotvis+si],1			; *((byte *)spotvis+xspot) = true;
-	add	bx,[xtilestep]				; xtile+=xtilestep
-	mov	ax,[WORD ystep]
-	add	[WORD yintercept],ax		; yintercept += ystep
-	adc	dx,[WORD ystep+2]
+;
+; NEC V30 build, StevenC & Claude: the three steps below are patched in per
+; ray by the quadrant code above, as id already patches vertop/horizop, so a
+; tile step no longer reads xtilestep and both words of ystep from memory.
+; The 1234h placeholders force the full imm16 encodings being patched.
+;
+vxtileop:
+	inc	bx							; xtile+=xtilestep: INC BX or DEC BX
+vyadd:
+	add	[WORD yintercept],1234h		; yintercept += ystep (low word at +4)
+vyadc:
+	adc	dx,1234h					; (high word at +2)
 	mov	si,bx
 	shl	si,6
 	add	si,dx						; xspot = (xtile<<6)+yinttile
@@ -580,10 +616,12 @@ horizentry:
 	jnz	hithoriz
 passhoriz:
 	mov	[BYTE spotvis+di],1			; *((byte *)spotvis+yspot) = true;
-	add	bp,[ytilestep]				; ytile+=ytilestep
-	mov	ax,[WORD xstep]
-	add	[WORD xintercept],ax		; xintercept += xstep
-	adc	cx,[WORD xstep+2]
+hytileop:
+	inc	bp							; ytile+=ytilestep: INC BP or DEC BP, patched
+hxadd:
+	add	[WORD xintercept],1234h		; xintercept += xstep (low word at +4)
+hxadc:
+	adc	cx,1234h					; (high word at +2)
 	mov	di,cx
 	shl	di,6
 	add	di,bp						; yspot = (xinttile<<6)+ytile
