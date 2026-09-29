@@ -287,63 +287,9 @@ void TransformActor (objtype *ob)
 ========================
 */
 
-boolean TransformTile (int tx, int ty, int *dispx, int *dispheight)
-{
-	int ratio;
-	fixed gx,gy,gxt,gyt,nx,ny;
-	long	temp;
-
-//
-// translate point to view centered coordinates
-//
-	gx = ((long)tx<<TILESHIFT)+0x8000-viewx;
-	gy = ((long)ty<<TILESHIFT)+0x8000-viewy;
-
-//
-// calculate newx
-//
-	gxt = FixedByFrac(gx,viewcos);
-	gyt = FixedByFrac(gy,viewsin);
-	nx = gxt-gyt-0x2000;		// 0x2000 is size of object
-
-//
-// calculate newy
-//
-	gxt = FixedByFrac(gx,viewsin);
-	gyt = FixedByFrac(gy,viewcos);
-	ny = gyt+gxt;
-
-
-//
-// calculate perspective ratio
-//
-	if (nx<mindist)			// too close, don't overflow the divide
-	{
-		*dispheight = 0;
-		return false;
-	}
-
-	*dispx = centerx + ny*scale/nx;	// DEBUG: use assembly divide
-
-//
-// calculate height (heightnumerator/(nx>>8))
-//
-	asm	mov	ax,[WORD PTR heightnumerator]
-	asm	mov	dx,[WORD PTR heightnumerator+2]
-	asm	idiv	[WORD PTR nx+1]			// nx>>8
-	asm	mov	[WORD PTR temp],ax
-	asm	mov	[WORD PTR temp+2],dx
-
-	*dispheight = temp;
-
-//
-// see if it should be grabbed
-//
-	if (nx<TILEGLOBAL && ny>-TILEGLOBAL/2 && ny<TILEGLOBAL/2)
-		return true;
-	else
-		return false;
-}
+// TransformTile is in WL_DR_A.ASM since the NEC V30 build (StevenC & Claude):
+// the same arithmetic without the six far calls.
+boolean TransformTile (int tx, int ty, int *dispx, int *dispheight);
 
 //==========================================================================
 

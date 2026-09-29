@@ -27,10 +27,10 @@ EXTRN	HitVertPWall:FAR
 EXTRN	ScaleShape:FAR
 EXTRN	FarScalePost:FAR
 EXTRN	PM_GetPage:FAR
-EXTRN	TransformTile:FAR
 EXTRN	GetBonus:FAR
 EXTRN	TransformActor:FAR
 EXTRN	CalcRotate:FAR
+EXTRN	NOLANGUAGE F_LDIV@:FAR		; Borland's signed long divide (H_LDIV.ASM)
 
 
 DATASEG
@@ -63,6 +63,13 @@ EXTRN	farthest:WORD
 EXTRN	statobjlist:WORD		; statobj_t statobjlist[], 8 bytes each
 EXTRN	laststatobj:WORD
 EXTRN	player:WORD				; objtype *player
+EXTRN	centerx:WORD
+EXTRN	scale:DWORD				; fixed: a long
+
+ttgx	dd	?					; TransformTile's working values
+ttgy	dd	?
+ttnx	dd	?
+ttny	dd	?
 EXTRN	lastside:WORD			; the wall-post state HitVertWall/HitHorizWall keep
 EXTRN	lastintercept:DWORD
 EXTRN	lasttilehit:WORD
@@ -869,6 +876,139 @@ PUBLIC	PlaceActors
 	mov	[visptr],di
 	pop	di
 	pop	si
+	retf
+ENDP
+
+
+;============================
+;
+; TransformTile (int tx, int ty, int *dispx, int *dispheight)
+;
+; NEC V30 build, StevenC & Claude: WL_DRAW.C's routine, once per visible
+; static object, which was four far calls to FixedByFrac and two to
+; Borland's long multiply and divide helpers.  The same arithmetic:
+;
+;	gx = ((long)tx<<TILESHIFT)+0x8000-viewx;
+;	gy = ((long)ty<<TILESHIFT)+0x8000-viewy;
+;	nx = FixedByFrac(gx,viewcos) - FixedByFrac(gy,viewsin) - 0x2000;
+;	ny = FixedByFrac(gy,viewcos) + FixedByFrac(gx,viewsin);
+;	if (nx<mindist)
+;		{ *dispheight = 0; return false; }
+;	*dispx = centerx + ny*scale/nx;
+;	*dispheight = heightnumerator/(int)(nx>>8);			; one IDIV
+;	return (nx<TILEGLOBAL && ny>-TILEGLOBAL/2 && ny<TILEGLOBAL/2);
+;
+; ny*scale is the low 32 bits of a long product, as Borland's LXMUL@ keeps
+; them -- three MULs; the divide is still Borland's LDIV@, which has the
+; V30 fast path, so the truncation is its own.
+;
+;============================
+
+PROC	TransformTile
+PUBLIC	TransformTile
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+
+	mov	ax,8000h					; gx = (tx:8000h) - viewx
+	mov	dx,[bp+6]
+	sub	ax,[WORD viewx]
+	sbb	dx,[WORD viewx+2]
+	mov	[WORD ttgx],ax
+	mov	[WORD ttgx+2],dx
+	mov	ax,8000h					; gy = (ty:8000h) - viewy
+	mov	dx,[bp+8]
+	sub	ax,[WORD viewy]
+	sbb	dx,[WORD viewy+2]
+	mov	[WORD ttgy],ax
+	mov	[WORD ttgy+2],dx
+
+	mov	ax,[WORD ttgx]				; nx
+	mov	dx,[WORD ttgx+2]
+	FIXBYFRAC	viewcos
+	mov	[WORD ttnx],ax
+	mov	[WORD ttnx+2],dx
+	mov	ax,[WORD ttgy]
+	mov	dx,[WORD ttgy+2]
+	FIXBYFRAC	viewsin
+	sub	[WORD ttnx],ax
+	sbb	[WORD ttnx+2],dx
+	sub	[WORD ttnx],2000h			; the size of an object
+	sbb	[WORD ttnx+2],0
+
+	mov	ax,[WORD ttgy]				; ny
+	mov	dx,[WORD ttgy+2]
+	FIXBYFRAC	viewcos
+	mov	[WORD ttny],ax
+	mov	[WORD ttny+2],dx
+	mov	ax,[WORD ttgx]
+	mov	dx,[WORD ttgx+2]
+	FIXBYFRAC	viewsin
+	add	[WORD ttny],ax
+	adc	[WORD ttny+2],dx
+
+	mov	ax,[WORD ttnx]				; too close?  (signed long compare)
+	mov	dx,[WORD ttnx+2]
+	cmp	dx,[WORD mindist+2]
+	jg	@@far
+	jl	@@close
+	cmp	ax,[WORD mindist]
+	jae	@@far
+@@close:
+	mov	bx,[bp+12]
+	mov	[WORD bx],0					; *dispheight = 0
+	xor	ax,ax						; return false
+	jmp	@@ret
+
+@@far:
+	mov	ax,[WORD ttny]				; ny*scale, low 32 bits
+	mul	[WORD scale]
+	mov	si,ax
+	mov	di,dx
+	mov	ax,[WORD ttny+2]
+	mul	[WORD scale]
+	add	di,ax
+	mov	ax,[WORD ttny]
+	mul	[WORD scale+2]
+	add	di,ax						; DI:SI = ny*scale
+	push	[WORD ttnx+2]				; LDIV@ (dividend, divisor): divisor first
+	push	[WORD ttnx]
+	push	di
+	push	si
+	call	F_LDIV@						; pops its own arguments
+	add	ax,[centerx]
+	mov	bx,[bp+10]
+	mov	[bx],ax						; *dispx
+
+	mov	ax,[WORD heightnumerator]
+	mov	dx,[WORD heightnumerator+2]
+	idiv	[WORD ttnx+1]				; nx>>8
+	mov	bx,[bp+12]
+	mov	[bx],ax						; *dispheight
+
+	xor	ax,ax						; see if it should be grabbed
+	cmp	[WORD ttnx+2],0
+	jg	@@ret						; nx >= TILEGLOBAL
+	mov	dx,[WORD ttny+2]
+	mov	cx,[WORD ttny]
+	cmp	dx,-1						; ny > -TILEGLOBAL/2 ?
+	jl	@@ret
+	jg	@@nyabove
+	cmp	cx,8000h
+	jbe	@@ret
+@@nyabove:
+	cmp	dx,0						; ny < TILEGLOBAL/2 ?
+	jg	@@ret
+	jl	@@grab
+	cmp	cx,8000h
+	jae	@@ret
+@@grab:
+	mov	ax,1
+@@ret:
+	pop	di
+	pop	si
+	pop	bp
 	retf
 ENDP
 
