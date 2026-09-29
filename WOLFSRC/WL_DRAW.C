@@ -62,7 +62,6 @@ fixed	viewsin,viewcos;
 
 
 fixed	FixedByFrac (fixed a, fixed b);
-void	TransformActor (objtype *ob);
 void	BuildTables (void);
 void	ClearScreen (void);
 int		CalcRotate (objtype *ob);
@@ -210,59 +209,8 @@ ansok:;
 //
 // transform actor
 //
-void TransformActor (objtype *ob)
-{
-	int ratio;
-	fixed gx,gy,gxt,gyt,nx,ny;
-	long	temp;
-
-//
-// translate point to view centered coordinates
-//
-	gx = ob->x-viewx;
-	gy = ob->y-viewy;
-
-//
-// calculate newx
-//
-	gxt = FixedByFrac(gx,viewcos);
-	gyt = FixedByFrac(gy,viewsin);
-	nx = gxt-gyt-ACTORSIZE;		// fudge the shape forward a bit, because
-								// the midpoint could put parts of the shape
-								// into an adjacent wall
-
-//
-// calculate newy
-//
-	gxt = FixedByFrac(gx,viewsin);
-	gyt = FixedByFrac(gy,viewcos);
-	ny = gyt+gxt;
-
-//
-// calculate perspective ratio
-//
-	ob->transx = nx;
-	ob->transy = ny;
-
-	if (nx<mindist)			// too close, don't overflow the divide
-	{
-	  ob->viewheight = 0;
-	  return;
-	}
-
-	ob->viewx = centerx + ny*scale/nx;	// DEBUG: use assembly divide
-
-//
-// calculate height (heightnumerator/(nx>>8))
-//
-	asm	mov	ax,[WORD PTR heightnumerator]
-	asm	mov	dx,[WORD PTR heightnumerator+2]
-	asm	idiv	[WORD PTR nx+1]			// nx>>8
-	asm	mov	[WORD PTR temp],ax
-	asm	mov	[WORD PTR temp+2],dx
-
-	ob->viewheight = temp;
-}
+// NEC V30 build (StevenC & Claude): TransformActor is TransformActorA in
+// WL_DR_A.ASM, called NEAR from PlaceActors -- the same arithmetic, inline.
 
 //==========================================================================
 

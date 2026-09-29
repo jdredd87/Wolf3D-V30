@@ -32,7 +32,6 @@ EXTRN	HitVertPWall:FAR
 EXTRN	ScaleShape:FAR
 EXTRN	PM_GetPage:FAR
 EXTRN	GetBonus:FAR
-EXTRN	TransformActor:FAR
 EXTRN	CalcRotate:FAR
 EXTRN	NOLANGUAGE F_LDIV@:FAR		; Borland's signed long divide (H_LDIV.ASM)
 
@@ -908,6 +907,10 @@ OB_TILEX		=	24					; against the compiler's listing of
 OB_TILEY		=	26					; TransformActor
 OB_VIEWX		=	30
 OB_VIEWHEIGHT	=	32
+OB_X			=	16
+OB_Y			=	20
+OB_TRANSX		=	34
+OB_TRANSY		=	38
 OB_TEMP1		=	50
 OB_NEXT			=	56
 SS_ROTATE		=	0					; statetype
@@ -1007,9 +1010,7 @@ PUBLIC	PlaceActors
 
 @@seen:
 	mov	[WORD si+OB_ACTIVE],1
-	push	si
-	call	TransformActor
-	add	sp,2
+	call	TransformActorA			; NEAR, SI = the actor
 	cmp	[WORD si+OB_VIEWHEIGHT],0
 	je	@@next						; too close or far away
 	mov	ax,[si+OB_VIEWX]
@@ -1046,6 +1047,123 @@ PUBLIC	PlaceActors
 	pop	di
 	pop	si
 	retf
+ENDP
+
+
+;============================
+;
+; TransformActorA -- SI = the actor
+;
+; NEC V30 build, StevenC & Claude: WL_DRAW.C's TransformActor, called NEAR
+; from PlaceActors for every actor in a visible tile.  The C made four far
+; calls to FixedByFrac with long arguments on the stack and one to LXMUL@;
+; here they are inline, as in TransformTile below, whose arithmetic this is
+; with the actor's own x and y, ACTORSIZE (4000h) for the fudge, and the
+; results stored in the actor:
+;
+;	gx = ob->x-viewx;  gy = ob->y-viewy;
+;	nx = FixedByFrac(gx,viewcos) - FixedByFrac(gy,viewsin) - ACTORSIZE;
+;	ny = FixedByFrac(gy,viewcos) + FixedByFrac(gx,viewsin);
+;	ob->transx = nx;  ob->transy = ny;
+;	if (nx<mindist) { ob->viewheight = 0; return; }
+;	ob->viewx = centerx + ny*scale/nx;
+;	ob->viewheight = heightnumerator/(nx>>8);		; one IDIV, as the C
+;
+; Keeps SI, DI and BP, as the C did.  The actor is addressed through BP,
+; which reads SS -- DGROUP, like DS -- because FIXBYFRAC needs SI.
+;
+;============================
+
+PROC	TransformActorA NEAR
+PUBLIC	TransformActorA				; public only so profiles can name it
+	push	si
+	push	di
+	push	bp
+	mov	bp,si
+
+	mov	ax,[bp+OB_X]				; gx = ob->x-viewx
+	mov	dx,[bp+OB_X+2]
+	sub	ax,[WORD viewx]
+	sbb	dx,[WORD viewx+2]
+	mov	[WORD ttgx],ax
+	mov	[WORD ttgx+2],dx
+	mov	ax,[bp+OB_Y]				; gy = ob->y-viewy
+	mov	dx,[bp+OB_Y+2]
+	sub	ax,[WORD viewy]
+	sbb	dx,[WORD viewy+2]
+	mov	[WORD ttgy],ax
+	mov	[WORD ttgy+2],dx
+
+	mov	ax,[WORD ttgx]				; nx
+	mov	dx,[WORD ttgx+2]
+	FIXBYFRAC	viewcos
+	mov	[WORD ttnx],ax
+	mov	[WORD ttnx+2],dx
+	mov	ax,[WORD ttgy]
+	mov	dx,[WORD ttgy+2]
+	FIXBYFRAC	viewsin
+	sub	[WORD ttnx],ax
+	sbb	[WORD ttnx+2],dx
+	sub	[WORD ttnx],4000h			; ACTORSIZE
+	sbb	[WORD ttnx+2],0
+
+	mov	ax,[WORD ttgy]				; ny
+	mov	dx,[WORD ttgy+2]
+	FIXBYFRAC	viewcos
+	mov	[WORD ttny],ax
+	mov	[WORD ttny+2],dx
+	mov	ax,[WORD ttgx]
+	mov	dx,[WORD ttgx+2]
+	FIXBYFRAC	viewsin
+	add	ax,[WORD ttny]
+	adc	dx,[WORD ttny+2]
+	mov	[WORD ttny],ax
+	mov	[WORD ttny+2],dx
+	mov	[bp+OB_TRANSY],ax			; ob->transy = ny
+	mov	[bp+OB_TRANSY+2],dx
+
+	mov	ax,[WORD ttnx]
+	mov	dx,[WORD ttnx+2]
+	mov	[bp+OB_TRANSX],ax			; ob->transx = nx
+	mov	[bp+OB_TRANSX+2],dx
+	cmp	dx,[WORD mindist+2]			; too close?  (signed long compare)
+	jg	@@far
+	jl	@@close
+	cmp	ax,[WORD mindist]
+	jae	@@far
+@@close:
+	mov	[WORD bp+OB_VIEWHEIGHT],0
+	jmp	@@ret
+
+@@far:
+	mov	ax,[WORD ttny]				; ny*scale, low 32 bits
+	mul	[WORD scale]
+	mov	si,ax
+	mov	di,dx
+	mov	ax,[WORD ttny+2]
+	mul	[WORD scale]
+	add	di,ax
+	mov	ax,[WORD ttny]
+	mul	[WORD scale+2]
+	add	di,ax						; DI:SI = ny*scale
+	push	[WORD ttnx+2]				; LDIV@ (dividend, divisor): divisor first
+	push	[WORD ttnx]
+	push	di
+	push	si
+	call	F_LDIV@						; pops its own arguments
+	add	ax,[centerx]
+	mov	[bp+OB_VIEWX],ax			; ob->viewx
+
+	mov	ax,[WORD heightnumerator]
+	mov	dx,[WORD heightnumerator+2]
+	idiv	[WORD ttnx+1]				; nx>>8
+	mov	[bp+OB_VIEWHEIGHT],ax		; ob->viewheight
+
+@@ret:
+	pop	bp
+	pop	di
+	pop	si
+	ret
 ENDP
 
 
