@@ -114,6 +114,7 @@ int		horizwall[MAXWALLTILES],vertwall[MAXWALLTILES];
 void AsmRefresh (void);			// in WL_DR_A.ASM
 void DrawVisList (void);		// in WL_DR_A.ASM: DrawScaleds' drawing loop
 void PlaceStatics (void);		// in WL_DR_A.ASM: DrawScaleds' static objects
+void PlaceActors (void);		// in WL_DR_A.ASM: DrawScaleds' actors
 
 /*
 ============================================================================
@@ -973,48 +974,9 @@ void DrawScaleds (void)
 //
 // place active objects
 //
-	for (obj = player->next;obj;obj=obj->next)
-	{
-		if (!(visptr->shapenum = obj->state->shapenum))
-			continue;						// no shape
-
-		spotloc = (obj->tilex<<6)+obj->tiley;	// optimize: keep in struct?
-		visspot = &spotvis[0][0]+spotloc;
-		tilespot = &tilemap[0][0]+spotloc;
-
-		//
-		// could be in any of the nine surrounding tiles
-		//
-		if (*visspot == vismark
-		|| ( *(visspot-1) == vismark && !*(tilespot-1) )
-		|| ( *(visspot+1) == vismark && !*(tilespot+1) )
-		|| ( *(visspot-65) == vismark && !*(tilespot-65) )
-		|| ( *(visspot-64) == vismark && !*(tilespot-64) )
-		|| ( *(visspot-63) == vismark && !*(tilespot-63) )
-		|| ( *(visspot+65) == vismark && !*(tilespot+65) )
-		|| ( *(visspot+64) == vismark && !*(tilespot+64) )
-		|| ( *(visspot+63) == vismark && !*(tilespot+63) ) )
-		{
-			obj->active = true;
-			TransformActor (obj);
-			if (!obj->viewheight)
-				continue;						// too close or far away
-
-			visptr->viewx = obj->viewx;
-			visptr->viewheight = obj->viewheight;
-			if (visptr->shapenum == -1)
-				visptr->shapenum = obj->temp1;	// special shape
-
-			if (obj->state->rotate)
-				visptr->shapenum += CalcRotate (obj);
-
-			if (visptr < &vislist[MAXVISABLE-1])	// don't let it overflow
-				visptr++;
-			obj->flags |= FL_VISABLE;
-		}
-		else
-			obj->flags &= ~FL_VISABLE;
-	}
+	// NEC V30 build (StevenC & Claude): PlaceActors in WL_DR_A.ASM -- the same
+	// loop, the same nine-spot test, the same stores and calls in the same order.
+	PlaceActors ();
 
 //
 // draw from back to front

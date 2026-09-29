@@ -111,7 +111,8 @@ byte for byte.
 | 18 | *(tried, reverted)* branchless fizzle step -- slower: see below | -- | -- |
 | 19 | every communal word-aligned; `spotvis` carries a frame stamp, cleared every 255 frames | 1050 | 3.45 |
 | 20 | *(tried, reverted)* skip clearing the rows last frame's walls all covered, then fill the gaps -- 2% slower: see below | -- | -- |
-| 21 | `ScaleLine` keeps the screen segment in DX; id's per-ray multiply helpers inlined; hot loop tops `EVEN` | **1038** | **3.49** |
+| 21 | `ScaleLine` keeps the screen segment in DX; id's per-ray multiply helpers inlined; hot loop tops `EVEN` | 1038 | 3.49 |
+| 22 | `DrawScaleds`' actor loop in asm (`PlaceActors`) -- game logic: wakes actors, sets `FL_VISABLE`, same order | **1024** | **3.53** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks, **2.39 -> 3.07 fps, 28% faster**. The whole attract loop

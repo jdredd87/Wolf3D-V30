@@ -1,6 +1,7 @@
 	IDEAL
 	MODEL	MEDIUM,C
 	P186				; NEC V30 build: the V30 runs the 80186 set
+	JUMPS				; out-of-range Jcc become Jcc-around-JMP; in-range ones are untouched
 
 SCREENSEG	=	0a000h
 
@@ -28,6 +29,8 @@ EXTRN	FarScalePost:FAR
 EXTRN	PM_GetPage:FAR
 EXTRN	TransformTile:FAR
 EXTRN	GetBonus:FAR
+EXTRN	TransformActor:FAR
+EXTRN	CalcRotate:FAR
 
 
 DATASEG
@@ -59,6 +62,7 @@ EXTRN	visstep:WORD
 EXTRN	farthest:WORD
 EXTRN	statobjlist:WORD		; statobj_t statobjlist[], 8 bytes each
 EXTRN	laststatobj:WORD
+EXTRN	player:WORD				; objtype *player
 EXTRN	lastside:WORD			; the wall-post state HitVertWall/HitHorizWall keep
 EXTRN	lastintercept:DWORD
 EXTRN	lasttilehit:WORD
@@ -703,6 +707,169 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	[WORD postsource+2],ax
 	mov	[WORD postsource],si
 	ret
+ENDP
+
+
+;============================
+;
+; PlaceActors
+;
+; NEC V30 build, StevenC & Claude: the second loop of DrawScaleds, over every
+; actor, in registers.  Game logic as well as drawing -- it wakes an actor
+; the player can see (active) and sets or clears FL_VISABLE -- so every
+; store and call is the C's, in the C's order:
+;
+;	for (obj = player->next;obj;obj=obj->next)
+;	{
+;		if (!(visptr->shapenum = obj->state->shapenum))
+;			continue;					// no shape
+;		spotloc = (obj->tilex<<6)+obj->tiley;
+;		if (seen(spotloc) || for each of the eight neighbours n,
+;			(seen(spotloc+n) && !tilemap[spotloc+n]))
+;		{
+;			obj->active = true;
+;			TransformActor (obj);
+;			if (!obj->viewheight)
+;				continue;				// too close or far away
+;			visptr->viewx = obj->viewx;
+;			visptr->viewheight = obj->viewheight;
+;			if (visptr->shapenum == -1)
+;				visptr->shapenum = obj->temp1;	// special shape
+;			if (obj->state->rotate)
+;				visptr->shapenum += CalcRotate (obj);
+;			if (visptr < &vislist[MAXVISABLE-1])
+;				visptr++;
+;			obj->flags |= FL_VISABLE;
+;		}
+;		else
+;			obj->flags &= ~FL_VISABLE;
+;	}
+;
+; seen(s) is spotvis[s] == vismark.  The objtype offsets are the compiler's
+; own, read from its listing of the C this replaces.
+;
+;============================
+
+OB_ACTIVE		=	0
+OB_STATE		=	6
+OB_FLAGS		=	8
+OB_TILEX		=	23
+OB_TILEY		=	25
+OB_VIEWX		=	28
+OB_VIEWHEIGHT	=	30
+OB_TEMP1		=	48
+OB_NEXT			=	54
+SS_ROTATE		=	0					; statetype
+SS_SHAPENUM		=	2
+FL_VISABLE		=	8
+
+PROC	PlaceActors
+PUBLIC	PlaceActors
+	push	si
+	push	di
+
+	mov	di,[visptr]					; where PlaceStatics left it
+	mov	bx,[player]
+	mov	si,[bx+OB_NEXT]
+	jmp	@@test
+
+	EVEN
+@@loop:
+	mov	bx,[si+OB_STATE]
+	mov	ax,[bx+SS_SHAPENUM]
+	mov	[di+VIS_SHAPENUM],ax		; as the C does, before the test
+	or	ax,ax
+	jz	@@next						; no shape: flags left alone
+	mov	bx,[si+OB_TILEX]
+	shl	bx,6
+	add	bx,[si+OB_TILEY]			; spotloc
+	mov	al,[BYTE vismark]
+	cmp	[BYTE spotvis+bx],al
+	je	@@seen
+@@n0:
+	cmp	[BYTE spotvis+bx-1],al
+	jne	@@n1
+	cmp	[BYTE tilemap+bx-1],0
+	je	@@seen
+@@n1:
+	cmp	[BYTE spotvis+bx+1],al
+	jne	@@n2
+	cmp	[BYTE tilemap+bx+1],0
+	je	@@seen
+@@n2:
+	cmp	[BYTE spotvis+bx-65],al
+	jne	@@n3
+	cmp	[BYTE tilemap+bx-65],0
+	je	@@seen
+@@n3:
+	cmp	[BYTE spotvis+bx-64],al
+	jne	@@n4
+	cmp	[BYTE tilemap+bx-64],0
+	je	@@seen
+@@n4:
+	cmp	[BYTE spotvis+bx-63],al
+	jne	@@n5
+	cmp	[BYTE tilemap+bx-63],0
+	je	@@seen
+@@n5:
+	cmp	[BYTE spotvis+bx+65],al
+	jne	@@n6
+	cmp	[BYTE tilemap+bx+65],0
+	je	@@seen
+@@n6:
+	cmp	[BYTE spotvis+bx+64],al
+	jne	@@n7
+	cmp	[BYTE tilemap+bx+64],0
+	je	@@seen
+@@n7:
+	cmp	[BYTE spotvis+bx+63],al
+	jne	@@unseen
+	cmp	[BYTE tilemap+bx+63],0
+	je	@@seen
+@@unseen:
+	and	[BYTE si+OB_FLAGS],NOT FL_VISABLE
+	jmp	@@next
+
+@@seen:
+	mov	[WORD si+OB_ACTIVE],1
+	push	si
+	call	TransformActor
+	add	sp,2
+	cmp	[WORD si+OB_VIEWHEIGHT],0
+	je	@@next						; too close or far away
+	mov	ax,[si+OB_VIEWX]
+	mov	[di+VIS_VIEWX],ax
+	mov	ax,[si+OB_VIEWHEIGHT]
+	mov	[di+VIS_HEIGHT],ax
+	cmp	[WORD di+VIS_SHAPENUM],-1
+	jne	@@shapeok
+	mov	ax,[si+OB_TEMP1]
+	mov	[di+VIS_SHAPENUM],ax		; special shape
+@@shapeok:
+	mov	bx,[si+OB_STATE]
+	cmp	[WORD bx+SS_ROTATE],0
+	je	@@norot
+	push	si
+	call	CalcRotate
+	add	sp,2
+	add	[di+VIS_SHAPENUM],ax
+@@norot:
+	cmp	di,OFFSET vislist+(MAXVISABLE-1)*VIS_SIZE
+	jae	@@full						; don't let it overflow
+	add	di,VIS_SIZE
+@@full:
+	or	[BYTE si+OB_FLAGS],FL_VISABLE
+
+@@next:
+	mov	si,[si+OB_NEXT]
+@@test:
+	or	si,si
+	jnz	@@loop
+
+	mov	[visptr],di
+	pop	di
+	pop	si
+	retf
 ENDP
 
 
