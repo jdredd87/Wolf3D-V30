@@ -1838,9 +1838,10 @@ initvars:
 	mov	di,cx
 	shl	di,6
 	add	di,bp						; yspot = (xinttile<<6) + ytile
-	mov	ax,SCREENSEG
-	mov	es,ax						; faster than mov es,[screenseg]
 	mov	ax,[WORD yintercept]		; NEC V30 build: AX = low word of yintercept
+									; (and no screen segment in ES: nothing
+									; from here to the next ray reads it --
+									; ScalePost loads its own)
 
 
 ;---------------------------------------------------------------------------
@@ -1890,8 +1891,9 @@ vertop:								; 0x7e = jle (ytilestep==-1)
 	jle	horizentry					; 0x7d = jge (ytilestep==1)
 	EVEN
 vertentry:
-	test [BYTE tilemap+si],0ffh		; tilehit = *((byte *)tilemap+xspot);
-	jnz	hitvert
+	cmp	[BYTE tilemap+si],bh		; tilehit = *((byte *)tilemap+xspot);
+	jnz	hitvert						; BH, xtile's high byte, is always 0 --
+									; a byte shorter than id's TEST ...,0FFh
 passvert:
 vspotop:
 	mov	[BYTE spotvis+si],1			; = vismark, patched in at +4 per frame
@@ -1919,7 +1921,7 @@ vertop2:							; the inverse of vertop: 0x7f = jg, 0x7c = jl
 ;-----------
 	EVEN
 horizentry:
-	test [BYTE tilemap+di],0ffh		; tilehit = *((byte *)tilemap+yspot);
+	cmp	[BYTE tilemap+di],bh		; tilehit = *((byte *)tilemap+yspot);
 	jnz	hithoriz
 passhoriz:
 hspotop:
