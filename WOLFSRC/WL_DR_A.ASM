@@ -108,12 +108,18 @@ EXTRN	xstep:DWORD
 EXTRN	ystep:DWORD
 
 EXTRN	doorposition:WORD		; table of door position values
+EXTRN	plux:WORD				; the player's x and y in 1/256 tiles
+EXTRN	pluy:WORD
 
 
 EXTRN	pwallpos:WORD			; amound a pushable wall has been moved
 
 curquad		dw	0				; NEC V30 build: the quadrant the loop is patched for
 tsave		dw	0				; T, across a door or pushwall test
+clx1		dw	0				; CheckLine's working storage
+cly1		dw	0
+clhalf		dw	0
+clend		dw	0
 
 CODESEG
 
@@ -2039,6 +2045,234 @@ vertpushwall:
 
 
 
+ENDP
+
+
+;============================
+;
+; CheckLine (objtype *ob) -- can ob see the player?  (a boolean)
+;
+; NEC V30 build, StevenC & Claude: WL_STATE.C's line-of-sight trace, called
+; by every shooting actor's think routine.  The same two passes -- across
+; the x tile boundaries between ob and the player, then across the y ones
+; -- with the same fixed-point stepping, the same clamp and the same door
+; test, so every actor decides exactly as id's did (a demo would lose sync
+; otherwise).  The C's long divide, ((long)delta<<8)/deltafrac clamped to
+; +-7FFFh, is one unsigned DIV here, guarded so it cannot overflow: a high
+; word at or above the divisor means a quotient over 0FFFFh, which clamps
+; anyway.  x*64+y for the tile map is kept as a running offset.
+;
+;============================
+
+PROC	CheckLine
+PUBLIC	CheckLine
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+
+	mov	si,[bp+6]
+	mov	ax,[si+OB_X+1]				; x1 = ob->x>>8, 1/256 tile
+	mov	[clx1],ax
+	mov	ax,[si+OB_Y+1]				; y1 = ob->y>>8
+	mov	[cly1],ax
+	mov	si,[player]
+
+;
+; across the x tiles
+;
+	mov	ax,[clx1]
+	sar	ax,8						; xt1
+	mov	bx,[si+OB_TILEX]			; xt2
+	cmp	bx,ax
+	jne	@@xgo
+	jmp	@@ypass
+@@xgo:
+	mov	cx,[clx1]
+	and	cx,0ffh
+	cmp	bx,ax
+	jg	@@xpos
+	mov	bp,-64						; xstep = -1: partial = x1&0xff
+	dec	bx							; xt2 += xstep
+	dec	ax							; x = xt1+xstep
+	jmp	@@xset
+@@xpos:
+	neg	cx
+	add	cx,256						; xstep = 1: partial = 256-(x1&0xff)
+	mov	bp,64
+	inc	bx
+	inc	ax
+@@xset:
+	shl	ax,6						; x, as a tile map offset
+	shl	bx,6
+	mov	[clend],bx
+	push	ax
+	mov	ax,[plux]
+	sub	ax,[clx1]
+	jns	@@xdf
+	neg	ax
+@@xdf:
+	mov	bx,ax						; deltafrac = abs(x2-x1)
+	mov	ax,[pluy]
+	sub	ax,[cly1]					; delta = y2-y1
+	call	StepDiv
+	mov	di,ax						; ystep
+	imul	cx							; ystep*partial
+	mov	al,ah						; >>8
+	mov	ah,dl
+	add	ax,[cly1]
+	mov	cx,ax						; yfrac = y1 + (ystep*partial>>8)
+	mov	ax,di
+	cwd
+	sub	ax,dx
+	sar	ax,1
+	mov	[clhalf],ax					; ystep/2, truncated toward zero as C does
+	pop	bx							; x*64
+
+@@xloop:
+	mov	ax,cx
+	sar	ax,8						; y = yfrac>>8
+	add	cx,di						; yfrac += ystep
+	mov	si,bx
+	add	si,ax
+	add	bx,bp						; x += xstep
+	mov	al,[BYTE tilemap+si]
+	or	al,al
+	jnz	@@xhit
+@@xnext:
+	cmp	bx,[clend]
+	jne	@@xloop
+	jmp	@@ypass
+@@xhit:
+	cmp	al,128
+	jb	@@false						; a wall
+	xor	ah,ah
+	and	al,7fh						; a door: open far enough?
+	mov	si,ax
+	shl	si,1
+	mov	ax,cx
+	sub	ax,[clhalf]					; intercept = yfrac-ystep/2
+	cmp	ax,[doorposition+si]
+	ja	@@false
+	jmp	@@xnext
+
+;
+; across the y tiles
+;
+@@ypass:
+	mov	si,[player]
+	mov	ax,[cly1]
+	sar	ax,8						; yt1
+	mov	bx,[si+OB_TILEY]			; yt2
+	cmp	bx,ax
+	jne	@@ygo
+	jmp	@@true
+@@ygo:
+	mov	cx,[cly1]
+	and	cx,0ffh
+	cmp	bx,ax
+	jg	@@ypos
+	mov	bp,-1						; ystep = -1
+	dec	bx
+	dec	ax
+	jmp	@@yset
+@@ypos:
+	neg	cx
+	add	cx,256
+	mov	bp,1
+	inc	bx
+	inc	ax
+@@yset:
+	mov	[clend],bx
+	push	ax
+	mov	ax,[pluy]
+	sub	ax,[cly1]
+	jns	@@ydf
+	neg	ax
+@@ydf:
+	mov	bx,ax						; deltafrac = abs(y2-y1)
+	mov	ax,[plux]
+	sub	ax,[clx1]					; delta = x2-x1
+	call	StepDiv
+	mov	di,ax						; xstep
+	imul	cx
+	mov	al,ah
+	mov	ah,dl
+	add	ax,[clx1]
+	mov	cx,ax						; xfrac
+	mov	ax,di
+	cwd
+	sub	ax,dx
+	sar	ax,1
+	mov	[clhalf],ax					; xstep/2
+	pop	bx							; y
+
+@@yloop:
+	mov	ax,cx
+	sar	ax,2						; (xfrac>>8)<<6, one shift fewer
+	and	al,0c0h
+	add	cx,di						; xfrac += xstep
+	mov	si,ax
+	add	si,bx
+	add	bx,bp						; y += ystep
+	mov	al,[BYTE tilemap+si]
+	or	al,al
+	jnz	@@yhit
+@@ynext:
+	cmp	bx,[clend]
+	jne	@@yloop
+@@true:
+	mov	ax,1
+	jmp	@@ret
+@@yhit:
+	cmp	al,128
+	jb	@@false
+	xor	ah,ah
+	and	al,7fh
+	mov	si,ax
+	shl	si,1
+	mov	ax,cx
+	sub	ax,[clhalf]					; intercept = xfrac-xstep/2
+	cmp	ax,[doorposition+si]
+	ja	@@false
+	jmp	@@ynext
+
+@@false:
+	xor	ax,ax
+@@ret:
+	pop	di
+	pop	si
+	pop	bp
+	ret
+ENDP
+
+;
+; StepDiv: AX = ((long)AX<<8)/BX, clamped to -7FFFh..7FFFh, BX > 0.
+; Destroys DX and SI.
+;
+PROC	StepDiv NEAR
+	mov	si,ax						; the sign
+	or	ax,ax
+	jns	@@pos
+	neg	ax
+@@pos:
+	mov	dl,ah						; dx:ax = |delta|<<8
+	xor	dh,dh
+	mov	ah,al
+	xor	al,al
+	cmp	dx,bx
+	jae	@@clamp						; the quotient would not fit
+	div	bx
+	cmp	ax,7fffh
+	jbe	@@sign
+@@clamp:
+	mov	ax,7fffh
+@@sign:
+	or	si,si
+	jns	@@done
+	neg	ax
+@@done:
+	ret
 ENDP
 
 
