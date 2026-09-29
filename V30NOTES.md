@@ -113,7 +113,8 @@ byte for byte.
 | 20 | *(tried, reverted)* skip clearing the rows last frame's walls all covered, then fill the gaps -- 2% slower: see below | -- | -- |
 | 21 | `ScaleLine` keeps the screen segment in DX; id's per-ray multiply helpers inlined; hot loop tops `EVEN` | 1038 | 3.49 |
 | 22 | `DrawScaleds`' actor loop in asm (`PlaceActors`) -- game logic: wakes actors, sets `FL_VISABLE`, same order | 1024 | 3.53 |
-| 23 | `TransformTile` in asm: four `FixedByFrac`s and the long multiply inline, Borland's `LDIV@` kept for the divide | **1016** | **3.56** |
+| 23 | `TransformTile` in asm: four `FixedByFrac`s and the long multiply inline, Borland's `LDIV@` kept for the divide | 1016 | 3.56 |
+| 24 | `PlaceActors`/`PlaceStatics` laid out so an unseen object takes no jump; `vismark` an immediate | **1005** | **3.60** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks, **2.39 -> 3.07 fps, 28% faster**. The whole attract loop
@@ -163,6 +164,11 @@ addresses and cost **3%**, with the pictures identical. id's own byte globals
 had already left 113 communals odd, including `ScaleLine`'s. `aligncheck.py`
 reads the map and lists them; after step 19 there are none. **Declare any new
 global as a word, or initialize it.**
+
+**Lay loops out so the common case falls through.** Step 24 changed no
+arithmetic at all -- only which way the branches go, so that an object
+nobody can see (nearly all of them, every frame) runs straight through
+its tests instead of jumping eight times -- and gained 1%.
 
 **A taken jump is expensive, but so is fetching code.** The V30 flushes its
 6-byte prefetch queue on every taken jump, which is why the fizzle's reject

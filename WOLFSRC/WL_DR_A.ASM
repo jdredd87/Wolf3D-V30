@@ -436,14 +436,26 @@ PUBLIC	PlaceStatics
 
 	mov	di,OFFSET vislist			; DI = visptr
 	mov	si,OFFSET statobjlist		; SI = statptr
+	mov	al,[BYTE vismark]
+	mov	[BYTE cs:@@mark+2],al		; this frame's mark, as an immediate below
 	jmp	@@test
 
+; Laid out for the V30: an object not seen this frame -- nearly all of them
+; -- falls straight through to the next; only a seen one jumps out.
 	EVEN
 @@loop:
 	mov	bx,[si+ST_VISSPOT]			; (both tests are pure: order is free)
-	mov	al,[vismark]
-	cmp	[bx],al
-	jne	@@next						; not seen this frame
+@@mark:
+	cmp	[BYTE bx],0					; (the 0 is vismark, patched above)
+	je	@@seenstat
+@@next:
+	add	si,ST_SIZE
+@@test:
+	cmp	si,[laststatobj]
+	jne	@@loop
+	jmp	@@statdone
+
+@@seenstat:
 	mov	ax,[si+ST_SHAPENUM]
 	cmp	ax,-1
 	je	@@next						; deleted
@@ -475,12 +487,9 @@ PUBLIC	PlaceStatics
 	jae	@@next						; don't let it overflow
 	add	di,VIS_SIZE
 
-@@next:
-	add	si,ST_SIZE
-@@test:
-	cmp	si,[laststatobj]
-	jne	@@loop
+	jmp	@@next
 
+@@statdone:
 	mov	[visptr],di
 	pop	di
 	pop	si
@@ -780,62 +789,86 @@ PUBLIC	PlaceActors
 	mov	si,[bx+OB_NEXT]
 	jmp	@@test
 
+; Laid out for the V30, where a taken jump flushes the prefetch queue: an
+; actor with a shape that nobody can see -- the common case -- runs straight
+; through all nine tests, and only a spot that was seen jumps out, to check
+; for a wall.
 	EVEN
 @@loop:
 	mov	bx,[si+OB_STATE]
 	mov	ax,[bx+SS_SHAPENUM]
 	mov	[di+VIS_SHAPENUM],ax		; as the C does, before the test
 	or	ax,ax
-	jz	@@next						; no shape: flags left alone
+	jz	@@next0						; no shape: flags left alone
 	mov	bx,[si+OB_TILEX]
 	shl	bx,6
 	add	bx,[si+OB_TILEY]			; spotloc
 	mov	al,[BYTE vismark]
 	cmp	[BYTE spotvis+bx],al
 	je	@@seen
-@@n0:
 	cmp	[BYTE spotvis+bx-1],al
-	jne	@@n1
+	je	@@c0						; seen: is there a wall?
+@@r0:
+	cmp	[BYTE spotvis+bx+1],al
+	je	@@c1						; seen: is there a wall?
+@@r1:
+	cmp	[BYTE spotvis+bx-65],al
+	je	@@c2						; seen: is there a wall?
+@@r2:
+	cmp	[BYTE spotvis+bx-64],al
+	je	@@c3						; seen: is there a wall?
+@@r3:
+	cmp	[BYTE spotvis+bx-63],al
+	je	@@c4						; seen: is there a wall?
+@@r4:
+	cmp	[BYTE spotvis+bx+65],al
+	je	@@c5						; seen: is there a wall?
+@@r5:
+	cmp	[BYTE spotvis+bx+64],al
+	je	@@c6						; seen: is there a wall?
+@@r6:
+	cmp	[BYTE spotvis+bx+63],al
+	je	@@c7						; seen: is there a wall?
+@@r7:
+	and	[BYTE si+OB_FLAGS],NOT FL_VISABLE	; unseen
+@@next0:
+	mov	si,[si+OB_NEXT]
+	or	si,si
+	jnz	@@loop
+	jmp	@@done
+
+@@c0:
 	cmp	[BYTE tilemap+bx-1],0
 	je	@@seen
-@@n1:
-	cmp	[BYTE spotvis+bx+1],al
-	jne	@@n2
+	jmp	@@r0
+@@c1:
 	cmp	[BYTE tilemap+bx+1],0
 	je	@@seen
-@@n2:
-	cmp	[BYTE spotvis+bx-65],al
-	jne	@@n3
+	jmp	@@r1
+@@c2:
 	cmp	[BYTE tilemap+bx-65],0
 	je	@@seen
-@@n3:
-	cmp	[BYTE spotvis+bx-64],al
-	jne	@@n4
+	jmp	@@r2
+@@c3:
 	cmp	[BYTE tilemap+bx-64],0
 	je	@@seen
-@@n4:
-	cmp	[BYTE spotvis+bx-63],al
-	jne	@@n5
+	jmp	@@r3
+@@c4:
 	cmp	[BYTE tilemap+bx-63],0
 	je	@@seen
-@@n5:
-	cmp	[BYTE spotvis+bx+65],al
-	jne	@@n6
+	jmp	@@r4
+@@c5:
 	cmp	[BYTE tilemap+bx+65],0
 	je	@@seen
-@@n6:
-	cmp	[BYTE spotvis+bx+64],al
-	jne	@@n7
+	jmp	@@r5
+@@c6:
 	cmp	[BYTE tilemap+bx+64],0
 	je	@@seen
-@@n7:
-	cmp	[BYTE spotvis+bx+63],al
-	jne	@@unseen
+	jmp	@@r6
+@@c7:
 	cmp	[BYTE tilemap+bx+63],0
 	je	@@seen
-@@unseen:
-	and	[BYTE si+OB_FLAGS],NOT FL_VISABLE
-	jmp	@@next
+	jmp	@@r7
 
 @@seen:
 	mov	[WORD si+OB_ACTIVE],1
@@ -873,6 +906,7 @@ PUBLIC	PlaceActors
 	or	si,si
 	jnz	@@loop
 
+@@done:
 	mov	[visptr],di
 	pop	di
 	pop	si
