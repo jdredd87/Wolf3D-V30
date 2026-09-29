@@ -1094,7 +1094,7 @@ PUBLIC	PlaceActors
 	add	bx,[si+OB_TILEY]			; spotloc
 	mov	al,[BYTE vismark]
 	cmp	[BYTE spotvis+bx],al
-	je	@@seen
+	je	@@seen_t					; (a short hop: see below)
 	cmp	[BYTE spotvis+bx-1],al
 	je	@@c0						; seen: is there a wall?
 @@r0:
@@ -1125,6 +1125,14 @@ PUBLIC	PlaceActors
 	or	si,si
 	jnz	@@loop
 	jmp	@@done
+;
+; NEC V30 build: TASM's JUMPS turns a conditional jump that cannot reach
+; into "jump the other way over a JMP", so a branch that is normally NOT
+; taken became one that always is -- one taken jump for every
+; unseen actor.  These short hops keep the common path falling through.
+;
+@@seen_t:
+	jmp	@@seen
 
 @@c0:
 	cmp	[BYTE tilemap+bx-1],0

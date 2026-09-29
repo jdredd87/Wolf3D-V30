@@ -294,9 +294,9 @@ PUBLIC	ScaleShape
 @@lloop:
 	dec	si
 	cmp	si,cx
-	jb	@@lend					; unsigned, as srcx and stopx are
+	jb	@@lend_t				; unsigned, as srcx and stopx are
 	or	di,di
-	jle	@@lend					; slinex > 0, signed
+	jle	@@lend_t				; slinex > 0, signed
 	mov	bx,si
 	shl	bx,1
 	mov	dx,[es:bx+WIDTHS]		; slinewidth = comptable->width[srcx]
@@ -314,6 +314,14 @@ PUBLIC	ScaleShape
 	jae	@@lloop					; obscured by a closer wall
 	call	ScaleSpan
 	jmp	@@lloop
+;
+; NEC V30 build: TASM's JUMPS turns a conditional jump that cannot reach
+; into "jump the other way over a JMP", so a branch that is normally NOT
+; taken became one that always is -- two taken jumps a column in each loop
+; here.  These short hops keep the common path falling through.
+;
+@@lend_t:
+	jmp	@@lend
 
 @@lmulti:
 	cmp	di,[viewwidth]
@@ -348,6 +356,7 @@ PUBLIC	ScaleShape
 	jae	@@lshrink
 @@ldraw:
 	call	ScaleSpan
+@@lagain:
 	jmp	@@lloop
 
 @@lnotleft:
@@ -356,7 +365,7 @@ PUBLIC	ScaleShape
 	add	bx,dx
 	sub	bx,2
 	cmp	[wallheight+bx],bp
-	jae	@@lloop					; totally obscured
+	jae	@@lagain				; totally obscured
 	mov	bx,ax
 @@lgrow:						; while (left edge hidden) slinex++, slinewidth--
 	inc	di
@@ -391,10 +400,10 @@ PUBLIC	ScaleShape
 @@rloop:
 	inc	si
 	cmp	si,cx
-	ja	@@done					; unsigned
+	ja	@@done_t				; unsigned
 	add	di,dx					; slinex += slinewidth
 	cmp	di,[viewwidth]
-	jge	@@done					; signed
+	jge	@@done_t				; signed
 	mov	bx,si
 	shl	bx,1
 	mov	dx,[es:bx+WIDTHS]
@@ -411,6 +420,8 @@ PUBLIC	ScaleShape
 	jae	@@rloop
 	call	ScaleSpan
 	jmp	@@rloop
+@@done_t:
+	jmp	@@done
 
 @@rmulti:
 	or	di,di
@@ -449,6 +460,7 @@ PUBLIC	ScaleShape
 	jmp	@@done					; break: the rest of the shape is gone
 @@rdraw:
 	call	ScaleSpan
+@@ragain:
 	jmp	@@rloop
 
 @@rnotleft:
@@ -457,7 +469,7 @@ PUBLIC	ScaleShape
 	add	bx,dx
 	sub	bx,2
 	cmp	[wallheight+bx],bp
-	jae	@@rloop					; totally obscured
+	jae	@@ragain				; totally obscured
 	mov	bx,ax
 @@rgrow:
 	inc	di
