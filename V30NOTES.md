@@ -116,7 +116,8 @@ byte for byte.
 | 22 | `DrawScaleds`' actor loop in asm (`PlaceActors`) -- game logic: wakes actors, sets `FL_VISABLE`, same order | 1024 | 3.53 |
 | 23 | `TransformTile` in asm: four `FixedByFrac`s and the long multiply inline, Borland's `LDIV@` kept for the divide | 1016 | 3.56 |
 | 24 | `PlaceActors`/`PlaceStatics` laid out so an unseen object takes no jump; `vismark` an immediate | 1005 | 3.60 |
-| 25 | music ISR counts down the ticks until the next event (`sqQuiet`), cleared by every C change to the sequencer | **1002** | **3.61** |
+| 25 | music ISR counts down the ticks until the next event (`sqQuiet`), cleared by every C change to the sequencer | 1002 | 3.61 |
+| 26 | `objtype` word-aligned (pad bytes after `flags` and `areanumber`) -- only 0.2%: game logic reads actors less than expected | **1000** | **3.62** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -174,6 +175,12 @@ addresses and cost **3%**, with the pictures identical. id's own byte globals
 had already left 113 communals odd, including `ScaleLine`'s. `aligncheck.py`
 reads the map and lists them; after step 19 there are none. **Declare any new
 global as a word, or initialize it.**
+
+**Savegames belong to the EXE that wrote them.** They store actors raw,
+including a near pointer to each actor's state, so a save only ever loaded
+in the build that made it -- id's own releases were the same. `WOLF3D.EXE`
+and `WOLF3DV.EXE` do not exchange saves, and a rebuild of `WOLF3DV.EXE`
+that moves data may not load an older one.
 
 **Lay loops out so the common case falls through.** Step 24 changed no
 arithmetic at all -- only which way the branches go, so that an object

@@ -655,6 +655,12 @@ typedef struct objstruct
 	statetype	*state;
 
 	byte		flags;				//	FL_SHOOTABLE, etc
+	byte		flagspad;			// NEC V30 build (StevenC & Claude): keeps every word
+									// below at an even address -- the V30 reads an odd
+									// one in two bus cycles, and game logic reads these
+									// constantly.  (WL_DR_A.ASM's PlaceActors knows the
+									// offsets.  Saves were only ever valid for the EXE
+									// that wrote them: they hold raw state pointers.)
 
 	long		distance;			// if negative, wait for that door to open
 	dirtype		dir;
@@ -662,6 +668,7 @@ typedef struct objstruct
 	fixed 		x,y;
 	unsigned	tilex,tiley;
 	byte		areanumber;
+	byte		areapad;			// NEC V30 build: even addresses below too
 
 	int	 		viewx;
 	unsigned	viewheight;

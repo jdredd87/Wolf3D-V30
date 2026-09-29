@@ -761,20 +761,20 @@ ENDP
 ;			obj->flags &= ~FL_VISABLE;
 ;	}
 ;
-; seen(s) is spotvis[s] == vismark.  The objtype offsets are the compiler's
-; own, read from its listing of the C this replaces.
+; seen(s) is spotvis[s] == vismark.  The objtype offsets below are the
+; compiler's own, read from its listings.
 ;
 ;============================
 
-OB_ACTIVE		=	0
-OB_STATE		=	6
-OB_FLAGS		=	8
-OB_TILEX		=	23
-OB_TILEY		=	25
-OB_VIEWX		=	28
-OB_VIEWHEIGHT	=	30
-OB_TEMP1		=	48
-OB_NEXT			=	54
+OB_ACTIVE		=	0					; objtype, word-aligned since the NEC V30
+OB_STATE		=	6					; build's pad bytes after flags and
+OB_FLAGS		=	8					; areanumber (WL_DEF.H) -- checked
+OB_TILEX		=	24					; against the compiler's listing of
+OB_TILEY		=	26					; TransformActor
+OB_VIEWX		=	30
+OB_VIEWHEIGHT	=	32
+OB_TEMP1		=	50
+OB_NEXT			=	56
 SS_ROTATE		=	0					; statetype
 SS_SHAPENUM		=	2
 FL_VISABLE		=	8
