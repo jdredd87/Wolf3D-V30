@@ -465,7 +465,9 @@ void HitVertWall (void)
 		texture = 0xfc0-texture;
 		xintercept += TILEGLOBAL;
 	}
-	wallheight[pixx] = CalcHeight();
+	// NEC V30 build (StevenC & Claude): CalcHeight is not called for a wide-scale
+	// column, whose height id computed and then overwrote with the one before;
+	// the two branches that keep it compute it first thing.
 
 	if (lastside==1 && lastintercept == xtile && lasttilehit == tilehit)
 	{
@@ -479,6 +481,7 @@ void HitVertWall (void)
 		}
 		else
 		{
+			wallheight[pixx] = CalcHeight();
 			ScalePost ();
 			(unsigned)postsource = texture;
 			postwidth = 1;
@@ -487,6 +490,7 @@ void HitVertWall (void)
 	}
 	else
 	{
+		wallheight[pixx] = CalcHeight();
 	// new wall
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();
@@ -537,7 +541,9 @@ void HitHorizWall (void)
 		yintercept += TILEGLOBAL;
 	else
 		texture = 0xfc0-texture;
-	wallheight[pixx] = CalcHeight();
+	// NEC V30 build (StevenC & Claude): CalcHeight is not called for a wide-scale
+	// column, whose height id computed and then overwrote with the one before;
+	// the two branches that keep it compute it first thing.
 
 	if (lastside==0 && lastintercept == ytile && lasttilehit == tilehit)
 	{
@@ -551,6 +557,7 @@ void HitHorizWall (void)
 		}
 		else
 		{
+			wallheight[pixx] = CalcHeight();
 			ScalePost ();
 			(unsigned)postsource = texture;
 			postwidth = 1;
@@ -559,6 +566,7 @@ void HitHorizWall (void)
 	}
 	else
 	{
+		wallheight[pixx] = CalcHeight();
 	// new wall
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();
@@ -604,7 +612,9 @@ void HitHorizDoor (void)
 	doornum = tilehit&0x7f;
 	texture = ( ((unsigned)xintercept-doorposition[doornum]) >> 4) &0xfc0;	// low word only
 
-	wallheight[pixx] = CalcHeight();
+	// NEC V30 build (StevenC & Claude): CalcHeight is not called for a wide-scale
+	// column, whose height id computed and then overwrote with the one before;
+	// the two branches that keep it compute it first thing.
 
 	if (lasttilehit == tilehit)
 	{
@@ -618,6 +628,7 @@ void HitHorizDoor (void)
 		}
 		else
 		{
+			wallheight[pixx] = CalcHeight();
 			ScalePost ();
 			(unsigned)postsource = texture;
 			postwidth = 1;
@@ -626,6 +637,7 @@ void HitHorizDoor (void)
 	}
 	else
 	{
+		wallheight[pixx] = CalcHeight();
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();			// draw last post
 	// first pixel in this door
@@ -672,7 +684,9 @@ void HitVertDoor (void)
 	doornum = tilehit&0x7f;
 	texture = ( ((unsigned)yintercept-doorposition[doornum]) >> 4) &0xfc0;	// low word only
 
-	wallheight[pixx] = CalcHeight();
+	// NEC V30 build (StevenC & Claude): CalcHeight is not called for a wide-scale
+	// column, whose height id computed and then overwrote with the one before;
+	// the two branches that keep it compute it first thing.
 
 	if (lasttilehit == tilehit)
 	{
@@ -686,6 +700,7 @@ void HitVertDoor (void)
 		}
 		else
 		{
+			wallheight[pixx] = CalcHeight();
 			ScalePost ();
 			(unsigned)postsource = texture;
 			postwidth = 1;
@@ -694,6 +709,7 @@ void HitVertDoor (void)
 	}
 	else
 	{
+		wallheight[pixx] = CalcHeight();
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();			// draw last post
 	// first pixel in this door
@@ -751,7 +767,9 @@ void HitHorizPWall (void)
 		yintercept += offset;
 	}
 
-	wallheight[pixx] = CalcHeight();
+	// NEC V30 build (StevenC & Claude): CalcHeight is not called for a wide-scale
+	// column, whose height id computed and then overwrote with the one before;
+	// the two branches that keep it compute it first thing.
 
 	if (lasttilehit == tilehit)
 	{
@@ -765,6 +783,7 @@ void HitHorizPWall (void)
 		}
 		else
 		{
+			wallheight[pixx] = CalcHeight();
 			ScalePost ();
 			(unsigned)postsource = texture;
 			postwidth = 1;
@@ -773,6 +792,7 @@ void HitHorizPWall (void)
 	}
 	else
 	{
+		wallheight[pixx] = CalcHeight();
 	// new wall
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();
@@ -815,7 +835,9 @@ void HitVertPWall (void)
 	else
 		xintercept += offset;
 
-	wallheight[pixx] = CalcHeight();
+	// NEC V30 build (StevenC & Claude): CalcHeight is not called for a wide-scale
+	// column, whose height id computed and then overwrote with the one before;
+	// the two branches that keep it compute it first thing.
 
 	if (lasttilehit == tilehit)
 	{
@@ -829,6 +851,7 @@ void HitVertPWall (void)
 		}
 		else
 		{
+			wallheight[pixx] = CalcHeight();
 			ScalePost ();
 			(unsigned)postsource = texture;
 			postwidth = 1;
@@ -837,6 +860,7 @@ void HitVertPWall (void)
 	}
 	else
 	{
+		wallheight[pixx] = CalcHeight();
 	// new wall
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();
