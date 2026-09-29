@@ -142,6 +142,7 @@ byte for byte.
 | 45 | the page manager's LRU search walks the 100 main-memory slots (an owner table kept by the four places that change residency) instead of all 663 pages, whenever nothing is in EMS; minimum over (lastHit, page), so the same page as id's; page-miss counts unchanged | 839 | 4.32 |
 | 46 | `DrawVisList` sorts once -- a stable insertion sort by height -- where id selected the nearest object with a pass over the whole list per object drawn (the first minimum each time: the same order); a list holding a height id's loop could never pick (32000 up) is left to id's loop | 833 | 4.35 |
 | 47 | the ray setup's per-frame values -- `viewx`/`viewy`, the partials, and xtile, xtile<<6, ytile and T for the quadrant -- patched in as immediates by the quadrant's patch block, which runs on each frame's first ray and on a change of quadrant | **815** | **4.44** |
+| 48 | *(tried, dropped)* `ScaleSpan`'s per-shape values (the shape's segment, `leftpix`, `bufferofs`) as immediates patched by `ScaleShape` -- 832.0 against 832.3: those memory operands cost the V30 next to nothing there | -- | -- |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -167,6 +168,8 @@ frames had been compared with id's picture; the frame counts staying
 whatever the game does with it.
 
 ## Findings worth keeping
+
+**Self-modifying code and the 486's prefetch queue.** The V30 prefetches 6 bytes, a 486 32, and a 486 does not notice a store into bytes it has already fetched: only a taken jump (or an interrupt) flushes them. Step 40 patched its fast quadrant entry at the start of every frame about 25 bytes before executing it, with no jump between. Harmless while the skipped patch block held only per-quadrant state; when step 47 put per-frame values there, the whole-loop CRC on the 486 differed -- deterministically for a given binary, and not at all once a diagnostic moved the code or its timing (a heisenbug: whether the stale CMP ran depended on where a timer interrupt fell). The V30 run of the same binary matched id's. The fix is a taken jump after the patch. **Rule for this code: a patched instruction must never be reached by falling through from the store within 32 bytes** -- every site was audited against it, and the whole-loop CRC runs on the 486 precisely because it would catch another.
 
 **What music costs, measured -- and what it does not.** `NOMUSIC` plays demo 0 about 3.4% faster (819 against 848 play ticks). Step 44 cut the timer interrupts 4.5-fold with no gain at all, so a quiet 700 Hz tick is next to free on this machine; the earlier estimate of ~100 us a tick was wrong. `OPLID` (id's 6+35 status reads a write, against the calibrated 2+9) costs 14.5 ticks: 30 extra reads at 4.02 us each put the music at ~140 OPL writes a second, far more than the 22 assumed at step 13, each costing 13 port accesses (~52 us). That accounts for roughly a fifth of music's cost; the rest is the full service on event and effects ticks and, it seems, the PicoMEM itself, whose AdLib is emulated in software on the card.
 
