@@ -84,6 +84,10 @@ int			tdcrcs;
 unsigned	tdcrclo[TDCRCMAX],tdcrchi[TDCRCMAX];
 int			tdcrcn;					// every checkpoint, folded into tdcrcall:
 unsigned	tdcrcall[2];			// a whole run's pictures in one number
+unsigned	tdscrall[2];			// and the whole screen's -- border, status bar
+									// and all -- which the view alone cannot vouch
+									// for (a stray fill once painted the status
+									// bar over while every view sum matched)
 
 /*
 ===================
@@ -101,10 +105,10 @@ unsigned	tdcrcall[2];			// a whole run's pictures in one number
 ===================
 */
 
-static void SumView (unsigned base, unsigned *lo, unsigned *hi)
+static void SumRect (unsigned base, unsigned w, unsigned rows, unsigned *lo, unsigned *hi)
 {
 	byte		far *row;
-	unsigned	s1,s2,x,y,w;
+	unsigned	s1,s2,x,y;
 	int			plane;
 	byte		oldmode,oldmap;
 
@@ -116,12 +120,11 @@ static void SumView (unsigned base, unsigned *lo, unsigned *hi)
 	outportb (GC_INDEX+1,oldmode & ~8);		// read mode 0
 
 	s1 = s2 = 0;
-	w = viewwidth/4;
 	for (plane=0;plane<4;plane++)
 	{
 		outportb (GC_INDEX,GC_READMAP);
 		outportb (GC_INDEX+1,plane);
-		for (y=0;y<viewheight;y++)
+		for (y=0;y<rows;y++)
 		{
 			row = MK_FP(SCREENSEG,base+y*SCREENWIDTH);
 			for (x=0;x<w;x++)
@@ -140,9 +143,18 @@ static void SumView (unsigned base, unsigned *lo, unsigned *hi)
 	*hi = s2;
 }
 
+static void SumView (unsigned base, unsigned *lo, unsigned *hi)
+{
+	SumRect (base,viewwidth/4,viewheight,lo,hi);
+}
+
 void ViewChecksum (void)
 {
 	unsigned	lo,hi;
+
+	SumRect (displayofs,SCREENWIDTH,200,&lo,&hi);	// the whole page shown
+	tdscrall[0] = (tdscrall[0]*33) ^ lo;
+	tdscrall[1] = (tdscrall[1]*33) ^ hi;
 
 	SumView (displayofs+screenofs,&lo,&hi);
 	tdcrcn++;
@@ -341,7 +353,7 @@ int songs[]=
  XFUNKIE_MUS,
  XDEATH_MUS,
  XGETYOU_MUS,		// DON'T KNOW
- ULTIMATE_MUS,	// Trans Gr”sse
+ ULTIMATE_MUS,	// Trans Grï¿½sse
 
  DUNGEON_MUS,
  GOINGAFT_MUS,

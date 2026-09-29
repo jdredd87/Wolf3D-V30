@@ -1541,8 +1541,9 @@ void TimeDemo (void)
 	if (tdcrc)
 	{
 		extern int tdcrcn;
-		extern unsigned tdcrcall[2];
+		extern unsigned tdcrcall[2],tdscrall[2];
 		printf ("view checksum, all %d: %04X%04X\n",tdcrcn,tdcrcall[1],tdcrcall[0]);
+		printf ("screen checksum, all %d: %04X%04X\n",tdcrcn,tdscrall[1],tdscrall[0]);
 		printf ("(checksums cover the view every 50 frames; this run's timing includes them)\n");
 	}
 	if (tdfzdone)

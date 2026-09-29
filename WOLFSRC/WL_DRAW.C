@@ -768,6 +768,14 @@ asm	shr	bh,1					// half height
 asm	mov	es,[screenseg]
 asm	mov	di,[bufferofs]
 asm	mov	ax,[ceiling]
+asm	xor	ch,ch					// NEC V30 build (StevenC & Claude): the loops
+									// below load only CL.  id's ThreeDRefresh
+									// cleared spotvis with a rep stosw every
+									// frame just before, which left CX = 0; since
+									// step 19 it does not, and a stray CH ran the
+									// ceiling fill across the whole page, status
+									// bar and all.  The view itself was redrawn
+									// over it, so the view checksums never saw it.
 
 toploop:
 asm	mov	cl,bl
