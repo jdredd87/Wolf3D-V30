@@ -120,8 +120,15 @@ byte for byte.
 | 25 | music ISR counts down the ticks until the next event (`sqQuiet`), cleared by every C change to the sequencer | 1002 | 3.61 |
 | 26 | `objtype` word-aligned (pad bytes after `flags` and `areanumber`) -- only 0.2%: game logic reads actors less than expected | 1000 | 3.62 |
 | 27 | `CalcHeight`'s per-frame constants (`viewx`/`viewy`, `viewcos`/`viewsin`, `mindist`, `heightnumerator`) patched in as immediates by `AsmRefresh`; NEAR entry for the asm hit routines | 988 | 3.66 |
-| 28 | `ScaleLine` and the glue that called it merged into one asm routine, `ScaleSpan`: the span stays in registers, one table lookup picks the one-byte case, the post loop tests at the bottom | **957** | **3.78** |
+| 28 | `ScaleLine` and the glue that called it merged into one asm routine, `ScaleSpan`: the span stays in registers, one table lookup picks the one-byte case, the post loop tests at the bottom | 957 | 3.78 |
 | 29 | XMS the default memory (what `NOEMS` bought, without the switch): no switch 957, `EMS` 1009, `NOXMS` 1012. `EMS` keeps id's EMS-first order, because XMSSC serves XMS out of EMS and an XMS-first start leaves EMS nothing | 957 | 3.78 |
+| 30 | ray loop: `T = (xtile<<6)+ytile` in DX, so the vertical test is `xspot` against `T` and a vertical step moves `xspot` with one `ADC` (id rebuilt it with a shift of six); both loops test at the bottom; the quadrant's code patches rewritten only when a ray changes quadrant | 937 | 3.87 |
+| 31 | *(tried, reverted)* `CalcHeight` remembering both products with their inputs -- 0.4% slower: see below | -- | -- |
+| 32 | `ScalePost` as a NEAR asm routine for the asm hit routines (was a far call, a near call and a C frame per wall post) | -7.5 | |
+| 33 | `TransformActor` in asm, NEAR from `PlaceActors` | -1 | |
+| 34 | `CheckLine` (line of sight) in asm: the clamped long divide is one guarded `DIV` | -9 | |
+| 35 | the actor loop in asm: an actor asleep outside the player's areas is skipped without a call | -14 | |
+| - | steps 32-35 together, rebuilt without 31 | **905** | **4.00** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -129,7 +136,46 @@ loop (`TIMEDEMO PRELOAD NOEMS`, all four demos, 5,386 frames) ran at 3.88 fps
 after step 19 and **4.05 fps after step 24**; demo 0 alone went from 4,575
 ticks (2.75 fps) at the start to **3,328 (3.78 fps), 1.37x**.
 
+Steps 32-35 were measured as a chain that still carried step 31, each against
+the one before, so the table gives their differences; the rebuilt tree was then
+measured against both.
+
+**Every build is now checked against id's own renderer over all four demos.**
+`TIMEDEMO CRC` folds every 50th frame of the whole attract loop -- 5,386
+frames, 105 checkpoints -- into two numbers, one for the 3-D view and one for
+the whole screen (border and status bar too), and they must equal those of a
+build of id's renderer and game logic with only TIMEDEMO's instruments added
+(`refsrc.py` makes that tree): **view `0707C966`, screen `F2A10CEB`**. CRC
+switches sound effects off, which makes a full run deterministic, so it runs on
+the 486 in two minutes (`ab.py --full`) and gives the V30's numbers. Steps
+1-36 all pass. Before this (see the findings below) only demo 0's first 200
+frames had been compared with id's picture; the frame counts staying
+691/1899/1140/1656 proves nothing -- a demo's length is its recorded input,
+whatever the game does with it.
+
 ## Findings worth keeping
+
+**Two faults the view checksums could not see, found 2026-09-29.**
+
+1. *A regression of mine, from step 19, spotted by StevenC on the V30's
+   screen:* ceiling colour everywhere outside the view, no status bar.
+   `VGAClearScreen` loads only CL for each row's `REP STOSW`; id's
+   `ThreeDRefresh` cleared `spotvis` with a `REP STOSW` every frame just
+   before, which left CX = 0, and step 19's frame stamp removed that clear.
+   With a stray CH the ceiling fill ran across the whole page. The floor fill
+   and the walls then repainted the view every frame, so every view checksum
+   matched -- the checksum measured exactly the part that was right. Fixed by
+   `xor ch,ch`, and the whole screen is now checksummed too. Timings between
+   step 19 and the fix carried the overrun's cost whenever CH was not 0, so
+   they are noisier than they look.
+2. *With AdLib sound effects on (as `CONFIG.WL6` has them) a demo is not
+   deterministic under an unpaced TIMEDEMO.* `UpdateFace` skips its `US_RndT`
+   calls while the gatling pickup sound plays; a sound lasts real time, and a
+   faster build fits more frames into it, so from that moment every build
+   plays a slightly different game. Shown on the 486: one EXE run twice gave
+   one number, four EXEs gave four. Every full run agreed on its first 400
+   frames, which is why demo-0 checks never noticed. CRC now turns sound
+   effects off; music never touches the game.
 
 **`ScaleLine`'s `OUT`s cost nothing measurable.** Replacing all six with `NOP`s
 (same size, wrong picture) timed identically, 988 against 989 play ticks.
@@ -165,12 +211,24 @@ the AdLib: the same notes appear with the calibrated waits and with id's
 (`OPLID`), none with `NOMUSIC`, and the broadband clicks in all three are the
 capture path's own.
 
+**Step 31: a cache that costs more than it saves.** A vertical wall's columns
+share `xintercept`, so one of `CalcHeight`'s two products repeats from column
+to column. Remembering *both* products with their inputs -- two compares and
+four stores on every call, for one reuse -- measured 0.4% slower. Memory
+writes are dear on this bus and a V30 `MUL` is not. Step 36 tries the narrow
+version: the hit routine knows which product repeats.
+
 **What the V30 does and does not offer.** Its own instructions (bit
 operations, `INS`/`EXT`, BCD strings, `ROL4`) are slower here than shifts and
 masks. What it has over an 8086 is hardware effective-address calculation --
 which is why step 6 barely moved: memory operands were already cheap -- and a
 fast multiplier and divider, which step 4 uses. The 8087 cannot help: Wolf3D
-draws entirely in fixed point.
+draws entirely in fixed point, and the one place it could stand in exactly --
+a 32/32 divide, `FIDIV` then `FISTP` with the rounding set to chop, exact for
+32-bit operands under a 64-bit mantissa -- costs more than the V30's own
+divide path (8087 `FDIV` ~200 clocks, `FILD`/`FISTP` ~50 each, against a V30
+`MUL` of ~22). Floating point anywhere else would stop the picture matching
+id's to the pixel.
 
 **Borland's C was better than expected more than once** (steps 11 and 12):
 converting to assembly pays where the C keeps loop state in memory (steps 2,

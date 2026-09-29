@@ -22,7 +22,10 @@ import sys
 import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, "WOLFSRC")
+# W3D_SRC / W3D_REMOTE build another tree (the reference renderer, for one)
+# in its own folder on the 486, leaving WOLFSRC and C:\\W3D alone
+SRC = os.environ.get("W3D_SRC", os.path.join(HERE, "WOLFSRC"))
+REMOTE = os.environ.get("W3D_REMOTE", r"C:\W3D")
 BRIDGE = os.environ.get("DOSBRIDGE", r"C:\dosbridgeDEV")
 DOSCTL = [sys.executable, os.path.join(BRIDGE, "dosctl.py")]
 BCPP_SRC = os.environ.get("BCPP_SRC", r"C:\Software\86Box\Software\BCPP")
@@ -95,18 +98,18 @@ def cmd_build():
             entries.append((os.path.join(SRC, f), f))
     for f in ("GAMEPAL.OBJ", "SIGNON.OBJ"):
         entries.append((os.path.join(SRC, "OBJ", f), "OBJ/" + f))
-    z = os.path.join(STAGE, "W3DSRC.ZIP")
+    z = os.path.join(STAGE, os.path.basename(REMOTE) + "SRC.ZIP")
     make_zip(z, entries)
-    ship_zip(z, r"C:\W3D")
+    ship_zip(z, REMOTE)
     # CALL, or the job's own batch never gets control back to send the result
     # CALL, or the job's own batch never gets control back to send the result;
     # and the log is TYPEd because a CALLed batch's output cannot be redirected
-    out = dosctl("exec", r"CD C:\W3D", "CALL BUILD86.BAT", r"TYPE C:\W3D\BUILD.LOG",
+    out = dosctl("exec", "CD " + REMOTE, "CALL BUILD86.BAT", "TYPE " + REMOTE + r"\BUILD.LOG",
                  "--box", BUILD_BOX, timeout=1500, check=False)
     if "##BUILD OK" not in out:
         sys.exit("build FAILED on %s -- see the output above" % BUILD_BOX)
     for f in ("WOLF3DV.EXE", "WOLF3DV.MAP"):
-        dosctl("pull", "C:\\W3D\\" + f, "--out", os.path.join(SRC, f), "--box", BUILD_BOX)
+        dosctl("pull", REMOTE + "\\" + f, "--out", os.path.join(SRC, f), "--box", BUILD_BOX)
     print("built:", os.path.join(SRC, "WOLF3DV.EXE"), os.path.getsize(os.path.join(SRC, "WOLF3DV.EXE")), "bytes")
 
 
