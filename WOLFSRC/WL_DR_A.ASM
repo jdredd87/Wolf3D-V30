@@ -1,6 +1,6 @@
 	IDEAL
 	MODEL	MEDIUM,C
-	P286
+	P186				; NEC V30 build: the V30 runs the 80186 set
 
 SCREENSEG	=	0a000h
 
@@ -41,6 +41,10 @@ EXTRN	viewtx:WORD
 EXTRN	viewty:WORD
 EXTRN	viewx:DWORD
 EXTRN	viewy:DWORD
+EXTRN	viewcos:DWORD			; sign-magnitude: bit 31 sign, low word fraction
+EXTRN	viewsin:DWORD
+EXTRN	mindist:DWORD
+EXTRN	heightnumerator:DWORD
 
 EXTRN	xpartialup:WORD
 EXTRN	ypartialup:WORD
@@ -172,6 +176,97 @@ EVEN
 	adc	dx,0
 	ret
 
+ENDP
+
+
+;============================
+;
+; CalcHeight
+;
+; NEC V30 build, StevenC & Claude: WL_DRAW.C's CalcHeight, moved here.  It
+; runs once per ray.  The C version built a stack frame, pushed eight words
+; for two far-style calls to FixedByFrac and spilled every intermediate to
+; the stack; this does the same arithmetic in registers, bit for bit:
+;
+;	gxt = FixedByFrac (xintercept-viewx, viewcos)
+;	gyt = FixedByFrac (yintercept-viewy, viewsin)
+;	nx  = max (gxt-gyt, mindist)
+;	return heightnumerator / (int)(nx>>8)		; one IDIV, as before
+;
+; FixedByFrac(a,b): |a| * (low word of b) >> 16, negated if exactly one of
+; a and b (bit 31) is negative -- the low word of the low product dropped,
+; exactly as the C routine does it.
+;
+;============================
+
+MACRO	FIXBYFRAC	frac
+	LOCAL	pos,done
+	mov	cx,dx				; cx:ax = a (it arrives in dx:ax)
+	mov	si,[WORD frac+2]	; sign of the result = sign of the fraction...
+	or	cx,cx
+	jns	pos
+	neg	cx
+	neg	ax
+	sbb	cx,0
+	xor	si,8000h			; ...toggled when a is negative
+pos:
+	mov	bx,[WORD frac]
+	mul	bx					; fraction*fraction
+	mov	di,dx				; keep only its high word
+	mov	ax,cx
+	mul	bx					; units*fraction
+	add	ax,di
+	adc	dx,0
+	test	si,8000h
+	jz	done
+	neg	dx
+	neg	ax
+	sbb	dx,0
+done:
+ENDM
+
+PROC	CalcHeight
+PUBLIC	CalcHeight
+	push	si
+	push	di
+
+	mov	ax,[WORD xintercept]
+	mov	dx,[WORD xintercept+2]
+	sub	ax,[WORD viewx]
+	sbb	dx,[WORD viewx+2]
+	FIXBYFRAC	viewcos			; dx:ax = gxt
+	push	dx
+	push	ax
+
+	mov	ax,[WORD yintercept]
+	mov	dx,[WORD yintercept+2]
+	sub	ax,[WORD viewy]
+	sbb	dx,[WORD viewy+2]
+	FIXBYFRAC	viewsin			; dx:ax = gyt
+
+	pop	bx
+	pop	cx					; cx:bx = gxt
+	sub	bx,ax
+	sbb	cx,dx				; cx:bx = nx = gxt-gyt
+
+	cmp	cx,[WORD mindist+2]	; if (nx < mindist) nx = mindist -- signed
+	jg	@@distok
+	jl	@@clamp
+	cmp	bx,[WORD mindist]
+	jae	@@distok
+@@clamp:
+	mov	bx,[WORD mindist]
+	mov	cx,[WORD mindist+2]
+@@distok:
+	mov	bl,bh				; bx = bits 8-23 of nx, the word at nx+1
+	mov	bh,cl
+	mov	ax,[WORD heightnumerator]
+	mov	dx,[WORD heightnumerator+2]
+	idiv	bx
+
+	pop	di
+	pop	si
+	retf
 ENDP
 
 

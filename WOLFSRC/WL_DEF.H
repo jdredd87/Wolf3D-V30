@@ -908,6 +908,25 @@ extern	int			controlx,controly;		// range from -100 to 100
 extern	boolean		buttonstate[NUMBUTTONS];
 
 extern	boolean		demorecord,demoplayback;
+extern	boolean		timedemo;		// TIMEDEMO: unpaced demos, timed -- StevenC & Claude
+extern	long		tdticks;		// BIOS ticks (18.2 Hz) the last PlayLoop took
+extern	long		tdlater;		// ...of which after its first frame (the fizzle-in)
+extern	long		tdmaxframes;	// QUICK: end each demo after this many frames
+#define	TDCRCMAX	8
+extern	boolean		tdcrc;			// CRC: checksum the view every 50 frames
+extern	int			tdcrcs;
+extern	unsigned	tdcrclo[TDCRCMAX],tdcrchi[TDCRCMAX];
+void	ViewChecksum (void);
+long	BiosTicks (void);
+
+//
+// WL_PROF -- the PROFILE sampler (StevenC & Claude)
+//
+extern	boolean		profiling;
+void	ProfInit (void);
+void	ProfStart (void);
+void	ProfStop (void);
+unsigned long ProfWrite (void);
 extern	char		far *demoptr, far *lastdemoptr;
 extern	memptr		demobuffer;
 

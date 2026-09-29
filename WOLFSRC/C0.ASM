@@ -147,6 +147,25 @@ ENDIF
 				or		ax,ax
 				jns		@@Have286		; If no sign bit, have a 286
 
+; StevenC & Claude, NEC V30 build: an 8086-class flags register does not
+; mean an 8086.  The game needs only the 80186 set, which a NEC V20/V30
+; and an 80186/188 both execute, so let those through and still refuse a
+; real 8086/8088.  Same probes as DOS Bridge's starter/cpu.pas:
+;   AAD with base 11 -- Intel answers AH*11+AL = 11, NEC ignores the
+;   operand and answers 10.  Only if Intel: shift 1 left by 32 -- the
+;   8086 clears it, a 186 masks the count to 0 and leaves it alone.
+; (The shift test runs after AAD on purpose: nobody agrees whether the
+; V20/V30 masks shift counts, so it is never asked.)
+				mov		ax,0100h		; AH=1, AL=0
+				db		0D5h,0Bh		; AAD 11
+				cmp		al,10
+				je		@@Have286		; NEC V20/V30
+				mov		al,1
+				mov		cl,32
+				shl		al,cl
+				or		al,al
+				jnz		@@Have286		; 80186/188
+
 				mov     cx, lgth_no286MSG
 				mov     dx, offset DGROUP: no286MSG
 				jmp		MsgExit3
@@ -742,7 +761,7 @@ abortMSG        db      'Abnormal program termination', 13, 10
 lgth_abortMSG   equ     $ - abortMSG
 
 ; JAB - Added string for no 286
-no286MSG		db		'Sorry, this program requires a 286 or better.', 13, 10
+no286MSG		db		'Sorry, this program requires a NEC V20/V30, an 80186 or better.', 13, 10
 lgth_no286MSG	equ		$ - no286MSG
 ; JAB - End of modifications
 

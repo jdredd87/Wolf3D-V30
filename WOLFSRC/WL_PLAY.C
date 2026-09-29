@@ -68,6 +68,95 @@ int			viewsize;
 boolean		buttonheld[NUMBUTTONS];
 
 boolean		demorecord,demoplayback;
+boolean		timedemo;
+long		tdticks;
+long		tdlater;
+long		tdmaxframes;
+boolean		tdcrc;
+int			tdcrcs;
+unsigned	tdcrclo[TDCRCMAX],tdcrchi[TDCRCMAX];
+
+/*
+===================
+=
+= ViewChecksum
+=
+= TIMEDEMO CRC: a Fletcher-style pair of 16-bit sums over the 3-D view
+= just displayed, all four planes, so that a change to the renderer can be
+= shown to draw exactly id's picture.  The game leaves the graphics
+= controller in read mode 1 (colour compare), so read mode 0 is set for
+= the read and both registers are put back.  Slow, and never timed: a CRC
+= run is for comparing pictures, not for comparing speed.
+= StevenC & Claude.
+=
+===================
+*/
+
+void ViewChecksum (void)
+{
+	byte		far *row;
+	unsigned	s1,s2,x,y,w;
+	int			plane;
+	byte		oldmode,oldmap;
+
+	if (tdcrcs >= TDCRCMAX)
+		return;
+	outportb (GC_INDEX,GC_MODE);
+	oldmode = inportb (GC_INDEX+1);
+	outportb (GC_INDEX,GC_READMAP);
+	oldmap = inportb (GC_INDEX+1);
+	outportb (GC_INDEX,GC_MODE);
+	outportb (GC_INDEX+1,oldmode & ~8);		// read mode 0
+
+	s1 = s2 = 0;
+	w = viewwidth/4;
+	for (plane=0;plane<4;plane++)
+	{
+		outportb (GC_INDEX,GC_READMAP);
+		outportb (GC_INDEX+1,plane);
+		for (y=0;y<viewheight;y++)
+		{
+			row = MK_FP(SCREENSEG,displayofs+screenofs+y*SCREENWIDTH);
+			for (x=0;x<w;x++)
+			{
+				s1 += row[x];
+				s2 += s1;
+			}
+		}
+	}
+
+	outportb (GC_INDEX,GC_READMAP);
+	outportb (GC_INDEX+1,oldmap);
+	outportb (GC_INDEX,GC_MODE);
+	outportb (GC_INDEX+1,oldmode);
+	tdcrclo[tdcrcs] = s1;
+	tdcrchi[tdcrcs] = s2;
+	tdcrcs++;
+}
+
+/*
+===================
+=
+= BiosTicks
+=
+= The BIOS tick count at 0040:006C, 18.2 Hz.  The sound manager's timer
+= ISRs chain to the BIOS each time their divisor sum overflows a word, so
+= this stays true while the game runs -- and unlike TimeCount, demo
+= playback never rewrites it.  StevenC & Claude.
+=
+===================
+*/
+
+long BiosTicks (void)
+{
+	long	t;
+
+asm	pushf
+asm	cli
+	t = *(long far *)MK_FP(0x40,0x6c);
+asm	popf
+	return t;
+}
 char		far *demoptr, far *lastdemoptr;
 memptr		demobuffer;
 
@@ -462,8 +551,8 @@ void PollControls (void)
 //
 	if (demoplayback)
 	{
-		while (TimeCount<lasttimecount+DEMOTICS)
-		;
+		while (TimeCount<lasttimecount+DEMOTICS && !timedemo)
+		;			// TIMEDEMO renders as fast as it can; the game still steps 4 tics
 		TimeCount = lasttimecount + DEMOTICS;
 		lasttimecount += DEMOTICS;
 		tics = DEMOTICS;
@@ -1385,6 +1474,8 @@ void PlayLoop (void)
 	if (demoplayback)
 		IN_StartAck ();
 
+	tdticks = BiosTicks ();
+	ProfStart ();
 	do
 	{
 		if (virtualreality)
@@ -1412,6 +1503,10 @@ void PlayLoop (void)
 		UpdatePaletteShifts ();
 
 		ThreeDRefresh ();
+		if (frameon == 1)
+			tdlater = BiosTicks ();	// TIMEDEMO: frame 1 carries the fizzle-in
+		if (tdcrc && !((unsigned)frameon % 50))
+			ViewChecksum ();		// TIMEDEMO CRC: frames 50, 100, 150, 200
 
 		//
 		// MAKE FUNNY FACE IF BJ DOESN'T MOVE FOR AWHILE
@@ -1464,7 +1559,17 @@ void PlayLoop (void)
 				player->angle += ANGLES;
 		}
 
+		if (tdmaxframes && frameon >= tdmaxframes)
+			playstate = ex_completed;	// QUICK timedemo: enough frames
 	}while (!playstate && !startgame);
+
+	ProfStop ();
+	tdlater = BiosTicks () - tdlater;
+	if (tdlater < 0)
+		tdlater += 0x1800B0L;
+	tdticks = BiosTicks () - tdticks;
+	if (tdticks < 0)
+		tdticks += 0x1800B0L;		// the BIOS count wraps at midnight
 
 	if (playstate != ex_died)
 		FinishPaletteShifts ();

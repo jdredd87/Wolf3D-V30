@@ -8,7 +8,7 @@
 ;[]-----------------------------------------------------------------[]
 .model medium
 	INCLUDE RULES.ASI
-.386C   ;JAB - we use 386 instructions
+.186    ;NEC V30 build: 386 only inside the patched block below
 
 _TEXT   segment public byte 'CODE'
 	assume  cs:_TEXT
@@ -50,6 +50,7 @@ F_LDIV@:
 ;                0[bp]: previous BP
 ;
 	IDEAL
+	P386
 
 	push bp
 	mov     bp,sp   ;Save BP, and set it equal to stack
@@ -63,6 +64,7 @@ F_LDIV@:
 	pop     bp              ;Restore BP
 	retf    8       ;Return to original caller
 
+	P186
 	MASM
 
 N_LUDIV@:
@@ -116,10 +118,12 @@ common:
 	jnz     slow@ldiv               ; both high words are zero
 
 	or      dx,dx
-	jz      quick@ldiv
+	jz      go@quick
 
 	or      bx,bx
-	jz      quick@ldiv              ; if cx:bx == 0 force a zero divide
+	jnz     slow@ldiv               ; else cx:bx == 0: force a zero divide
+go@quick:                               ; (a near JMP: the V30 fast path below
+	jmp     quick@ldiv              ; put quick@ldiv out of short range)
 					; we don't expect this to actually
 					; work
 
@@ -148,47 +152,91 @@ onepos:
 	sbb     cx,0                    ; negate divisor
 	xor     di,4
 positive:
-	mov     bp,cx
-	mov     cx,32                   ; shift counter
-	push    di                      ; save the flags
 ;
-;       Now the stack looks something like this:
+;	NEC V30 build, StevenC & Claude: the V30's DIV instruction is fast, so
+;	the 32-step shift-and-subtract loop Borland used here is replaced by
+;	hardware division.  Every result is the loop's: DX:AX and CX:BX are
+;	already non-negative here, the control bits in DI say what the caller
+;	wants, and the code below leaves the quotient in DX:AX and the
+;	remainder in DI:SI, exactly where the loop left them, for Borland's
+;	own tail to pick the one wanted and fix its sign.  (A zero divisor
+;	never gets here: the entry code sends it to quick@ldiv's DIV.)
 ;
-;               16[bp]: divisor (high word)
-;               14[bp]: divisor (low word)
-;               12[bp]: dividend (high word)
-;               10[bp]: dividend (low word)
-;                8[bp]: return CS
-;                6[bp]: return IP
-;                4[bp]: previous BP
-;                2[bp]: previous SI
-;                 [bp]: previous DI
-;               -2[bp]: control bits
-;                       01 - Unsigned divide
-;                       02 - Remainder wanted
-;                       04 - Negative quotient
-;                       08 - Negative remainder
+;	divisor < 65536    two DIVs, high word then low word
+;	divisor >= 65536   Hacker's Delight 9-5, doubleword division: normalise
+;	                   the divisor to 16 bits, one DIV of the dividend/2 for
+;	                   an estimate that is exact or one high, one multiply
+;	                   back to correct it.  ldivmodel.py checks this, step
+;	                   for step, against exact division.
 ;
-	xor     di,di                   ; fake a 64 bit dividend
-	xor     si,si                   ;
-xloop:
-	shl     ax,1                    ; shift dividend left one bit
-	rcl     dx,1
-	rcl     si,1
-	rcl     di,1
-	cmp     di,bp                   ; dividend larger?
-	jb      nosub
-	ja      subtract
-	cmp     si,bx                   ; maybe
-	jb      nosub
-subtract:
-	sub     si,bx
-	sbb     di,bp                   ; subtract the divisor
-	inc     ax                      ; build quotient
-nosub:
-	loop    xloop
+	push    di                      ; save the flags, as the loop did
+	or      cx,cx
+	jnz     big@ldiv
+
+	mov     si,ax                   ; divisor fits a word
+	mov     ax,dx
+	xor     dx,dx
+	div     bx                      ; AX = high word of quotient, DX = carry
+	mov     di,ax
+	mov     ax,si
+	div     bx                      ; AX = low word, DX = remainder
+	mov     si,dx
+	mov     dx,di                   ; quotient DX:AX
+	xor     di,di                   ; remainder DI:SI
+	jmp     short tail@ldiv
+
+big@ldiv:
+	push    dx                      ; u high
+	push    ax                      ; u low
+	push    cx                      ; v high
+	push    bx                      ; v low
+	xor     si,si                   ; n = leading zeros of v's high word
+norm@ldiv:
+	or      cx,cx
+	js      normed@ldiv
+	shl     bx,1
+	rcl     cx,1                    ; CX = v1 = (v << n) >> 16
+	inc     si
+	jmp     short norm@ldiv
+normed@ldiv:
+	shr     dx,1
+	rcr     ax,1                    ; u1 = u >> 1: high word < 8000h <= v1
+	div     cx                      ; AX = q1
+	mov     cx,15
+	sub     cx,si
+	shr     ax,cl                   ; q0 = q1 >> (15-n)
+	or      ax,ax
+	jz      q0@ldiv
+	dec     ax                      ; q0 = q0-1 unless zero
+q0@ldiv:
+	mov     si,ax                   ; SI = q0
+	pop     bx                      ; v low
+	pop     cx                      ; v high
+	mul     cx                      ; q0 * v high (fits a word: q0*v <= u)
+	mov     di,ax
+	mov     ax,si
+	mul     bx                      ; q0 * v low
+	add     dx,di                   ; DX:AX = q0 * v
+	pop     di                      ; u low
+	sub     di,ax
+	mov     ax,di
+	pop     di                      ; u high
+	sbb     di,dx                   ; DI:AX = r = u - q0*v
+	cmp     di,cx
+	jb      done@ldiv
+	ja      fix@ldiv
+	cmp     ax,bx
+	jb      done@ldiv
+fix@ldiv:
+	sub     ax,bx                   ; r >= v: the estimate was one low
+	sbb     di,cx
+	inc     si
+done@ldiv:
+	xchg    ax,si                   ; AX = quotient, SI = remainder low
+	xor     dx,dx                   ; quotient < 65536 here
+tail@ldiv:
 ;
-;       When done with the loop the four register value look like:
+;       When the division is done the four registers look like:
 ;
 ;       |     di     |     si     |     dx     |     ax     |
 ;       |        remainder        |         quotient        |

@@ -1,6 +1,6 @@
 ; JABHACK.ASM
 
-.386C
+.186	; NEC V30 build (was .386C; nothing here needs a 386)
 IDEAL
 MODEL	MEDIUM
 

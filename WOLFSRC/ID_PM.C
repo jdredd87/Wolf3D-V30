@@ -642,27 +642,17 @@ PM_GetPageAddress(int pagenum)
 //	PML_GiveLRUPage() - Returns the page # of the least recently used
 //		present & unlocked main/EMS page (or main page if mainonly is true)
 //
+int PML_FindLRU (boolean mainonly);	// ID_PM_A.ASM: the scan, in assembly
+
 int
 PML_GiveLRUPage(boolean mainonly)
 {
-	int				i,lru;
-	long			last;
-	PageListStruct	far *page;
+	int				lru;
 
-	for (i = 0,page = PMPages,lru = -1,last = MAXLONG;i < ChunksInFile;i++,page++)
-	{
-		if
-		(
-			(page->lastHit < last)
-		&&	((page->emsPage != -1) || (page->mainPage != -1))
-		&& 	(page->locked == pml_Unlocked)
-		&&	(!(mainonly && (page->mainPage == -1)))
-		)
-		{
-			last = page->lastHit;
-			lru = i;
-		}
-	}
+	// NEC V30 build (StevenC & Claude): the search over every page, which
+	// was 6% of a frame with a small main-memory cache, is PML_FindLRU in
+	// ID_PM_A.ASM -- the same test, first oldest page wins, as before.
+	lru = PML_FindLRU (mainonly);
 
 	if (lru == -1)
 		Quit("PML_GiveLRUPage: LRU Search failed");

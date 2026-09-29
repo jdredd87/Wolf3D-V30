@@ -468,19 +468,29 @@ void LoadLatchMem (void)
 
 extern	ControlInfo	c;
 
+//
+// NEC V30 build, StevenC & Claude: the per-pixel loop is FizzleStep, in
+// ID_VH_A.ASM -- the same pixels in the same order, but on the V30 the C
+// loop made every level start and every death a six-second fizzle.
+//
+unsigned	fzcount,fzsource,fzdelta,fzwidth,fzheight,fzdone;
+long		fzrnd;
+void		FizzleStep (void);
+
 boolean FizzleFade (unsigned source, unsigned dest,
 	unsigned width,unsigned height, unsigned frames, boolean abortable)
 {
 	int			pixperframe;
-	unsigned	drawofs,pagedelta;
-	byte 		mask,maskb[8] = {1,2,4,8};
-	unsigned	x,y,p,frame;
-	long		rndval;
+	unsigned	frame;
 
-	pagedelta = dest-source;
-	rndval = 1;
-	y = 0;
+	fzdelta = dest-source;
+	fzsource = source;
+	fzwidth = width;
+	fzheight = height;
+	fzrnd = 1;
+	fzdone = false;
 	pixperframe = 64000/frames;
+	fzcount = pixperframe > 0 ? pixperframe : 0;
 
 	IN_StartAck ();
 
@@ -490,58 +500,12 @@ boolean FizzleFade (unsigned source, unsigned dest,
 		if (abortable && IN_CheckAck () )
 			return true;
 
-		asm	mov	es,[screenseg]
+		FizzleStep ();
+		if (fzdone)
+			return false;		// entire sequence has been completed
 
-		for (p=0;p<pixperframe;p++)
-		{
-			//
-			// seperate random value into x/y pair
-			//
-			asm	mov	ax,[WORD PTR rndval]
-			asm	mov	dx,[WORD PTR rndval+2]
-			asm	mov	bx,ax
-			asm	dec	bl
-			asm	mov	[BYTE PTR y],bl			// low 8 bits - 1 = y xoordinate
-			asm	mov	bx,ax
-			asm	mov	cx,dx
-			asm	mov	[BYTE PTR x],ah			// next 9 bits = x xoordinate
-			asm	mov	[BYTE PTR x+1],dl
-			//
-			// advance to next random element
-			//
-			asm	shr	dx,1
-			asm	rcr	ax,1
-			asm	jnc	noxor
-			asm	xor	dx,0x0001
-			asm	xor	ax,0x2000
-noxor:
-			asm	mov	[WORD PTR rndval],ax
-			asm	mov	[WORD PTR rndval+2],dx
-
-			if (x>width || y>height)
-				continue;
-			drawofs = source+ylookup[y] + (x>>2);
-
-			//
-			// copy one pixel
-			//
-			mask = x&3;
-			VGAREADMAP(mask);
-			mask = maskb[mask];
-			VGAMAPMASK(mask);
-
-			asm	mov	di,[drawofs]
-			asm	mov	al,[es:di]
-			asm add	di,[pagedelta]
-			asm	mov	[es:di],al
-
-			if (rndval == 1)		// entire sequence has been completed
-				return false;
-		}
 		frame++;
 		while (TimeCount<frame)		// don't go too fast
 		;
 	} while (1);
-
-
 }

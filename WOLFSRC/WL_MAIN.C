@@ -1408,6 +1408,112 @@ void Quit (char *error)
 
 static  char *ParmStrings[] = {"baby","easy","normal","hard",""};
 
+/*
+=====================
+=
+= TimeDemo
+=
+= WOLF3D TIMEDEMO: play id's four demos with no frame pacing, time each
+= one off the BIOS tick, put the screen back to text and print the
+= results through DOS so they can be captured.  Only the play loop is
+= timed -- not the level loads or the fades around it.  A key aborts.
+= StevenC & Claude, for the NEC V30 work.
+=
+=====================
+*/
+
+/*
+=====================
+=
+= FpsString
+=
+= frames / (ticks / 18.2065), to hundredths, in integers: frames*182065 /
+= (ticks*100) is fps*100.  The product fits a long up to 11,795 frames.
+=
+=====================
+*/
+
+char *FpsString (long frames, long ticks)
+{
+	static char	s[24];
+	long		f100;
+
+	if (ticks <= 0)
+		return "   -.-- fps";
+	f100 = frames*182065L/(ticks*100L);		// fps * 100
+	sprintf (s,"%4ld.%02ld fps",f100/100,f100%100);
+	return s;
+}
+
+extern	int		MainPagesAvail;		// ID_PM.C, not in its header
+
+void TimeDemo (void)
+{
+	int		i,played,ndemos,aborted;
+	int		maps[4];
+	long	frames[4],ticks[4],later[4],tf,tt,tl;
+	unsigned long	samples;
+
+	ndemos = 4;
+	tdcrc = MS_CheckParm ("crc");	// checksum the view every 50 frames
+	if (MS_CheckParm ("quick"))
+	{
+		ndemos = 1;					// QUICK: demo 0, first 200 frames only --
+		tdmaxframes = 200;			// the same frames every run, for A/B timing
+	}
+
+	ProfInit ();
+	aborted = false;
+	for (played=0;played<ndemos;played++)
+	{
+		PlayDemo (played);
+		maps[played] = gamestate.mapon;
+		frames[played] = frameon;
+		ticks[played] = tdticks;
+		later[played] = tdlater;
+		if (playstate == ex_abort)
+		{
+			aborted = true;
+			played++;				// it did play, partly -- report it
+			break;
+		}
+	}
+
+	samples = ProfWrite ();			// before ShutdownId frees its memory
+	ShutdownId ();
+	printf ("WOLF3D TIMEDEMO  -- NEC V30 build, StevenC & Claude\n");
+	printf ("pages: %u in VSWAP  EMS %s %u  XMS %s %u  main %d\n",ChunksInFile,
+		EMSPresent ? "yes" : "no",EMSPagesAvail,
+		XMSPresent ? "yes" : "no",XMSPagesAvail,MainPagesAvail);
+	printf ("view %d x %d%s\n",viewwidth,viewheight,
+		tdmaxframes ? ", QUICK (demo 0, 200 frames)" : "");
+	tf = tt = tl = 0;
+	for (i=0;i<played;i++)
+	{
+		printf ("demo %d  floor %2d  %5ld frames  %5ld ticks  %s",
+			i,maps[i]+1,frames[i],ticks[i],FpsString(frames[i],ticks[i]));
+		printf ("  | play %5ld ticks %s\n",later[i],FpsString(frames[i]-1,later[i]));
+		tf += frames[i];
+		tt += ticks[i];
+		tl += later[i];
+	}
+	if (played > 1)
+	{
+		printf ("total              %5ld frames  %5ld ticks  %s",tf,tt,FpsString(tf,tt));
+		printf ("  | play %5ld ticks %s\n",tl,FpsString(tf-played,tl));
+	}
+	printf ("(play = after each demo's first frame, which carries the fizzle-in)\n");
+	if (profiling)
+		printf ("PROFILE: %lu samples in PROF.BIN\n",samples);
+	for (i=0;i<tdcrcs;i++)
+		printf ("view checksum %d: %04X%04X\n",i+1,tdcrchi[i],tdcrclo[i]);
+	if (tdcrc)
+		printf ("(checksums cover the view every 50 frames; this run's timing includes them)\n");
+	if (aborted)
+		printf ("ABORTED by a key, mouse or joystick button during demo %d\n",played-1);
+	exit (aborted ? 2 : 0);
+}
+
 void    DemoLoop (void)
 {
 	static int LastDemo;
@@ -1473,6 +1579,9 @@ void    DemoLoop (void)
 		#endif
 		#endif
 	#endif
+
+	if (timedemo)
+		TimeDemo ();			// never returns
 
 	StartCPMusic(INTROSONG);
 
@@ -1606,6 +1715,12 @@ void main (void)
 	CheckForEpisodes();
 
 	Patch386 ();
+
+	if (MS_CheckParm ("timedemo"))
+	{
+		timedemo = true;
+		NoWait = true;			// no "press a key" at the signon screen
+	}
 
 	InitGame ();
 

@@ -2,7 +2,7 @@
 ;	ID_SD_A.ASM
 ;	Id Sound Manager assembly stuff
 
-	.286C
+	.186				; NEC V30 build: the V30 runs the 80186 set
 	IDEAL
 	MODEL	MEDIUM,C
 	JUMPS

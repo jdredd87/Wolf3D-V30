@@ -356,31 +356,9 @@ boolean TransformTile (int tx, int ty, int *dispx, int *dispheight)
 
 #pragma warn -rvl			// I stick the return value in with ASMs
 
-int	CalcHeight (void)
-{
-	int	transheight;
-	int ratio;
-	fixed gxt,gyt,nx,ny;
-	long	gx,gy;
-
-	gx = xintercept-viewx;
-	gxt = FixedByFrac(gx,viewcos);
-
-	gy = yintercept-viewy;
-	gyt = FixedByFrac(gy,viewsin);
-
-	nx = gxt-gyt;
-
-  //
-  // calculate perspective ratio (heightnumerator/(nx>>8))
-  //
-	if (nx<mindist)
-		nx=mindist;			// don't let divide overflow
-
-	asm	mov	ax,[WORD PTR heightnumerator]
-	asm	mov	dx,[WORD PTR heightnumerator+2]
-	asm	idiv	[WORD PTR nx+1]			// nx>>8
-}
+// CalcHeight is in WL_DR_A.ASM since the NEC V30 build (StevenC & Claude):
+// the same arithmetic without the stack frame and the two calls per ray.
+int	CalcHeight (void);
 
 
 //==========================================================================
@@ -479,7 +457,7 @@ void HitVertWall (void)
 	int			wallpic;
 	unsigned	texture;
 
-	texture = (yintercept>>4)&0xfc0;
+	texture = ((unsigned)yintercept>>4)&0xfc0;	// low word only: no long shift
 	if (xtilestep == -1)
 	{
 		texture = 0xfc0-texture;
@@ -552,7 +530,7 @@ void HitHorizWall (void)
 	int			wallpic;
 	unsigned	texture;
 
-	texture = (xintercept>>4)&0xfc0;
+	texture = ((unsigned)xintercept>>4)&0xfc0;	// low word only: no long shift
 	if (ytilestep == -1)
 		yintercept += TILEGLOBAL;
 	else
@@ -622,7 +600,7 @@ void HitHorizDoor (void)
 	unsigned	texture,doorpage,doornum;
 
 	doornum = tilehit&0x7f;
-	texture = ( (xintercept-doorposition[doornum]) >> 4) &0xfc0;
+	texture = ( ((unsigned)xintercept-doorposition[doornum]) >> 4) &0xfc0;	// low word only
 
 	wallheight[pixx] = CalcHeight();
 
@@ -690,7 +668,7 @@ void HitVertDoor (void)
 	unsigned	texture,doorpage,doornum;
 
 	doornum = tilehit&0x7f;
-	texture = ( (yintercept-doorposition[doornum]) >> 4) &0xfc0;
+	texture = ( ((unsigned)yintercept-doorposition[doornum]) >> 4) &0xfc0;	// low word only
 
 	wallheight[pixx] = CalcHeight();
 
@@ -761,7 +739,7 @@ void HitHorizPWall (void)
 	int			wallpic;
 	unsigned	texture,offset;
 
-	texture = (xintercept>>4)&0xfc0;
+	texture = ((unsigned)xintercept>>4)&0xfc0;	// low word only: no long shift
 	offset = pwallpos<<10;
 	if (ytilestep == -1)
 		yintercept += TILEGLOBAL-offset;
@@ -825,7 +803,7 @@ void HitVertPWall (void)
 	int			wallpic;
 	unsigned	texture,offset;
 
-	texture = (yintercept>>4)&0xfc0;
+	texture = ((unsigned)yintercept>>4)&0xfc0;	// low word only: no long shift
 	offset = pwallpos<<10;
 	if (xtilestep == -1)
 	{
