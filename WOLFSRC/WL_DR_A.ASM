@@ -126,6 +126,7 @@ chhgyhi		dw	0
 tsave		dw	0				; T, across a door or pushwall test
 yadj		dw	64				; xtilestep<<6, as added into vyadc's word
 clx1		dw	0				; CheckLine's working storage
+visord		dw	50 DUP (0)		; DrawVisList's drawing order (MAXVISABLE entries)
 cly1		dw	0
 clhalf		dw	0
 clend		dw	0
@@ -456,7 +457,74 @@ PUBLIC	DrawVisList
 	jcxz	@@done
 	mov	di,[visptr]
 	mov	bx,[farthest]
+;
+; NEC V30 build, StevenC & Claude (step 46): id picks the nearest-first
+; order by selection -- a pass over the whole list per object drawn, the
+; FIRST of the smallest heights each time.  That is exactly a stable sort
+; by height, so the list is sorted once here, by insertion, into visord,
+; and drawn in that order.  id's loop never picks a height of 32000 or
+; more (it marks drawn objects 32000, and re-draws the last object
+; instead) and compares signed; a list holding such a height is left to
+; id's loop, so every case draws what id's did.
+;
+	mov	si,OFFSET vislist
+	xor	bx,bx						; visord index, bytes
+@@collect:
+	cmp	[WORD si+VIS_HEIGHT],32000
+	jae	@@idloop					; unsigned: 32000 up, and "negative" ones
+	mov	[visord+bx],si
+	add	bx,2
+	add	si,VIS_SIZE
+	cmp	si,di
+	jb	@@collect
 
+	mov	si,2						; insertion sort, by signed height
+@@isort:
+	cmp	si,bx
+	jae	@@sorted
+	mov	ax,[visord+si]				; key
+	push	di
+	mov	di,ax
+	mov	dx,[di+VIS_HEIGHT]			; its height
+	pop	di
+	push	si
+@@ishift:
+	mov	di,[visord+si-2]
+	cmp	[di+VIS_HEIGHT],dx
+	jle	@@iplace					; not greater: stop (keeps equal ones in order)
+	mov	[visord+si],di
+	sub	si,2
+	jnz	@@ishift
+@@iplace:
+	mov	[visord+si],ax
+	pop	si
+	add	si,2
+	jmp	@@isort
+@@sorted:
+	mov	di,[visptr]
+	xor	si,si
+@@draw:
+	mov	bx,[visord+si]
+	mov	[farthest],bx
+	push	cx
+	push	si
+	push	[WORD bx+VIS_HEIGHT]
+	push	[WORD bx+VIS_SHAPENUM]
+	push	[WORD bx+VIS_VIEWX]
+	call	ScaleShape
+	add	sp,6
+	pop	si
+	pop	cx
+	mov	bx,[farthest]
+	mov	[WORD bx+VIS_HEIGHT],32000
+	add	si,2
+	loop	@@draw
+	mov	[visstep],di				; where the C loop left it
+	jmp	@@done
+
+@@idloop:
+	mov	di,[visptr]
+	mov	bx,[farthest]
 @@pass:
 	mov	si,OFFSET vislist
 	mov	dx,32000				; least
