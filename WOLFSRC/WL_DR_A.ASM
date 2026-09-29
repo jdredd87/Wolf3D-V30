@@ -1430,6 +1430,7 @@ PUBLIC	AsmRefresh
 	mov	[chhkey],8000h
 
 	mov	[curquad],0				; the first ray patches its quadrant in
+	mov	[WORD cs:qlo+2],7FFFh	; and takes id's chain to get there
 	mov	[pixx],0
 ;---------------------------------------------------------------------------
 ;
@@ -1452,6 +1453,25 @@ pixxloop:
 	mov	bx,[pixx]
 	shl	bx,1
 	add	cx,[pixelangle+bx]		; delta for this pixel
+;
+; NEC V30 build, StevenC & Claude: a ray is nearly always in the quadrant
+; of the ray before, and the test chain below cost two to four taken jumps
+; (JUMPS made most of them long) plus the quadrant's own check.  So the
+; range and body of the current quadrant are patched in here -- by the
+; quadrant code, only when a ray changes quadrant -- and a ray inside it
+; goes straight there.  Anything else, the first ray of a frame included
+; (7FFFh), takes id's chain.
+;
+qlo:
+	cmp	cx,1234h				; the quadrant's first angle (81 F9 iw: at +2)
+	jl	@@qslow
+qhi:
+	cmp	cx,1234h				; one past its last
+	jge	@@qslow
+qjmp:
+	db	0E9h					; JMP rel16 to the quadrant's body, patched
+	dw	0
+@@qslow:
 	cmp	cx,0
 	jge	not0
 ;----------
@@ -1474,6 +1494,11 @@ entry90:
 	cmp	[curquad],1				; NEC V30 build: the loop is patched for a
 	je	@@q1					; quadrant, and only a change of quadrant --
 	mov	[curquad],1				; twice a frame at most -- patches it again
+	mov	[WORD cs:qlo+2],0		; and the fast entry at pixxloop
+	mov	[WORD cs:qhi+2],DEG90
+	mov	ax,OFFSET @@q1		; rel16, computed here: TASM's own
+	sub	ax,OFFSET qjmp+3	; label arithmetic came out 6 bytes off
+	mov	[WORD cs:qjmp+1],ax	; (JUMPS moves labels between passes)
 	mov	[xtilestep],1			; xtilestep = 1
 	mov	[ytilestep],-1			; ytilestep = -1
 	mov	[BYTE cs:vertop],OP_JLE		; patch a jle in
@@ -1548,6 +1573,11 @@ not90:
 	cmp	[curquad],2
 	je	@@q2
 	mov	[curquad],2
+	mov	[WORD cs:qlo+2],DEG90		; and the fast entry at pixxloop
+	mov	[WORD cs:qhi+2],DEG180
+	mov	ax,OFFSET @@q2		; rel16, computed here: TASM's own
+	sub	ax,OFFSET qjmp+3	; label arithmetic came out 6 bytes off
+	mov	[WORD cs:qjmp+1],ax	; (JUMPS moves labels between passes)
 	mov	ax,-1
 	mov	[xtilestep],ax			; xtilestep = -1
 	mov	[ytilestep],ax			; ytilestep = -1
@@ -1629,6 +1659,11 @@ not180:
 	cmp	[curquad],3
 	je	@@q3
 	mov	[curquad],3
+	mov	[WORD cs:qlo+2],DEG180		; and the fast entry at pixxloop
+	mov	[WORD cs:qhi+2],DEG270
+	mov	ax,OFFSET @@q3		; rel16, computed here: TASM's own
+	sub	ax,OFFSET qjmp+3	; label arithmetic came out 6 bytes off
+	mov	[WORD cs:qjmp+1],ax	; (JUMPS moves labels between passes)
 	mov	[xtilestep],-1			; xtilestep = -1
 	mov	[ytilestep],1			; ytilestep = 1
 	mov	[BYTE cs:vertop],OP_JGE		; patch a jge in
@@ -1704,6 +1739,11 @@ entry360:
 	cmp	[curquad],4
 	je	@@q4
 	mov	[curquad],4
+	mov	[WORD cs:qlo+2],DEG270		; and the fast entry at pixxloop
+	mov	[WORD cs:qhi+2],DEG360
+	mov	ax,OFFSET @@q4		; rel16, computed here: TASM's own
+	sub	ax,OFFSET qjmp+3	; label arithmetic came out 6 bytes off
+	mov	[WORD cs:qjmp+1],ax	; (JUMPS moves labels between passes)
 	mov	ax,1
 	mov	[xtilestep],ax			; xtilestep = 1
 	mov	[ytilestep],ax			; ytilestep = 1

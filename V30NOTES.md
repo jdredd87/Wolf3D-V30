@@ -133,7 +133,8 @@ byte for byte.
 | 36 | `CalcHeight` for the ray loop's wall hits: a vertical wall's columns share `xintercept`, so `CalcHeightV` keeps `gxt` against its high word (`CalcHeightH` keeps `gyt`), each with its own patched immediates -- step 31's idea, narrowed to the product that repeats | 892 | 4.06 |
 | 37 | per-ray setup specialised per quadrant: each block multiplies the positive tangent and adds or subtracts the product (id negated the tangent, tested the sign, negated back, multiplied, negated the product); the partial in a register; `xtile<<6` once for `xspot` and `T` | 879 | 4.12 |
 | 38 | no `JUMPS`-expanded branches on the common paths: TASM made each out-of-range `jb`/`jle`/`ja`/`jge` a jump the other way over a `JMP`, so `ScaleShape`'s column walk took two jumps a column and `PlaceActors` one per unseen actor; short hops to a nearby `JMP` instead | 870 | 4.16 |
-| 39 | no per-ray `xstep`/`ystep` stores: the door and pushwall paths read the values from the loop's own patch sites (`ystep`'s high word less `xtilestep<<6`, kept in `yadj`); id's two dead multiply helpers removed | **863** | **4.20** |
+| 39 | no per-ray `xstep`/`ystep` stores: the door and pushwall paths read the values from the loop's own patch sites (`ystep`'s high word less `xtilestep<<6`, kept in `yadj`); id's two dead multiply helpers removed | 863 | 4.20 |
+| 40 | a ray in the last ray's quadrant goes straight to its body: `cmp`/`cmp`/`jmp` with the range and target patched in on a change of quadrant (the target's rel16 computed at run time: TASM's label arithmetic across `JUMPS`' passes came out 6 bytes off); id's test chain for the rest | **856** | **4.23** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
