@@ -879,6 +879,7 @@ extern	byte		*nearmapylookup[MAPSIZE];
 
 extern	byte		tilemap[MAPSIZE][MAPSIZE];	// wall values only
 extern	byte		spotvis[MAPSIZE][MAPSIZE];
+extern	unsigned	vismark;		// NEC V30 build: this frame's mark in spotvis (1-255)
 extern	objtype		*actorat[MAPSIZE][MAPSIZE];
 
 #define UPDATESIZE			(UPDATEWIDE*UPDATEHIGH)

@@ -39,6 +39,12 @@ int			extravbls;
 
 byte		tilemap[MAPSIZE][MAPSIZE];	// wall values only
 byte		spotvis[MAPSIZE][MAPSIZE];
+unsigned	vismark;	// NEC V30 build (StevenC & Claude): spotvis[x][y] == vismark
+					// means seen this frame; only ever counts up, and
+					// spotvis is cleared when it passes 255 (ThreeDRefresh).
+					// A word, not a byte: a one-byte global here put
+					// actorat and everything after it on odd addresses
+					// and cost 3% (aligncheck.py)
 objtype		*actorat[MAPSIZE][MAPSIZE];
 
 //

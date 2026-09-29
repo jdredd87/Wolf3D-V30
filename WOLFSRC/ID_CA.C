@@ -61,7 +61,7 @@ byte		_seg	*audiosegs[NUMSNDCHUNKS];
 void		_seg	*grsegs[NUMCHUNKS];
 
 byte		far	grneeded[NUMCHUNKS];
-byte		ca_levelbit,ca_levelnum;
+byte		ca_levelbit = 0,ca_levelnum = 0;	// NEC V30 build: initialized, even-sized -- see aligncheck.py
 
 int			profilehandle,debughandle;
 
@@ -85,7 +85,7 @@ extern	byte	far	audiohead;
 extern	byte	audiodict;
 
 
-char extension[5],	// Need a string, not constant to change cache files
+char extension[6],	// Need a string, not constant to change cache files (6: even-sized, NEC V30 build)
      gheadname[10]=GREXT"HEAD.",
      gfilename[10]=GREXT"GRAPH.",
      gdictname[10]=GREXT"DICT.",

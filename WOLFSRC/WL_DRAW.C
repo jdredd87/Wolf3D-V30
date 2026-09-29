@@ -985,15 +985,15 @@ void DrawScaleds (void)
 		//
 		// could be in any of the nine surrounding tiles
 		//
-		if (*visspot
-		|| ( *(visspot-1) && !*(tilespot-1) )
-		|| ( *(visspot+1) && !*(tilespot+1) )
-		|| ( *(visspot-65) && !*(tilespot-65) )
-		|| ( *(visspot-64) && !*(tilespot-64) )
-		|| ( *(visspot-63) && !*(tilespot-63) )
-		|| ( *(visspot+65) && !*(tilespot+65) )
-		|| ( *(visspot+64) && !*(tilespot+64) )
-		|| ( *(visspot+63) && !*(tilespot+63) ) )
+		if (*visspot == vismark
+		|| ( *(visspot-1) == vismark && !*(tilespot-1) )
+		|| ( *(visspot+1) == vismark && !*(tilespot+1) )
+		|| ( *(visspot-65) == vismark && !*(tilespot-65) )
+		|| ( *(visspot-64) == vismark && !*(tilespot-64) )
+		|| ( *(visspot-63) == vismark && !*(tilespot-63) )
+		|| ( *(visspot+65) == vismark && !*(tilespot+65) )
+		|| ( *(visspot+64) == vismark && !*(tilespot+64) )
+		|| ( *(visspot+63) == vismark && !*(tilespot+63) ) )
 		{
 			obj->active = true;
 			TransformActor (obj);
@@ -1191,12 +1191,21 @@ void	ThreeDRefresh (void)
 //
 // clear out the traced array
 //
+// NEC V30 build (StevenC & Claude): not every frame any more.  The ray loop
+// marks a tile with this frame's vismark, and "seen this frame" is
+// spotvis[x][y] == vismark; the array is cleared only when vismark passes
+// 255, every 255 frames, so no stale mark can ever equal the current one.
+//
+	if (++vismark > 255)
+	{
 asm	mov	ax,ds
 asm	mov	es,ax
 asm	mov	di,OFFSET spotvis
 asm	xor	ax,ax
 asm	mov	cx,2048							// 64*64 / 2
 asm	rep stosw
+		vismark = 1;
+	}
 
 	bufferofs += screenofs;
 

@@ -635,7 +635,7 @@ void OverheadRefresh (void)
 				break;
 
 			case visview:
-				tile = spotvis[x][y];
+				tile = spotvis[x][y] == vismark;
 				break;
 #endif
 			case actoratview:

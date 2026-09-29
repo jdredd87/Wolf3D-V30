@@ -36,6 +36,7 @@ EXTRN	viewwidth:WORD
 
 EXTRN	tilemap:BYTE
 EXTRN	spotvis:BYTE
+EXTRN	vismark:BYTE
 EXTRN	pixelangle:WORD
 
 
@@ -426,12 +427,13 @@ PUBLIC	PlaceStatics
 	jmp	@@test
 
 @@loop:
+	mov	bx,[si+ST_VISSPOT]			; (both tests are pure: order is free)
+	mov	al,[vismark]
+	cmp	[bx],al
+	jne	@@next						; not seen this frame
 	mov	ax,[si+ST_SHAPENUM]
 	cmp	ax,-1
 	je	@@next						; deleted
-	mov	bx,[si+ST_VISSPOT]
-	cmp	[BYTE bx],0
-	je	@@next						; not visible
 	mov	[di+VIS_SHAPENUM],ax
 
 	lea	ax,[di+VIS_HEIGHT]
@@ -716,6 +718,10 @@ PUBLIC	AsmRefresh
 	push	di
 	push	bp
 
+	mov	al,[vismark]			; NEC V30 build: this frame's mark, patched into
+	mov	[BYTE cs:vspotop+4],al		; the two spotvis stores (C6 84 disp16 imm8)
+	mov	[BYTE cs:hspotop+4],al
+
 	mov	[pixx],0
 ;---------------------------------------------------------------------------
 ;
@@ -998,7 +1004,8 @@ vertentry:
 	test [BYTE tilemap+si],0ffh		; tilehit = *((byte *)tilemap+xspot);
 	jnz	hitvert
 passvert:
-	mov	[BYTE spotvis+si],1			; *((byte *)spotvis+xspot) = true;
+vspotop:
+	mov	[BYTE spotvis+si],1			; = vismark, patched in at +4 per frame
 ;
 ; NEC V30 build, StevenC & Claude: the three steps below are patched in per
 ; ray by the quadrant code above, as id already patches vertop/horizop, so a
@@ -1048,7 +1055,8 @@ horizentry:
 	test [BYTE tilemap+di],0ffh		; tilehit = *((byte *)tilemap+yspot);
 	jnz	hithoriz
 passhoriz:
-	mov	[BYTE spotvis+di],1			; *((byte *)spotvis+yspot) = true;
+hspotop:
+	mov	[BYTE spotvis+di],1			; = vismark, patched in at +4 per frame
 hytileop:
 	inc	bp							; ytile+=ytilestep: INC BP or DEC BP, patched
 hxadd:

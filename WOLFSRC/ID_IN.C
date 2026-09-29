@@ -58,8 +58,8 @@ boolean			JoyPadPresent;
 // 	Global variables
 		boolean		Keyboard[NumCodes];
 		boolean		Paused;
-		char		LastASCII;
-		ScanCode	LastScan;
+		char		LastASCII = 0;	// NEC V30 build: initialized, even-sized -- see aligncheck.py
+		ScanCode	LastScan = 0;
 
 		KeyboardDef	KbdDefs = {0x1d,0x38,0x47,0x48,0x49,0x4b,0x4d,0x4f,0x50,0x51};
 		JoystickDef	JoyDefs[MaxJoys];

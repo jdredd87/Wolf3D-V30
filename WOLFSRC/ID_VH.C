@@ -26,7 +26,7 @@ pictabletype	_seg *pictable;
 
 
 int	px,py;
-byte	fontcolor,backcolor;
+byte	fontcolor = 0,backcolor = 0;	// NEC V30 build: initialized, even-sized -- see aligncheck.py
 int	fontnumber;
 int bufferwidth,bufferheight;
 

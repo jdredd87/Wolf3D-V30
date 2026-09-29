@@ -248,7 +248,7 @@ extern	unsigned	far *linecmds;
 extern	long		linescale;
 extern	unsigned	maskword;
 
-byte	mask1,mask2,mask3;
+byte	mask1 = 0,mask2 = 0,mask3 = 0,maskpad = 0;	// NEC V30 build: initialized, even-sized -- see aligncheck.py
 
 
 void near ScaleLine (void)

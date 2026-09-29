@@ -134,12 +134,13 @@ static	byte					sbpOldFMMix,sbpOldVOCMix;
 		boolean				ssNoCheck;
 		boolean				ssActive;
 		word				ssControl,ssStatus,ssData;
-		byte				ssOn,ssOff;
+		byte				ssOn = 0,ssOff = 0;	// NEC V30 build: initialized, even-sized -- see aligncheck.py
 		volatile byte		far *ssSample;
 		volatile longword	ssLengthLeft;
 
 //	PC Sound variables
-		volatile byte	pcLastSample,far *pcSound;
+		volatile byte	pcLastSample = 0,pcLastPad = 0;	// NEC V30 build: initialized, even-sized -- see aligncheck.py
+		volatile byte	far *pcSound;
 		longword		pcLengthLeft;
 		word			pcSoundLookup[255];
 
