@@ -51,7 +51,7 @@ WIDTHS		=	130					; offset of t_compscale.width[]
 DATAOFS		=	4					; offset of t_compshape.dataofs[]
 
 
-SEGMENT	WL_SCALE_TEXT BYTE PUBLIC 'CODE'
+SEGMENT	WL_SCALE_TEXT WORD PUBLIC 'CODE'	; WORD, so EVEN below is a real even address
 	ASSUME	cs:WL_SCALE_TEXT, ds:DGROUP
 
 EXTRN	ScaleLine:NEAR				; WL_SCALE.C, same segment
@@ -144,6 +144,7 @@ PUBLIC	ScaleShape
 ;----------------------------------------------------------------------------
 
 	mov	si,32
+	EVEN
 @@lloop:
 	dec	si
 	cmp	si,cx
@@ -240,6 +241,7 @@ PUBLIC	ScaleShape
 @@rstart:
 	xor	dx,dx					; slinewidth = 0
 
+	EVEN
 @@rloop:
 	inc	si
 	cmp	si,cx
@@ -383,6 +385,7 @@ PUBLIC	SimpleScaleShape
 	mov	es,ax					; ES = comptable
 
 	mov	si,32
+	EVEN
 @@lloop:
 	dec	si
 	cmp	si,cx
@@ -407,6 +410,7 @@ PUBLIC	SimpleScaleShape
 	dec	si
 @@rstart:
 	xor	dx,dx					; slinewidth = 0
+	EVEN
 @@rloop:
 	inc	si
 	cmp	si,cx

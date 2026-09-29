@@ -63,6 +63,7 @@ ARG		mainonly:WORD
 ; first: most of the 663 pages are in neither EMS nor main memory, and are
 ; turned away by the residency test before their lastHit is read.
 ;
+	EVEN
 @@anyloop:
 	cmp	[WORD es:di+P_EMSPAGE],-1
 	jne	@@anyres
@@ -89,6 +90,7 @@ ARG		mainonly:WORD
 ;
 ; main memory pages only
 ;
+	EVEN
 @@mainloop:
 	cmp	[WORD es:di+P_MAINPAGE],-1
 	je	@@mainnext				; mainonly: must be in main memory

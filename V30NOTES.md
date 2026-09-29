@@ -109,7 +109,9 @@ byte for byte.
 | 16 | ray loop keeps `yintercept`'s low word in AX (no read-modify-write per step) | 1055 | 3.43 |
 | 17 | FizzleFade through the VGA latches, `y` tested first -- fizzle 3.7 -> 3.2 s, play unchanged | 1055 | 3.43 |
 | 18 | *(tried, reverted)* branchless fizzle step -- slower: see below | -- | -- |
-| 19 | every communal word-aligned; `spotvis` carries a frame stamp, cleared every 255 frames | **1050** | **3.45** |
+| 19 | every communal word-aligned; `spotvis` carries a frame stamp, cleared every 255 frames | 1050 | 3.45 |
+| 20 | *(tried, reverted)* skip clearing the rows last frame's walls all covered, then fill the gaps -- 2% slower: see below | -- | -- |
+| 21 | `ScaleLine` keeps the screen segment in DX; id's per-ray multiply helpers inlined; hot loop tops `EVEN` | **1038** | **3.49** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks, **2.39 -> 3.07 fps, 28% faster**. The whole attract loop
@@ -166,6 +168,16 @@ path was slow. But replacing the sequence step's 50/50 `JNC` with a
 branchless six-instruction `SBB`/`AND`/`XOR` (step 18) made it *slower*: on
 a 16-bit bus the extra instruction bytes cost more than half a flushed queue.
 Measure both ways.
+
+**Not clearing what the walls will cover did not pay** (step 20). The
+idea is sound -- walls are centred, so the rows every column's wall
+covered last frame form one band the clear could skip, with any column
+whose wall came out shorter filled in afterwards -- and it stayed
+pixel-identical, the fill made sure of that. But the player is always
+moving or turning, so the fills were frequent, and `VL_Bar` fills with
+three register writes a row: 1072 play ticks against 1050. A margin on the
+band and a faster column fill might break even; the evidence says the room
+is thin.
 
 **What is left of the music interrupt's cost: ~4%** (`NOMUSIC` 1007 vs 1050
 play ticks). The fast path is ~450 clocks, 700 times a second: interrupt

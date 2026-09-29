@@ -172,6 +172,7 @@ PUBLIC	FizzleStep
 	or	cx,cx
 	jz	@@out
 
+	EVEN
 @@pix:
 	mov	bx,ax					; this step's coordinates, before advancing
 	mov	dx,si

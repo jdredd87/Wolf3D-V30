@@ -342,6 +342,7 @@ PUBLIC	DrawVisList
 	mov	dx,32000				; least
 	cmp	si,di
 	jae	@@found
+	EVEN
 @@scan:
 	mov	ax,[si+VIS_HEIGHT]
 	cmp	ax,dx
@@ -426,6 +427,7 @@ PUBLIC	PlaceStatics
 	mov	si,OFFSET statobjlist		; SI = statptr
 	jmp	@@test
 
+	EVEN
 @@loop:
 	mov	bx,[si+ST_VISSPOT]			; (both tests are pure: order is free)
 	mov	al,[vismark]
@@ -934,7 +936,32 @@ not360:
 ;
 ;---------------------------------------------------------------------------
 initvars:
-	call	NEAR xpartialbyystep	; xpartial is in BX
+;	xpartialbyystep, inlined (NEC V30 build: one call and return fewer a ray)
+	mov	ax,[WORD ystep]
+	mov	cx,[WORD ystep+2]
+	or	cx,cx
+	jns	@@ixpos
+	neg	cx
+	neg	ax
+	sbb	cx,0
+	mul	bx
+	mov	di,dx
+	mov	ax,cx
+	mul	bx
+	add	ax,di
+	adc	dx,0
+	neg	dx
+	neg	ax
+	sbb	dx,0
+	jmp	@@ixdone
+@@ixpos:
+	mul	bx
+	mov	di,dx
+	mov	ax,cx
+	mul	bx
+	add	ax,di
+	adc	dx,0
+@@ixdone:
 	add	ax,[WORD viewy]
 	adc	dx,[WORD viewy+2]
 	mov	[WORD yintercept],ax
@@ -947,7 +974,32 @@ initvars:
 	add	si,dx						; xspot = (xtile<<6) + yinttile
 
 
-	call	NEAR ypartialbyxstep	; ypartial is in BP
+;	ypartialbyxstep, inlined
+	mov	ax,[WORD xstep]
+	mov	cx,[WORD xstep+2]
+	or	cx,cx
+	jns	@@iypos
+	neg	cx
+	neg	ax
+	sbb	cx,0
+	mul	bp
+	mov	di,dx
+	mov	ax,cx
+	mul	bp
+	add	ax,di
+	adc	dx,0
+	neg	dx
+	neg	ax
+	sbb	dx,0
+	jmp	@@iydone
+@@iypos:
+	mul	bp
+	mov	di,dx
+	mov	ax,cx
+	mul	bp
+	add	ax,di
+	adc	dx,0
+@@iydone:
 	add	ax,[WORD viewx]
 	adc	dx,[WORD viewx+2]
 	mov	[WORD xintercept],ax

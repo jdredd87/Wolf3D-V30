@@ -288,7 +288,10 @@ asm	jnz	twobyte						// scale across two bytes
 //
 asm	mov	al,BYTE PTR ss:[mapmasks1-1+bx]	// -1 because pixwidth of 1 is first
 asm	out	dx,al						// set map mask register
-
+asm	mov	dx,SCREENSEG				// DX = the screen for the rest of the loop:
+									// the port is no longer needed, and the
+									// scalers touch only AL, so AH keeps the
+									// patched byte (NEC V30 build)
 scalesingle:
 
 asm	mov	bx,[es:bp]					// table location of rtl to patch
@@ -296,20 +299,19 @@ asm	or	bx,bx
 asm	jz	linedone					// 0 signals end of segment list
 asm	mov	ds,cx						// DS = the scaler
 asm	mov	bx,[bx]
-asm	mov	dl,[bx]						// save old value
+asm	mov	ah,[bx]						// save old value
 asm	mov	BYTE PTR [bx],OP_RETF		// patch a RETF in
 asm	mov	si,[es:bp+4]				// table location of entry spot
-asm	mov	ax,[si]
-asm	mov	WORD PTR ss:[linescale],ax	// call here to start scaling
+asm	mov	si,[si]
+asm	mov	WORD PTR ss:[linescale],si	// call here to start scaling
 asm	mov	si,[es:bp+2]				// corrected top of shape for this segment
 asm	add	bp,6						// next segment list
 
-asm	mov	ax,SCREENSEG
-asm	mov	ds,ax						// DS = the screen
+asm	mov	ds,dx						// DS = the screen
 asm	call ss:[linescale]				// scale the segment of pixels
 
 asm	mov	ds,cx						// DS = the scaler
-asm	mov	BYTE PTR [bx],dl			// unpatch the RETF
+asm	mov	BYTE PTR [bx],ah			// unpatch the RETF
 asm	jmp	scalesingle					// do the next segment
 
 
