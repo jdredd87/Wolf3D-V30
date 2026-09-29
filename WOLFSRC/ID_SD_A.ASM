@@ -73,7 +73,8 @@ alDelayData	dw	35					; id's counts until SDL_TimeOPL runs
 	EXTRN	SoundPriority:WORD
 
 count_time	dw	?
-count_fx	dw	?
+fxdown		dw	5					; NEC V30 build: ticks to the next effects tick,
+								; counting down (id's count_fx counted up to 5)
 
 pcdtab	db	00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b
 		db	00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b,00b
@@ -245,13 +246,8 @@ extreme		dw	?
 @@nosave:
 	mov	ax,[TimerDivisor]
 	add	[TimerCount],ax
-	jnc	@@myack
+	jc	@@chain					; NEC V30 build: the usual case falls through
 
-	pushf
-	call [t0OldService]
-	jmp	@@out
-
-@@myack:
 	mov	al,20h
 	out	20h,al
 
@@ -274,6 +270,11 @@ extreme		dw	?
 	ENDIF
 
 	iret
+
+@@chain:
+	pushf
+	call [t0OldService]
+	jmp	@@out
 	ENDM
 
 ;
@@ -368,9 +369,8 @@ extreme		dw	?
 
 	COMMONSTART
 
-	inc	[count_fx]						; Time to do PC/AdLib effects & time?
-	cmp	[count_fx],5
-	jae	@@dofull
+	dec	[fxdown]						; Time to do PC/AdLib effects & time?
+	jz	@@dofull
 
 ;
 ; NEC V30 build, StevenC & Claude: sqQuiet is how many coming ticks are
@@ -384,9 +384,30 @@ extreme		dw	?
 	jz	@@notquiet
 	dec	ax
 	mov	[sqQuiet],ax
-	add	[WORD PTR alTimeCount],1
-	adc	[WORD PTR alTimeCount+2],0
-	jmp	@@nosave
+	inc	[WORD PTR alTimeCount]		; alTimeCount++: its high word carries once
+	jz	@@qcarry					; in 65536 ticks
+@@qexit:
+;
+; NEC V30 build: a quiet tick leaves from here, not through a jump to the
+; shared exit: the BIOS chain test and the end of interrupt, inline.
+;
+	mov	ax,[TimerDivisor]
+	add	[TimerCount],ax
+	jc	@@qchain
+	mov	al,20h
+	out	20h,al
+	pop	ax
+	pop	ds
+	iret
+@@qchain:
+	pushf
+	call [t0OldService]
+	pop	ax
+	pop	ds
+	iret
+@@qcarry:
+	inc	[WORD PTR alTimeCount+2]
+	jmp	@@qexit
 @@notquiet:
 
 	mov	ax,[WORD PTR ssSample]			; Is there a sample for the Sound Src?
@@ -418,17 +439,17 @@ extreme		dw	?
 	cmp	ax,[WORD PTR alTimeCount]
 	jbe	@@dofull						; an event is due
 @@notdue:
-	add	[WORD PTR alTimeCount],1
-	adc	[WORD PTR alTimeCount+2],0
-	jmp	@@nosave
+	inc	[WORD PTR alTimeCount]
+	jnz	@@qexit
+	jmp	@@qcarry
 
 @@dofull:
 	pusha
 	push es
 
-	cmp	[count_fx],5
-	jb	@@nofx
-	mov	[count_fx],0
+	cmp	[fxdown],0
+	jne	@@nofx
+	mov	[fxdown],5
 	DOFX
 
 	inc	[count_time]
