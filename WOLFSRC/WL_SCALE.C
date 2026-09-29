@@ -191,8 +191,14 @@ unsigned BuildCompScale (int height, memptr *finalspot)
 			continue;
 
 	//
-	// mov al,[si+src]
+	// mov al,es:[si+src]
 	//
+	// NEC V30 build (StevenC & Claude): the texture is in ES and the screen in
+	// DS while a scaler runs, so the store below -- repeated for every screen
+	// pixel of a texel -- needs no segment prefix, and this load, once per
+	// texel, takes it instead.  ScalePost and ScaleLine set the segments.
+	//
+		*code++ = 0x26;
 		*code++ = 0x8a;
 		*code++ = 0x44;
 		*code++ = src;
@@ -205,9 +211,8 @@ unsigned BuildCompScale (int height, memptr *finalspot)
 				continue;					// not into the view area
 
 		//
-		// mov [es:di+heightofs],al
+		// mov [di+heightofs],al		(DS = the screen)
 		//
-			*code++ = 0x26;
 			*code++ = 0x88;
 			*code++ = 0x85;
 			*((unsigned far *)code)++ = startpix*SCREENBWIDE;
@@ -248,8 +253,15 @@ byte	mask1,mask2,mask3;
 
 void near ScaleLine (void)
 {
-asm	mov	cx,WORD PTR [linescale+2]
-asm	mov	es,cx						// segment of scaler
+//
+// NEC V30 build (StevenC & Claude): while a scaler runs, the shape (its post
+// list and its texels) is in ES and the screen in DS, so the scaler's stores
+// need no prefix -- see BuildCompScale.  The RETF patch into the scaler is
+// made through DS set to the scaler's segment, which is in CX (one byte
+// wide) or in linescale's high word (two and three, where CL keeps the
+// patched byte).  The scalers touch only AL, SI and DI.
+//
+asm	mov	cx,WORD PTR [linescale+2]		// segment of scaler
 
 asm	mov bp,WORD PTR [linecmds]
 asm	mov	dx,SC_INDEX+1				// to set SC_MAPMASK
@@ -262,7 +274,7 @@ asm	and	bx,3
 asm	shl	bx,3
 asm	add	bx,[slinewidth]				// bx = (pixel*8+pixwidth)
 asm	mov	al,BYTE [mapmasks3-1+bx]	// -1 because pixwidth of 1 is first
-asm	mov	ds,WORD PTR [linecmds+2]
+asm	mov	es,WORD PTR [linecmds+2]	// ES = the shape
 asm	or	al,al
 asm	jz	notthreebyte				// scale across three bytes
 asm	jmp	threebyte
@@ -279,24 +291,25 @@ asm	out	dx,al						// set map mask register
 
 scalesingle:
 
-asm	mov	bx,[ds:bp]					// table location of rtl to patch
+asm	mov	bx,[es:bp]					// table location of rtl to patch
 asm	or	bx,bx
 asm	jz	linedone					// 0 signals end of segment list
-asm	mov	bx,[es:bx]
-asm	mov	dl,[es:bx]					// save old value
-asm	mov	BYTE PTR es:[bx],OP_RETF	// patch a RETF in
-asm	mov	si,[ds:bp+4]				// table location of entry spot
-asm	mov	ax,[es:si]
+asm	mov	ds,cx						// DS = the scaler
+asm	mov	bx,[bx]
+asm	mov	dl,[bx]						// save old value
+asm	mov	BYTE PTR [bx],OP_RETF		// patch a RETF in
+asm	mov	si,[es:bp+4]				// table location of entry spot
+asm	mov	ax,[si]
 asm	mov	WORD PTR ss:[linescale],ax	// call here to start scaling
-asm	mov	si,[ds:bp+2]				// corrected top of shape for this segment
+asm	mov	si,[es:bp+2]				// corrected top of shape for this segment
 asm	add	bp,6						// next segment list
 
 asm	mov	ax,SCREENSEG
-asm	mov	es,ax
+asm	mov	ds,ax						// DS = the screen
 asm	call ss:[linescale]				// scale the segment of pixels
 
-asm	mov	es,cx						// segment of scaler
-asm	mov	BYTE PTR es:[bx],dl			// unpatch the RETF
+asm	mov	ds,cx						// DS = the scaler
+asm	mov	BYTE PTR [bx],dl			// unpatch the RETF
 asm	jmp	scalesingle					// do the next segment
 
 
@@ -318,20 +331,21 @@ asm	mov	ss:[mask1],al
 
 scaledouble:
 
-asm	mov	bx,[ds:bp]					// table location of rtl to patch
+asm	mov	bx,[es:bp]					// table location of rtl to patch
 asm	or	bx,bx
 asm	jz	linedone					// 0 signals end of segment list
-asm	mov	bx,[es:bx]
-asm	mov	cl,[es:bx]					// save old value
-asm	mov	BYTE PTR es:[bx],OP_RETF	// patch a RETF in
-asm	mov	si,[ds:bp+4]				// table location of entry spot
-asm	mov	ax,[es:si]
+asm	mov	ds,WORD PTR ss:[linescale+2]	// DS = the scaler
+asm	mov	bx,[bx]
+asm	mov	cl,[bx]						// save old value
+asm	mov	BYTE PTR [bx],OP_RETF		// patch a RETF in
+asm	mov	si,[es:bp+4]				// table location of entry spot
+asm	mov	ax,[si]
 asm	mov	WORD PTR ss:[linescale],ax	// call here to start scaling
-asm	mov	si,[ds:bp+2]				// corrected top of shape for this segment
+asm	mov	si,[es:bp+2]				// corrected top of shape for this segment
 asm	add	bp,6						// next segment list
 
 asm	mov	ax,SCREENSEG
-asm	mov	es,ax
+asm	mov	ds,ax						// DS = the screen
 asm	mov	al,ss:[mask1]
 asm	out	dx,al						// set map mask register
 asm	call ss:[linescale]				// scale the segment of pixels
@@ -341,8 +355,8 @@ asm	out	dx,al						// set map mask register
 asm	call ss:[linescale]				// scale the segment of pixels
 asm	dec	di
 
-asm	mov	es,WORD PTR ss:[linescale+2] // segment of scaler
-asm	mov	BYTE PTR es:[bx],cl			// unpatch the RETF
+asm	mov	ds,WORD PTR ss:[linescale+2] // DS = the scaler
+asm	mov	BYTE PTR [bx],cl			// unpatch the RETF
 asm	jmp	scaledouble					// do the next segment
 
 
@@ -358,20 +372,21 @@ asm	mov	ss:[mask1],al
 
 scaletriple:
 
-asm	mov	bx,[ds:bp]					// table location of rtl to patch
+asm	mov	bx,[es:bp]					// table location of rtl to patch
 asm	or	bx,bx
 asm	jz	linedone					// 0 signals end of segment list
-asm	mov	bx,[es:bx]
-asm	mov	cl,[es:bx]					// save old value
-asm	mov	BYTE PTR es:[bx],OP_RETF	// patch a RETF in
-asm	mov	si,[ds:bp+4]				// table location of entry spot
-asm	mov	ax,[es:si]
+asm	mov	ds,WORD PTR ss:[linescale+2]	// DS = the scaler
+asm	mov	bx,[bx]
+asm	mov	cl,[bx]						// save old value
+asm	mov	BYTE PTR [bx],OP_RETF		// patch a RETF in
+asm	mov	si,[es:bp+4]				// table location of entry spot
+asm	mov	ax,[si]
 asm	mov	WORD PTR ss:[linescale],ax	// call here to start scaling
-asm	mov	si,[ds:bp+2]				// corrected top of shape for this segment
+asm	mov	si,[es:bp+2]				// corrected top of shape for this segment
 asm	add	bp,6						// next segment list
 
 asm	mov	ax,SCREENSEG
-asm	mov	es,ax
+asm	mov	ds,ax						// DS = the screen
 asm	mov	al,ss:[mask1]
 asm	out	dx,al						// set map mask register
 asm	call ss:[linescale]				// scale the segment of pixels
@@ -386,8 +401,8 @@ asm	call ss:[linescale]				// scale the segment of pixels
 asm	dec	di
 asm	dec	di
 
-asm	mov	es,WORD PTR ss:[linescale+2] // segment of scaler
-asm	mov	BYTE PTR es:[bx],cl			// unpatch the RETF
+asm	mov	ds,WORD PTR ss:[linescale+2] // DS = the scaler
+asm	mov	BYTE PTR [bx],cl			// unpatch the RETF
 asm	jmp	scaletriple					// do the next segment
 
 

@@ -379,9 +379,8 @@ unsigned	postwidth;
 
 void	near ScalePost (void)		// VGA version
 {
-	asm	mov	ax,SCREENSEG
-	asm	mov	es,ax
-
+	// NEC V30 build (StevenC & Claude): the scalers load from ES and store to
+	// DS, so the texture goes in ES and the screen in DS -- see BuildCompScale.
 	asm	mov	bx,[postx]
 	asm	shl	bx,1
 	asm	mov	bp,WORD PTR [wallheight+bx]		// fractional height (low 3 bits frac)
@@ -407,7 +406,9 @@ heightok:
 	asm	mov	al,BYTE PTR [mapmasks1-1+bx]	// -1 because no widths of 0
 	asm	mov	dx,SC_INDEX+1
 	asm	out	dx,al						// set bit mask register
-	asm	lds	si,DWORD PTR [postsource]
+	asm	les	si,DWORD PTR [postsource]	// ES:SI = the texture column
+	asm	mov	ax,SCREENSEG
+	asm	mov	ds,ax						// DS = the screen
 	asm	call DWORD PTR [bp]				// scale the line of pixels
 
 	asm	mov	al,BYTE PTR [ss:mapmasks2-1+bx]   // -1 because no widths of 0
