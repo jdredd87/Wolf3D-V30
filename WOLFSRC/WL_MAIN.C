@@ -1472,6 +1472,11 @@ void TimeDemo (void)
 		SD_SetMusicMode (smm_Off);
 	if (MS_CheckParm ("nosound"))
 		SD_SetSoundMode (sdm_Off);
+	if (MS_CheckParm ("oplid"))
+	{
+		alDelayAddr = 6;		// OPLID: id's fixed OPL waits, for A/B listening
+		alDelayData = 35;
+	}
 
 	ProfInit ();
 	aborted = false;

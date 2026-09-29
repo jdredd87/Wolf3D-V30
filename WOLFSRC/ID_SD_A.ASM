@@ -361,13 +361,38 @@ extreme		dw	?
 	cmp	[count_fx],5
 	jae	@@dofull
 
-	mov	ax,[sqActive]					; Is the sequencer active?
-	or	ax,ax
-	jnz	@@dofull
-
 	mov	ax,[WORD PTR ssSample]			; Is there a sample for the Sound Src?
 	or	ax,[WORD PTR ssSample+2]
+	jnz	@@dofull
+
+	mov	ax,[sqActive]					; Is the sequencer active?
+	or	ax,ax
 	jz	@@nosave
+
+;
+; NEC V30 build, StevenC & Claude: with music playing, id took the full
+; service -- PUSHA, ES, the sequencer walk, POPA -- on every one of 700
+; ticks a second, though on nearly all of them no music event is due and
+; all it changes is alTimeCount.  That was ~100 us a tick on the V30, 5.8%
+; of a frame.  So test the same condition the sequencer loop tests, with
+; id's own comparison (high word, then low word), and when nothing is due
+; do just what the full service would have done: alTimeCount++.  Effects
+; ticks, samples, events due and the end of the song all still go the full
+; way, and the music keeps its 700 Hz timing.
+;
+	mov	ax,[sqHackLen]
+	or	ax,ax
+	jz	@@dofull						; end of the song: restart it there
+	mov	ax,[WORD PTR sqHackTime+2]
+	cmp	ax,[WORD PTR alTimeCount+2]
+	ja	@@notdue
+	mov	ax,[WORD PTR sqHackTime]
+	cmp	ax,[WORD PTR alTimeCount]
+	jbe	@@dofull						; an event is due
+@@notdue:
+	add	[WORD PTR alTimeCount],1
+	adc	[WORD PTR alTimeCount+2],0
+	jmp	@@nosave
 
 @@dofull:
 	pusha
