@@ -1011,12 +1011,12 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	shr	si,4
 	and	si,0fc0h				; SI = texture
 	cmp	[xtilestep],-1
-	jne	@@tex
+	jne	hvw_tex
 	mov	ax,0fc0h
 	sub	ax,si
 	mov	si,ax
 	inc	[WORD xintercept+2]		; xintercept += TILEGLOBAL
-@@tex:
+hvw_tex:
 ;
 ; NEC V30 build (step 51): id's test -- lastside, both words of
 ; lastintercept and lasttilehit, four compares against memory -- is one
@@ -1025,17 +1025,75 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 ; exactly, never FFFFh; C invalidates it wherever it changes that state.
 ;
 	cmp	cx,[lastkey]
-	jne	@@newwall
+	jne	hvw_nwt				; (a short hop: see hvw_nwt)
 	cmp	si,[WORD postsource]
-	jne	@@newcol
+	jne	hvw_newcol
 	inc	[postwidth]				; wide scale
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	ax,[wallheight+bx-2]
 	mov	[wallheight+bx],ax
 	jmp	nextpix				; step 62: jumped to, not called
-@@newcol:
-	call	CalcHeightV
+hvw_nwt:
+	jmp	hvw_newwall			; step 67: the new-wall test's hop
+; step 67: the inline height's cache miss, within reach of its test
+cvi_miss:
+	mov	[chvkey],ax
+	mov	ax,[WORD xintercept]
+	mov	dx,[WORD xintercept+2]
+cvvxloc:
+	sub	ax,1234h				; viewx, low word (2D iw: at +1)
+cvvxhic:
+	sbb	dx,1234h				; high word (81 DA iw: at +2)
+	FIXBYFRACB	cvcossignc,cvcosfracc	; dx:ax = gxt
+	mov	[chvgxlo],ax
+	mov	[chvgxhi],dx
+	jmp	cvi_have
+hvw_newcol:
+; step 67: CalcHeightV inline, no call
+								; (step 61: nothing kept; the sign is in BP)
+	mov	ax,[WORD xintercept+2]
+	cmp	ax,[chvkey]
+	jne	cvi_miss
+	mov	ax,[chvgxlo]			; dx:ax = gxt, as for the last column
+	mov	dx,[chvgxhi]
+cvi_have:
+	push	dx
+	push	ax
+
+	mov	ax,[WORD yintercept]
+	mov	dx,[WORD yintercept+2]
+cvvyloc:
+	sub	ax,1234h				; viewy
+cvvyhic:
+	sbb	dx,1234h
+	FIXBYFRACB	cvsinsignc,cvsinfracc	; dx:ax = gyt
+
+	pop	bx
+	pop	cx					; cx:bx = gxt
+	sub	bx,ax
+	sbb	cx,dx				; cx:bx = nx = gxt-gyt
+
+cvmdhic:
+	cmp	cx,1234h			; if (nx < mindist) nx = mindist -- signed (81 F9 iw)
+	jg	cvi_distok
+	jl	cvi_clamp
+cvmdloc:
+	cmp	bx,1234h			; (81 FB iw)
+	jae	cvi_distok
+cvi_clamp:
+cvmdlo2c:
+	mov	bx,1234h			; (BB iw)
+cvmdhi2c:
+	mov	cx,1234h			; (B9 iw)
+cvi_distok:
+	mov	bl,bh				; bx = bits 8-23 of nx, the word at nx+1
+	mov	bh,cl
+cvhnloc:
+	mov	ax,1234h			; heightnumerator (B8 iw)
+cvhnhic:
+	mov	dx,1234h			; (BA iw)
+	idiv	bx
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
@@ -1045,16 +1103,16 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	ax,[pixx]
 	mov	[postx],ax
 	jmp	nextpix				; step 62: jumped to, not called
-@@newwall:
+hvw_newwall:
 	mov	[lastkey],cx
 	call	CalcHeightV
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
 	cmp	[lastside],-1
-	je	@@first
+	je	hvw_first
 	call	ScalePostA
-@@first:
+hvw_first:
 	mov	[lastside],1
 	mov	ax,[xtile]
 	cwd
@@ -1066,7 +1124,7 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	[postx],ax
 	mov	[postwidth],1
 	test	bl,40h
-	jz	@@plain
+	jz	hvw_plain
 	mov	ax,[WORD yintercept+2]	; ytile = yintercept>>TILESHIFT
 	mov	[ytile],ax
 	mov	di,[xtile]
@@ -1074,16 +1132,16 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	shl	di,6
 	add	di,ax
 	test	[BYTE tilemap+di],80h
-	jz	@@notdoor
+	jz	hvw_notdoor
 	mov	ax,[PMSpriteStart]
 	sub	ax,8-3					; DOORWALL+3
-	jmp	@@getpage
-@@notdoor:
+	jmp	hvw_getpage
+hvw_notdoor:
 	and	bx,NOT 40h
-@@plain:
+hvw_plain:
 	shl	bx,1
 	mov	ax,[vertwall+bx]
-@@getpage:
+hvw_getpage:
 	push	ax
 	call	PM_GetPage
 	add	sp,2
@@ -1099,14 +1157,14 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	shr	si,4
 	and	si,0fc0h				; SI = texture
 	cmp	[ytilestep],-1
-	jne	@@mirror
+	jne	hhw_mirror
 	inc	[WORD yintercept+2]		; yintercept += TILEGLOBAL
-	jmp	@@tex
-@@mirror:
+	jmp	hhw_tex
+hhw_mirror:
 	mov	ax,0fc0h
 	sub	ax,si
 	mov	si,ax
-@@tex:
+hhw_tex:
 ;
 ; NEC V30 build (step 51): id's test -- lastside, both words of
 ; lastintercept and lasttilehit, four compares against memory -- is one
@@ -1115,17 +1173,61 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 ; exactly, never FFFFh; C invalidates it wherever it changes that state.
 ;
 	cmp	cx,[lastkey]
-	jne	@@newwall
+	jne	hhw_nwt				; (a short hop: see hhw_nwt)
 	cmp	si,[WORD postsource]
-	jne	@@newcol
+	jne	hhw_newcol
 	inc	[postwidth]				; wide scale
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	ax,[wallheight+bx-2]
 	mov	[wallheight+bx],ax
 	jmp	nextpix				; step 62: jumped to, not called
-@@newcol:
-	call	CalcHeightH
+hhw_nwt:
+	jmp	hhw_newwall			; step 67: the new-wall test's hop
+hhw_newcol:
+; step 67: CalcHeightH inline, no call
+								; (step 61: nothing kept; the sign is in BP)
+	mov	ax,[WORD xintercept]
+	mov	dx,[WORD xintercept+2]
+czvxloc:
+	sub	ax,1234h				; viewx, low word (2D iw: at +1)
+czvxhic:
+	sbb	dx,1234h				; high word (81 DA iw: at +2)
+	FIXBYFRACB	czcossignc,czcosfracc	; dx:ax = gxt
+	push	dx
+	push	ax
+
+	mov	ax,[WORD yintercept+2]
+	cmp	ax,[chhkey]
+	jne	czi_miss
+	mov	ax,[chhgylo]			; dx:ax = gyt, as for the last column
+	mov	dx,[chhgyhi]
+czi_have:
+	pop	bx
+	pop	cx					; cx:bx = gxt
+	sub	bx,ax
+	sbb	cx,dx				; cx:bx = nx = gxt-gyt
+
+czmdhic:
+	cmp	cx,1234h			; if (nx < mindist) nx = mindist -- signed (81 F9 iw)
+	jg	czi_distok
+	jl	czi_clamp
+czmdloc:
+	cmp	bx,1234h			; (81 FB iw)
+	jae	czi_distok
+czi_clamp:
+czmdlo2c:
+	mov	bx,1234h			; (BB iw)
+czmdhi2c:
+	mov	cx,1234h			; (B9 iw)
+czi_distok:
+	mov	bl,bh				; bx = bits 8-23 of nx, the word at nx+1
+	mov	bh,cl
+czhnloc:
+	mov	ax,1234h			; heightnumerator (B8 iw)
+czhnhic:
+	mov	dx,1234h			; (BA iw)
+	idiv	bx
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
@@ -1135,16 +1237,29 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	ax,[pixx]
 	mov	[postx],ax
 	jmp	nextpix				; step 62: jumped to, not called
-@@newwall:
+; step 67: the inline height's cache miss, within reach of its test
+czi_miss:
+	mov	[chhkey],ax
+	mov	ax,[WORD yintercept]
+	mov	dx,[WORD yintercept+2]
+czvyloc:
+	sub	ax,1234h				; viewy
+czvyhic:
+	sbb	dx,1234h
+	FIXBYFRACB	czsinsignc,czsinfracc	; dx:ax = gyt
+	mov	[chhgylo],ax
+	mov	[chhgyhi],dx
+	jmp	czi_have
+hhw_newwall:
 	mov	[lastkey],cx
 	call	CalcHeightH
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
 	cmp	[lastside],-1
-	je	@@first
+	je	hhw_first
 	call	ScalePostA
-@@first:
+hhw_first:
 	mov	[lastside],0
 	mov	ax,[ytile]
 	cwd
@@ -1156,7 +1271,7 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	[postx],ax
 	mov	[postwidth],1
 	test	bl,40h
-	jz	@@plain
+	jz	hhw_plain
 	mov	ax,[WORD xintercept+2]	; xtile = xintercept>>TILESHIFT
 	mov	[xtile],ax
 	mov	di,ax
@@ -1164,16 +1279,16 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	add	di,[ytile]
 	sub	di,[ytilestep]			; tilemap[xtile][ytile-ytilestep]
 	test	[BYTE tilemap+di],80h
-	jz	@@notdoor
+	jz	hhw_notdoor
 	mov	ax,[PMSpriteStart]
 	sub	ax,8-2					; DOORWALL+2
-	jmp	@@getpage
-@@notdoor:
+	jmp	hhw_getpage
+hhw_notdoor:
 	and	bx,NOT 40h
-@@plain:
+hhw_plain:
 	shl	bx,1
 	mov	ax,[horizwall+bx]
-@@getpage:
+hhw_getpage:
 	push	ax
 	call	PM_GetPage
 	add	sp,2
@@ -1661,57 +1776,85 @@ PUBLIC	AsmRefresh
 								; in all three of its forms
 	mov	[WORD cs:chvxlo+1],ax
 	mov	[WORD cs:cvvxlo+1],ax
+	mov	[WORD cs:cvvxloc+1],ax
 	mov	[WORD cs:czvxlo+1],ax
+	mov	[WORD cs:czvxloc+1],ax
 	mov	ax,[WORD viewx+2]
 	mov	[WORD cs:chvxhi+2],ax
 	mov	[WORD cs:cvvxhi+2],ax
+	mov	[WORD cs:cvvxhic+2],ax
 	mov	[WORD cs:czvxhi+2],ax
+	mov	[WORD cs:czvxhic+2],ax
 	mov	ax,[WORD viewy]
 	mov	[WORD cs:chvylo+1],ax
 	mov	[WORD cs:cvvylo+1],ax
+	mov	[WORD cs:cvvyloc+1],ax
 	mov	[WORD cs:czvylo+1],ax
+	mov	[WORD cs:czvyloc+1],ax
 	mov	ax,[WORD viewy+2]
 	mov	[WORD cs:chvyhi+2],ax
 	mov	[WORD cs:cvvyhi+2],ax
+	mov	[WORD cs:cvvyhic+2],ax
 	mov	[WORD cs:czvyhi+2],ax
+	mov	[WORD cs:czvyhic+2],ax
 	mov	ax,[WORD viewcos+2]
 	mov	[WORD cs:chcossign+1],ax
 	mov	[WORD cs:cvcossign+1],ax
+	mov	[WORD cs:cvcossignc+1],ax
 	mov	[WORD cs:czcossign+1],ax
+	mov	[WORD cs:czcossignc+1],ax
 	mov	ax,[WORD viewcos]
 	mov	[WORD cs:chcosfrac+1],ax
 	mov	[WORD cs:cvcosfrac+1],ax
+	mov	[WORD cs:cvcosfracc+1],ax
 	mov	[WORD cs:czcosfrac+1],ax
+	mov	[WORD cs:czcosfracc+1],ax
 	mov	ax,[WORD viewsin+2]
 	mov	[WORD cs:chsinsign+1],ax
 	mov	[WORD cs:cvsinsign+1],ax
+	mov	[WORD cs:cvsinsignc+1],ax
 	mov	[WORD cs:czsinsign+1],ax
+	mov	[WORD cs:czsinsignc+1],ax
 	mov	ax,[WORD viewsin]
 	mov	[WORD cs:chsinfrac+1],ax
 	mov	[WORD cs:cvsinfrac+1],ax
+	mov	[WORD cs:cvsinfracc+1],ax
 	mov	[WORD cs:czsinfrac+1],ax
+	mov	[WORD cs:czsinfracc+1],ax
 	mov	ax,[WORD mindist+2]
 	mov	[WORD cs:chmdhi+2],ax
 	mov	[WORD cs:chmdhi2+1],ax
 	mov	[WORD cs:cvmdhi+2],ax
+	mov	[WORD cs:cvmdhic+2],ax
 	mov	[WORD cs:cvmdhi2+1],ax
+	mov	[WORD cs:cvmdhi2c+1],ax
 	mov	[WORD cs:czmdhi+2],ax
+	mov	[WORD cs:czmdhic+2],ax
 	mov	[WORD cs:czmdhi2+1],ax
+	mov	[WORD cs:czmdhi2c+1],ax
 	mov	ax,[WORD mindist]
 	mov	[WORD cs:chmdlo+2],ax
 	mov	[WORD cs:chmdlo2+1],ax
 	mov	[WORD cs:cvmdlo+2],ax
+	mov	[WORD cs:cvmdloc+2],ax
 	mov	[WORD cs:cvmdlo2+1],ax
+	mov	[WORD cs:cvmdlo2c+1],ax
 	mov	[WORD cs:czmdlo+2],ax
+	mov	[WORD cs:czmdloc+2],ax
 	mov	[WORD cs:czmdlo2+1],ax
+	mov	[WORD cs:czmdlo2c+1],ax
 	mov	ax,[WORD heightnumerator]
 	mov	[WORD cs:chhnlo+1],ax
 	mov	[WORD cs:cvhnlo+1],ax
+	mov	[WORD cs:cvhnloc+1],ax
 	mov	[WORD cs:czhnlo+1],ax
+	mov	[WORD cs:czhnloc+1],ax
 	mov	ax,[WORD heightnumerator+2]
 	mov	[WORD cs:chhnhi+1],ax
 	mov	[WORD cs:cvhnhi+1],ax
+	mov	[WORD cs:cvhnhic+1],ax
 	mov	[WORD cs:czhnhi+1],ax
+	mov	[WORD cs:czhnhic+1],ax
 	mov	[chvkey],8000h			; and the wall caches are empty
 	mov	[chhkey],8000h
 	mov	[postmin],7FFFh			; step 62: no posts yet this frame
