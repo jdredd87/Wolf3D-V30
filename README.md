@@ -26,7 +26,7 @@ were a test suite.
 | | |
 |---|---|
 | runs on the V30 | yes -- `WOLF3DV.EXE`, alongside the registered 1.4 WL6 data |
-| speed | **4.05 fps** over all four demos (was 3.88 mid-way); demo 0 in full **2.75 -> 3.78 fps, 1.37x**; the 200-frame benchmark 4.46 fps in play |
+| speed | **4.82 fps** over all four demos, 4.87 in play (was 4.05 before steps 27-49); demo 0 in full **2.75 -> 4.56 fps, 1.66x**; the 200-frame benchmark 4.46 fps in play |
 | picture | identical to id's renderer over the whole attract loop -- all four demos, 5,386 frames, every 50th checksummed, the 3-D view and the whole screen (`ab.py --full`, on the 486) |
 | music | identical to id's: the same register writes on the same ticks (`MUSICLOG`) |
 | optimisations | 49 steps so far -- see [V30NOTES.md](V30NOTES.md) |
