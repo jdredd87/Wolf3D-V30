@@ -1179,7 +1179,8 @@ hvw_first:
 	cwd
 	mov	[WORD lastintercept],ax
 	mov	[WORD lastintercept+2],dx
-	mov	bx,[tilehit]
+	mov	bx,[lastkey]				; step 76: tilehit, from the wall key
+	shr	bx,7
 	mov	[lasttilehit],bx
 	mov	ax,[pixx]
 	mov	[postx],ax
@@ -2465,7 +2466,7 @@ horizop2:							; the inverse of id's horizop (jle/jge
 hitvert:
 	mov	[WORD yintercept],ax		; the low word back to memory first
 	mov	al,[BYTE tilemap+si]		; tilehit = *((byte *)tilemap+xspot);
-	mov	[BYTE tilehit],al
+									; (step 76: stored only by the door path)
 	or	al,al						; set flags
 	jns	notvertdoor
 	jmp	vertdoor
@@ -2489,7 +2490,7 @@ hdoor_t:
 hithoriz:
 	mov	[WORD yintercept],ax		; (the door path continues with AX)
 	mov	al,[BYTE tilemap+di]		; tilehit = *((byte *)tilemap+yspot);
-	mov	[BYTE tilehit],al
+									; (step 76: stored only by the door path)
 	or	al,al						; set flags
 	js	hdoor_t						; step 70: a short hop (see hdoor_t)
 	mov	di,bx						; ytile = T-(xtile<<6)
@@ -2683,7 +2684,8 @@ hhw_first:
 	cwd
 	mov	[WORD lastintercept],ax
 	mov	[WORD lastintercept+2],dx
-	mov	bx,[tilehit]
+	mov	bx,[lastkey]				; step 76: tilehit, from the wall key
+	shr	bx,7
 	mov	[lasttilehit],bx
 	mov	ax,[pixx]
 	mov	[postx],ax
@@ -2731,6 +2733,7 @@ hhw_getpage:
 ;
 ;=============
 horizdoor:
+	mov	[BYTE tilehit],al			; step 76: the door routines read it
 	mov	[xtile],bx					; save off live register variables
 	mov	[tsave],dx					; T
 
@@ -2842,6 +2845,7 @@ horizpushwall:
 ;
 ;=============
 vertdoor:
+	mov	[BYTE tilehit],al			; step 76: the door routines read it
 	mov	[xtile],bx					; save off live register variables
 	mov	[tsave],dx					; T
 	mov	dx,bx

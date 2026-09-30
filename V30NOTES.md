@@ -169,7 +169,8 @@ byte for byte.
 | 72 | *(tried, dropped)* the height and the post draw inline on the new-wall paths too, as steps 67-68 did for new columns: identical, and slower (746.0 -> 747.7) -- new walls are too rare to pay for 400 more bytes of code in the hit routines | -- | -- |
 | 73 | *(tried, dropped)* step 55's pixel loops with their per-sprite constants as patched immediates instead of memory operands: no gain (745.7 -> 746.7) -- step 48's finding again, a memory operand costs the V30 next to nothing | -- | -- |
 | 74 | *(tried, dropped)* the ray loop's hot jump targets EVEN-aligned (three quadrant bodies, `initvars`, `notvertdoor` and the new-column paths were at odd addresses): 746.7 -> 746.0, inside the noise, and the 486 slower | -- | -- |
-| 75 | a wall hit's intercepts and tiles stay in registers and are stored only where a post starts (the new-column and new-wall paths): a ray that only widens the current post -- the common case -- stores none of them. 0.54% (747.3 -> 743.3) | **743** | **4.87** |
+| 75 | a wall hit's intercepts and tiles stay in registers and are stored only where a post starts (the new-column and new-wall paths): a ray that only widens the current post -- the common case -- stores none of them. 0.54% (747.3 -> 743.3) | 743 | 4.87 |
+| 76 | `tilehit` stored only where it is read: the door paths store it on entry, and the new-wall path takes it from the wall key it has just saved (`lastkey>>7` is `tilehit` exactly) -- one store fewer on every ray. 743.7 -> 743.0, at the edge of the noise | **743** | **4.88** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
