@@ -48,7 +48,8 @@ still work. Everything else is the game as id made it.
 
 For measuring, `WOLF3DV TIMEDEMO QUICK PRELOAD` plays demo 0's first 200
 frames flat out and prints the frame rate; `CRC` adds checksums of the picture,
-`PROFILE` a sampled profile. [V30NOTES.md](V30NOTES.md) explains them all.
+`PROFILE` a sampled profile. It always measures the 240x120 view (size 15), whatever
+size the game was left at; `MYVIEW` uses yours instead. [V30NOTES.md](V30NOTES.md) explains them all.
 
 ## Building
 
