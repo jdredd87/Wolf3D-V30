@@ -824,8 +824,9 @@ ENDP
 ;
 ; NEC V30 build, StevenC & Claude: WL_DRAW.C's two wall-hit routines,
 ; which AsmRefresh calls once per ray.  In C each was a far call with a
-; frame and its state compared through memory; here they are NEAR calls
-; from the ray loop.  Every register is free at the call -- AsmRefresh has
+; frame and its state compared through memory; here the ray loop jumps to
+; them and they jump on to nextpix (step 62).  Every register is free on
+; entry -- AsmRefresh has
 ; stored xtile, ytile and the intercepts and reloads everything at
 ; nextpix -- so only SI and DI need keeping across the C calls made here.
 ; Statement for statement the C (with CalcHeight skipped for a wide-scale
@@ -895,7 +896,7 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	shl	bx,1
 	mov	ax,[wallheight+bx-2]
 	mov	[wallheight+bx],ax
-	ret
+	jmp	nextpix				; step 62: jumped to, not called
 @@newcol:
 	call	CalcHeightV
 	mov	bx,[pixx]
@@ -906,7 +907,7 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	[postwidth],1
 	mov	ax,[pixx]
 	mov	[postx],ax
-	ret
+	jmp	nextpix				; step 62: jumped to, not called
 @@newwall:
 	mov	[lastkey],cx
 	call	CalcHeightV
@@ -951,7 +952,7 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	add	sp,2
 	mov	[WORD postsource+2],ax
 	mov	[WORD postsource],si
-	ret
+	jmp	nextpix				; step 62: jumped to, not called
 ENDP
 
 
@@ -985,7 +986,7 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	shl	bx,1
 	mov	ax,[wallheight+bx-2]
 	mov	[wallheight+bx],ax
-	ret
+	jmp	nextpix				; step 62: jumped to, not called
 @@newcol:
 	call	CalcHeightH
 	mov	bx,[pixx]
@@ -996,7 +997,7 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	[postwidth],1
 	mov	ax,[pixx]
 	mov	[postx],ax
-	ret
+	jmp	nextpix				; step 62: jumped to, not called
 @@newwall:
 	mov	[lastkey],cx
 	call	CalcHeightH
@@ -1041,7 +1042,7 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	add	sp,2
 	mov	[WORD postsource+2],ax
 	mov	[WORD postsource],si
-	ret
+	jmp	nextpix				; step 62: jumped to, not called
 ENDP
 
 
@@ -2261,8 +2262,7 @@ notvertdoor:
 	shr	cx,1
 	or	cl,bl
 	or	cl,40h
-	call	HitVertWallA			; NEAR, WL_DR_A.ASM (was the far C routine)
-	jmp nextpix
+	jmp	HitVertWallA			; step 62: it goes on to nextpix itself
 
 
 	EVEN
@@ -2286,8 +2286,7 @@ hithoriz:
 	xor	cl,cl
 	shr	cx,1
 	or	cx,bp
-	call	HitHorizWallA			; NEAR, WL_DR_A.ASM (was the far C routine)
-	jmp nextpix
+	jmp	HitHorizWallA			; step 62: it goes on to nextpix itself
 
 ;---------------------------------------------------------------------------
 ;

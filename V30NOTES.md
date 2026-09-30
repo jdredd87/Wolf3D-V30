@@ -154,7 +154,8 @@ byte for byte.
 | 57 | `PM_GetPage`'s common case -- the page resident in main memory -- in assembly: bounds, `mainPage`, `lastHit`, `MainMemPages[]`, and id's C for everything else, reached with the caller's frame untouched. 0.8% (774.7 -> 768.3) | 768 | 4.72 |
 | 58 | `PlaceStatics`' scan unrolled by four: an unseen static -- nearly all of up to 400 -- costs three instructions and a quarter of the loop's. A seen one leaves for the same handler as before, which carries on from the next, so the order of `TransformTile` and `GetBonus` calls is unchanged. 0.1% (768.3 -> 767.3) | 767 | 4.72 |
 | 59 | `DoActors` laid out so a skipped actor -- inactive, outside the player's areas: most of a level's -- costs one short jump back instead of two jumps, one of them TASM's JUMPS expansion. 0.1% over the whole attract loop (18,759 -> 18,742 play ticks); within the noise of the quick benchmark | 767 | 4.72 |
-| 60 | `CalcHeightV` and `CalcHeightH` keep no registers: their only callers, the asm hit routines, need SI back and nothing else, so the multiply's sign moves from SI to the free BP and four pushes and pops go from every wall hit's height. 0.65% (767.0 -> 762.0) | **762** | **4.75** |
+| 60 | `CalcHeightV` and `CalcHeightH` keep no registers: their only callers, the asm hit routines, need SI back and nothing else, so the multiply's sign moves from SI to the free BP and four pushes and pops go from every wall hit's height. 0.65% (767.0 -> 762.0) | 762 | 4.75 |
+| 61 | the ray loop jumps into its hit routines, and they jump on to `nextpix` themselves: one JMP per ray where there were a CALL, a RET and a JMP. 0.2% (762.0 -> 760.7) | **761** | **4.76** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
