@@ -130,7 +130,7 @@ yadj		dw	64				; xtilestep<<6, as added into vyadc's word
 lastkey		dw	0FFFFh			; step 51: tilehit<<7 | side<<6 | tile of the last
 	PUBLIC	lastkey					; wall post, or FFFFh (C invalidates it)
 ;
-; step 63: the band of rows VGAClearScreen leaves to the walls
+; step 62: the band of rows VGAClearScreen leaves to the walls
 ;
 postmin		dw	0				; the least scale*4 of the frame's wall posts
 	PUBLIC	postmin					; (0 until a frame has been drawn: no band)
@@ -841,7 +841,7 @@ PUBLIC	ScalePostA					; public only so profiles can name it
 	jmp	@@minok
 
 ;
-; NEC V30 build (step 63): this wall covers rows half-c .. half+c-1, c the
+; NEC V30 build (step 62): this wall covers rows half-c .. half+c-1, c the
 ; scale (scaler 0 is scaler 1), and VGAClearScreen left half-B .. half+B-1
 ; to the walls: fill the difference in each byte the post draws, after its
 ; wall and with its masks.  (c < B <= half, so none of it is wall.)
@@ -1701,7 +1701,7 @@ PUBLIC	AsmRefresh
 	mov	[WORD cs:czhnhi+1],ax
 	mov	[chvkey],8000h			; and the wall caches are empty
 	mov	[chhkey],8000h
-	mov	[postmin],7FFFh			; step 63: no posts yet this frame
+	mov	[postmin],7FFFh			; step 62: no posts yet this frame
 
 	mov	ax,[midangle]			; step 57: the frame's centre angle and width
 	mov	[WORD cs:pxmid+1],ax

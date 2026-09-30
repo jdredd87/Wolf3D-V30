@@ -341,7 +341,7 @@ void  FarScalePost (void)				// just so other files can call
 }
 
 //
-// NEC V30 build (step 63), StevenC & Claude: the frame's posts are drawn by
+// NEC V30 build (step 62), StevenC & Claude: the frame's posts are drawn by
 // ScalePostA (WL_DR_A.ASM), which also fills the rows VGAClearScreen left to
 // a wall when the wall turns out shorter.
 //
@@ -770,7 +770,7 @@ void VGAClearScreen (void)
  extern unsigned postmin,bandlim,bandhalf,bandtop,ceilcolor;
 
   //
-  // NEC V30 build (step 63), StevenC & Claude: the scaler for scale i covers
+  // NEC V30 build (step 62), StevenC & Claude: the scaler for scale i covers
   // rows half-i .. half+i-1 of every column it draws (scaler 0 is scaler 1),
   // and a wall post draws its whole column.  So the band the last frame's
   // least wall covered -- 32 of 120 rows on average -- is left out here, and
