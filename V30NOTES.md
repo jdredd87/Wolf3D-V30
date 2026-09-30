@@ -164,7 +164,8 @@ byte for byte.
 | 67 | the height calculation inline where a wall hit starts a new texture column -- the commonest way a post begins -- in both hit routines: no CALL or RET, the copy's immediates patched with the originals', and the branches around it laid out so none is a JUMPS expansion. 0.6% (759.3 -> 754.7); the 486 got 0.6% slower, a layout effect the V30 does not share | 755 | 4.80 |
 | 68 | `ScalePostA` inline at the new-column paths too, its two rare branches (a new least wall; a post shorter than the band, which calls the routine) out of line; the horizontal copy's height tests its cache first so its miss block is a short jump back. 0.45% (754.7 -> 751.3) | 751 | 4.82 |
 | 69 | `nextpix` sits directly before the next ray's setup, the frame's exit a short jump back: a ray ends with one taken jump where it had two. 0.2% (751.3 -> 749.7) | 750 | 4.83 |
-| 70 | the horizontal hit block falls into `HitHorizWallA`, now placed right after it (its door test takes a short hop placed before the block); only one hit routine can go there, since the tile loops' branches to both hit blocks must stay short. 0.27% (749.7 -> 747.7) | **748** | **4.85** |
+| 70 | the horizontal hit block falls into `HitHorizWallA`, now placed right after it (its door test takes a short hop placed before the block); only one hit routine can go there, since the tile loops' branches to both hit blocks must stay short. 0.27% (749.7 -> 747.7) | 748 | 4.85 |
+| 71 | the hit routines' per-quadrant test (`xtilestep`, `ytilestep` against -1, in memory, every ray) is one 2-byte instruction the quadrant code patches: EBh, a short jump, or 3Ch, CMP AL,imm8, which swallows the displacement and falls through. 0.2% (748.7 -> 747.0) | **747** | **4.85** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract

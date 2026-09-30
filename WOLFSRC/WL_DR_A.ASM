@@ -1010,8 +1010,8 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	si,[WORD yintercept]
 	shr	si,4
 	and	si,0fc0h				; SI = texture
-	cmp	[xtilestep],-1
-	jne	hvw_tex
+hvwx:								; step 71: EB (xtilestep 1) or 3C (-1),
+	jmp	SHORT hvw_tex				; patched by the quadrant code
 	mov	ax,0fc0h
 	sub	ax,si
 	mov	si,ax
@@ -1869,6 +1869,8 @@ entry90:
 	mov	[WORD cs:qjmp+1],ax	; (JUMPS moves labels between passes)
 	mov	[xtilestep],1			; xtilestep = 1
 	mov	[ytilestep],-1			; ytilestep = -1
+	mov	[BYTE cs:hvwx],0EBh	; step 71: the hit routines' tests
+	mov	[BYTE cs:hhwy],3Ch
 	mov	[BYTE cs:vertop],OP_JLE		; patch a jle in
 	mov	[BYTE cs:vertop2],OP_JG		; and its inverse at the loop's bottom
 	mov	[BYTE cs:horizop2],OP_JL	; (id's horizop was jge: its inverse)
@@ -1981,6 +1983,8 @@ not90:
 	mov	ax,-1
 	mov	[xtilestep],ax			; xtilestep = -1
 	mov	[ytilestep],ax			; ytilestep = -1
+	mov	[BYTE cs:hvwx],3Ch	; step 71: the hit routines' tests
+	mov	[BYTE cs:hhwy],3Ch
 	mov	[BYTE cs:vertop],OP_JLE		; patch a jle in
 	mov	[BYTE cs:vertop2],OP_JG
 	mov	[BYTE cs:horizop2],OP_JG	; (id's horizop was jle)
@@ -2097,6 +2101,8 @@ not180:
 	mov	[WORD cs:qjmp+1],ax	; (JUMPS moves labels between passes)
 	mov	[xtilestep],-1			; xtilestep = -1
 	mov	[ytilestep],1			; ytilestep = 1
+	mov	[BYTE cs:hvwx],3Ch	; step 71: the hit routines' tests
+	mov	[BYTE cs:hhwy],0EBh
 	mov	[BYTE cs:vertop],OP_JGE		; patch a jge in
 	mov	[BYTE cs:vertop2],OP_JL
 	mov	[BYTE cs:horizop2],OP_JG	; (id's horizop was jle)
@@ -2209,6 +2215,8 @@ entry360:
 	mov	ax,1
 	mov	[xtilestep],ax			; xtilestep = 1
 	mov	[ytilestep],ax			; ytilestep = 1
+	mov	[BYTE cs:hvwx],0EBh	; step 71: the hit routines' tests
+	mov	[BYTE cs:hhwy],0EBh
 	mov	[BYTE cs:vertop],OP_JGE		; patch a jge in
 	mov	[BYTE cs:vertop2],OP_JL
 	mov	[BYTE cs:horizop2],OP_JL	; (id's horizop was jge)
@@ -2500,8 +2508,8 @@ HitHorizWallA:
 	mov	si,[WORD xintercept]
 	shr	si,4
 	and	si,0fc0h				; SI = texture
-	cmp	[ytilestep],-1
-	jne	hhw_mirror
+hhwy:								; step 71: EB (ytilestep 1) or 3C (-1),
+	jmp	SHORT hhw_mirror			; patched by the quadrant code
 	inc	[WORD yintercept+2]		; yintercept += TILEGLOBAL
 	jmp	hhw_tex
 hhw_mirror:
