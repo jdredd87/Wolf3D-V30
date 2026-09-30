@@ -1202,202 +1202,7 @@ hvw_getpage:
 ENDP
 
 
-PROC	HitHorizWallA NEAR
-PUBLIC	HitHorizWallA				; public only so profiles can name it
-	mov	si,[WORD xintercept]
-	shr	si,4
-	and	si,0fc0h				; SI = texture
-	cmp	[ytilestep],-1
-	jne	hhw_mirror
-	inc	[WORD yintercept+2]		; yintercept += TILEGLOBAL
-	jmp	hhw_tex
-hhw_mirror:
-	mov	ax,0fc0h
-	sub	ax,si
-	mov	si,ax
-hhw_tex:
-;
-; NEC V30 build (step 51): id's test -- lastside, both words of
-; lastintercept and lasttilehit, four compares against memory -- is one
-; compare of the key AsmRefresh built in CX: tilehit<<7 | side<<6 | tile.
-; Tiles are under 64 and tilehit a byte, so the key holds all three
-; exactly, never FFFFh; C invalidates it wherever it changes that state.
-;
-	cmp	cx,[lastkey]
-	jne	hhw_nwt				; (a short hop: see hhw_nwt)
-	cmp	si,[WORD postsource]
-	jne	hhw_newcol
-	inc	[postwidth]				; wide scale
-	mov	bx,[pixx]
-	shl	bx,1
-	mov	ax,[wallheight+bx-2]
-	mov	[wallheight+bx],ax
-	jmp	nextpix				; step 62: jumped to, not called
-hhw_nwt:
-	jmp	hhw_newwall			; step 67: the new-wall test's hop
-; step 67: the inline height's cache miss, within reach of its test
-czi_miss:
-	mov	[chhkey],ax
-	mov	ax,[WORD yintercept]
-	mov	dx,[WORD yintercept+2]
-czvyloc:
-	sub	ax,1234h				; viewy
-czvyhic:
-	sbb	dx,1234h
-	FIXBYFRACB	czsinsignc,czsinfracc	; dx:ax = gyt
-	mov	[chhgylo],ax
-	mov	[chhgyhi],dx
-	jmp	czi_have
-hhw_newcol:
-; step 67: CalcHeightH inline, no call -- step 68: its cache test first (gyt,
-; then gxt: they are independent, and nx = gxt-gyt as before)
-	mov	ax,[WORD yintercept+2]
-	cmp	ax,[chhkey]
-	jne	czi_miss
-	mov	ax,[chhgylo]			; dx:ax = gyt, as for the last column
-	mov	dx,[chhgyhi]
-czi_have:
-	push	dx
-	push	ax
-	mov	ax,[WORD xintercept]
-	mov	dx,[WORD xintercept+2]
-czvxloc:
-	sub	ax,1234h				; viewx, low word (2D iw: at +1)
-czvxhic:
-	sbb	dx,1234h				; high word (81 DA iw: at +2)
-	FIXBYFRACB	czcossignc,czcosfracc	; dx:ax = gxt
-	pop	bx
-	pop	cx					; cx:bx = gyt
-	sub	ax,bx
-	sbb	dx,cx
-	mov	bx,ax
-	mov	cx,dx				; cx:bx = nx = gxt-gyt
-czmdhic:
-	cmp	cx,1234h			; if (nx < mindist) nx = mindist -- signed (81 F9 iw)
-	jg	czi_distok
-	jl	czi_clamp
-czmdloc:
-	cmp	bx,1234h			; (81 FB iw)
-	jae	czi_distok
-czi_clamp:
-czmdlo2c:
-	mov	bx,1234h			; (BB iw)
-czmdhi2c:
-	mov	cx,1234h			; (B9 iw)
-czi_distok:
-	mov	bl,bh				; bx = bits 8-23 of nx, the word at nx+1
-	mov	bh,cl
-czhnloc:
-	mov	ax,1234h			; heightnumerator (B8 iw)
-czhnhic:
-	mov	dx,1234h			; (BA iw)
-	idiv	bx
-	mov	bx,[pixx]
-	shl	bx,1
-	mov	[wallheight+bx],ax
-	push	si						; step 68: ScalePostA inline -- the post
-	mov	bx,[postx]				; this column closes
-	mov	di,bx
-	shl	bx,1
-	mov	bp,[wallheight+bx]		; fractional height (low 3 bits frac)
-	and	bp,0fff8h				; bp = heightscaler*4
-	shr	bp,1
-	cmp	bp,[maxscaleshl2]
-	jle	czp_hok
-	mov	bp,[maxscaleshl2]
-czp_hok:
-	cmp	bp,[postmin]			; the least wall of the frame (rarely new)
-	jb	czp_newmin
-czp_minok:
-	cmp	bp,[bandlim]
-	jb	czp_short				; shorter than the band: ScalePostA's own path
-	add	bp,OFFSET fullscalefarcall
-	mov	bx,di
-	shr	di,2					; X in bytes
-	add	di,[bufferofs]
-	and	bx,3
-	shl	bx,3
-	add	bx,[postwidth]			; bx = pixel*8+pixwidth
-	mov	al,[mapmasks1-1+bx]		; -1 because no widths of 0
-	mov	dx,SC_INDEX+1
-	out	dx,al					; set bit mask register
-	les	si,[postsource]			; ES:SI = the texture column
-	mov	cx,SCREENSEG
-	mov	ds,cx					; DS = the screen
-	call	[DWORD bp]				; SS:BP -- scale the line of pixels
-	mov	al,[ss:mapmasks2-1+bx]
-	or	al,al
-	jz	czp_done
-	inc	di						; a strip that crosses two bytes
-	out	dx,al
-	call	[DWORD bp]
-	mov	al,[ss:mapmasks3-1+bx]
-	or	al,al
-	jz	czp_done
-	inc	di						; three bytes
-	out	dx,al
-	call	[DWORD bp]
-czp_done:
-	mov	ax,ss
-	mov	ds,ax
-	pop	si
-	mov	[WORD postsource],si
-	mov	[postwidth],1
-	mov	ax,[pixx]
-	mov	[postx],ax
-	jmp	nextpix
-czp_newmin:
-	mov	[postmin],bp
-	jmp	czp_minok
-czp_short:
-	call	ScalePostA				; (it recomputes; postmin is a least value)
-	jmp	czp_done
-hhw_newwall:
-	mov	[lastkey],cx
-	call	CalcHeightH
-	mov	bx,[pixx]
-	shl	bx,1
-	mov	[wallheight+bx],ax
-	cmp	[lastside],-1
-	je	hhw_first
-	call	ScalePostA
-hhw_first:
-	mov	[lastside],0
-	mov	ax,[ytile]
-	cwd
-	mov	[WORD lastintercept],ax
-	mov	[WORD lastintercept+2],dx
-	mov	bx,[tilehit]
-	mov	[lasttilehit],bx
-	mov	ax,[pixx]
-	mov	[postx],ax
-	mov	[postwidth],1
-	test	bl,40h
-	jz	hhw_plain
-	mov	ax,[WORD xintercept+2]	; xtile = xintercept>>TILESHIFT
-	mov	[xtile],ax
-	mov	di,ax
-	shl	di,6
-	add	di,[ytile]
-	sub	di,[ytilestep]			; tilemap[xtile][ytile-ytilestep]
-	test	[BYTE tilemap+di],80h
-	jz	hhw_notdoor
-	mov	ax,[PMSpriteStart]
-	sub	ax,8-2					; DOORWALL+2
-	jmp	hhw_getpage
-hhw_notdoor:
-	and	bx,NOT 40h
-hhw_plain:
-	shl	bx,1
-	mov	ax,[horizwall+bx]
-hhw_getpage:
-	push	ax
-	call	PM_GetPage
-	add	sp,2
-	mov	[WORD postsource+2],ax
-	mov	[WORD postsource],si
-	jmp	nextpix				; step 62: jumped to, not called
-ENDP
+; (HitHorizWallA is in AsmRefresh since step 70, after hithoriz)
 
 
 ;============================
@@ -2664,6 +2469,8 @@ notvertdoor:
 	jmp	HitVertWallA			; step 62: it goes on to nextpix itself
 
 
+hdoor_t:
+	jmp	horizdoor					; step 70: hithoriz's door test's hop
 	EVEN
 hithoriz:
 	mov	[WORD xintercept],bp		; the low word back to memory first
@@ -2671,7 +2478,7 @@ hithoriz:
 	mov	al,[BYTE tilemap+di]		; tilehit = *((byte *)tilemap+yspot);
 	mov	[BYTE tilehit],al
 	or	al,al						; set flags
-	js	horizdoor
+	js	hdoor_t						; step 70: a short hop (see hdoor_t)
 	mov	[WORD xintercept+2],cx
 	mov	[xtile],cx
 	mov	bp,bx						; ytile = T-(xtile<<6)
@@ -2685,7 +2492,204 @@ hithoriz:
 	xor	cl,cl
 	shr	cx,1
 	or	cx,bp
-	jmp	HitHorizWallA			; step 62: it goes on to nextpix itself
+;
+; NEC V30 build (step 70): HitHorizWallA follows, falling through
+;
+HitHorizWallA:
+	PUBLIC	HitHorizWallA				; (public only so profiles can name it)
+	mov	si,[WORD xintercept]
+	shr	si,4
+	and	si,0fc0h				; SI = texture
+	cmp	[ytilestep],-1
+	jne	hhw_mirror
+	inc	[WORD yintercept+2]		; yintercept += TILEGLOBAL
+	jmp	hhw_tex
+hhw_mirror:
+	mov	ax,0fc0h
+	sub	ax,si
+	mov	si,ax
+hhw_tex:
+;
+; NEC V30 build (step 51): id's test -- lastside, both words of
+; lastintercept and lasttilehit, four compares against memory -- is one
+; compare of the key AsmRefresh built in CX: tilehit<<7 | side<<6 | tile.
+; Tiles are under 64 and tilehit a byte, so the key holds all three
+; exactly, never FFFFh; C invalidates it wherever it changes that state.
+;
+	cmp	cx,[lastkey]
+	jne	hhw_nwt				; (a short hop: see hhw_nwt)
+	cmp	si,[WORD postsource]
+	jne	hhw_newcol
+	inc	[postwidth]				; wide scale
+	mov	bx,[pixx]
+	shl	bx,1
+	mov	ax,[wallheight+bx-2]
+	mov	[wallheight+bx],ax
+	jmp	nextpix				; step 62: jumped to, not called
+hhw_nwt:
+	jmp	hhw_newwall			; step 67: the new-wall test's hop
+; step 67: the inline height's cache miss, within reach of its test
+czi_miss:
+	mov	[chhkey],ax
+	mov	ax,[WORD yintercept]
+	mov	dx,[WORD yintercept+2]
+czvyloc:
+	sub	ax,1234h				; viewy
+czvyhic:
+	sbb	dx,1234h
+	FIXBYFRACB	czsinsignc,czsinfracc	; dx:ax = gyt
+	mov	[chhgylo],ax
+	mov	[chhgyhi],dx
+	jmp	czi_have
+hhw_newcol:
+; step 67: CalcHeightH inline, no call -- step 68: its cache test first (gyt,
+; then gxt: they are independent, and nx = gxt-gyt as before)
+	mov	ax,[WORD yintercept+2]
+	cmp	ax,[chhkey]
+	jne	czi_miss
+	mov	ax,[chhgylo]			; dx:ax = gyt, as for the last column
+	mov	dx,[chhgyhi]
+czi_have:
+	push	dx
+	push	ax
+	mov	ax,[WORD xintercept]
+	mov	dx,[WORD xintercept+2]
+czvxloc:
+	sub	ax,1234h				; viewx, low word (2D iw: at +1)
+czvxhic:
+	sbb	dx,1234h				; high word (81 DA iw: at +2)
+	FIXBYFRACB	czcossignc,czcosfracc	; dx:ax = gxt
+	pop	bx
+	pop	cx					; cx:bx = gyt
+	sub	ax,bx
+	sbb	dx,cx
+	mov	bx,ax
+	mov	cx,dx				; cx:bx = nx = gxt-gyt
+czmdhic:
+	cmp	cx,1234h			; if (nx < mindist) nx = mindist -- signed (81 F9 iw)
+	jg	czi_distok
+	jl	czi_clamp
+czmdloc:
+	cmp	bx,1234h			; (81 FB iw)
+	jae	czi_distok
+czi_clamp:
+czmdlo2c:
+	mov	bx,1234h			; (BB iw)
+czmdhi2c:
+	mov	cx,1234h			; (B9 iw)
+czi_distok:
+	mov	bl,bh				; bx = bits 8-23 of nx, the word at nx+1
+	mov	bh,cl
+czhnloc:
+	mov	ax,1234h			; heightnumerator (B8 iw)
+czhnhic:
+	mov	dx,1234h			; (BA iw)
+	idiv	bx
+	mov	bx,[pixx]
+	shl	bx,1
+	mov	[wallheight+bx],ax
+	push	si						; step 68: ScalePostA inline -- the post
+	mov	bx,[postx]				; this column closes
+	mov	di,bx
+	shl	bx,1
+	mov	bp,[wallheight+bx]		; fractional height (low 3 bits frac)
+	and	bp,0fff8h				; bp = heightscaler*4
+	shr	bp,1
+	cmp	bp,[maxscaleshl2]
+	jle	czp_hok
+	mov	bp,[maxscaleshl2]
+czp_hok:
+	cmp	bp,[postmin]			; the least wall of the frame (rarely new)
+	jb	czp_newmin
+czp_minok:
+	cmp	bp,[bandlim]
+	jb	czp_short				; shorter than the band: ScalePostA's own path
+	add	bp,OFFSET fullscalefarcall
+	mov	bx,di
+	shr	di,2					; X in bytes
+	add	di,[bufferofs]
+	and	bx,3
+	shl	bx,3
+	add	bx,[postwidth]			; bx = pixel*8+pixwidth
+	mov	al,[mapmasks1-1+bx]		; -1 because no widths of 0
+	mov	dx,SC_INDEX+1
+	out	dx,al					; set bit mask register
+	les	si,[postsource]			; ES:SI = the texture column
+	mov	cx,SCREENSEG
+	mov	ds,cx					; DS = the screen
+	call	[DWORD bp]				; SS:BP -- scale the line of pixels
+	mov	al,[ss:mapmasks2-1+bx]
+	or	al,al
+	jz	czp_done
+	inc	di						; a strip that crosses two bytes
+	out	dx,al
+	call	[DWORD bp]
+	mov	al,[ss:mapmasks3-1+bx]
+	or	al,al
+	jz	czp_done
+	inc	di						; three bytes
+	out	dx,al
+	call	[DWORD bp]
+czp_done:
+	mov	ax,ss
+	mov	ds,ax
+	pop	si
+	mov	[WORD postsource],si
+	mov	[postwidth],1
+	mov	ax,[pixx]
+	mov	[postx],ax
+	jmp	nextpix
+czp_newmin:
+	mov	[postmin],bp
+	jmp	czp_minok
+czp_short:
+	call	ScalePostA				; (it recomputes; postmin is a least value)
+	jmp	czp_done
+hhw_newwall:
+	mov	[lastkey],cx
+	call	CalcHeightH
+	mov	bx,[pixx]
+	shl	bx,1
+	mov	[wallheight+bx],ax
+	cmp	[lastside],-1
+	je	hhw_first
+	call	ScalePostA
+hhw_first:
+	mov	[lastside],0
+	mov	ax,[ytile]
+	cwd
+	mov	[WORD lastintercept],ax
+	mov	[WORD lastintercept+2],dx
+	mov	bx,[tilehit]
+	mov	[lasttilehit],bx
+	mov	ax,[pixx]
+	mov	[postx],ax
+	mov	[postwidth],1
+	test	bl,40h
+	jz	hhw_plain
+	mov	ax,[WORD xintercept+2]	; xtile = xintercept>>TILESHIFT
+	mov	[xtile],ax
+	mov	di,ax
+	shl	di,6
+	add	di,[ytile]
+	sub	di,[ytilestep]			; tilemap[xtile][ytile-ytilestep]
+	test	[BYTE tilemap+di],80h
+	jz	hhw_notdoor
+	mov	ax,[PMSpriteStart]
+	sub	ax,8-2					; DOORWALL+2
+	jmp	hhw_getpage
+hhw_notdoor:
+	and	bx,NOT 40h
+hhw_plain:
+	shl	bx,1
+	mov	ax,[horizwall+bx]
+hhw_getpage:
+	push	ax
+	call	PM_GetPage
+	add	sp,2
+	mov	[WORD postsource+2],ax
+	mov	[WORD postsource],si
+	jmp	nextpix				; step 62: jumped to, not called
 
 ;---------------------------------------------------------------------------
 ;
