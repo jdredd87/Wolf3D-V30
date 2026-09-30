@@ -141,8 +141,9 @@ byte for byte.
 | 44 | *(tried, reverted)* the music timer interrupting only on ticks that need it -- PIT mode 2, each interval queued two ahead, quiet ticks counted in bulk, `MUSICLOG` still A92D: 49,365 interrupts became 10,961 and the speed did not move (847.5 vs 848.0 over four rounds). See below | -- | -- |
 | 45 | the page manager's LRU search walks the 100 main-memory slots (an owner table kept by the four places that change residency) instead of all 663 pages, whenever nothing is in EMS; minimum over (lastHit, page), so the same page as id's; page-miss counts unchanged | 839 | 4.32 |
 | 46 | `DrawVisList` sorts once -- a stable insertion sort by height -- where id selected the nearest object with a pass over the whole list per object drawn (the first minimum each time: the same order); a list holding a height id's loop could never pick (32000 up) is left to id's loop | 833 | 4.35 |
-| 47 | the ray setup's per-frame values -- `viewx`/`viewy`, the partials, and xtile, xtile<<6, ytile and T for the quadrant -- patched in as immediates by the quadrant's patch block, which runs on each frame's first ray and on a change of quadrant | **815** | **4.44** |
+| 47 | the ray setup's per-frame values -- `viewx`/`viewy`, the partials, and xtile, xtile<<6, ytile and T for the quadrant -- patched in as immediates by the quadrant's patch block, which runs on each frame's first ray and on a change of quadrant | 815 | 4.44 |
 | 48 | *(tried, dropped)* `ScaleSpan`'s per-shape values (the shape's segment, `leftpix`, `bufferofs`) as immediates patched by `ScaleShape` -- 832.0 against 832.3: those memory operands cost the V30 next to nothing there | -- | -- |
+| 49 | `ScalePostA` keeps only SI (its callers, the hit routines, need nothing else back); `PlaceStatics` holds its bound in CX, reloaded after the C calls | **812** | **4.46** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract

@@ -615,6 +615,7 @@ PUBLIC	PlaceStatics
 	mov	si,OFFSET statobjlist		; SI = statptr
 	mov	al,[BYTE vismark]
 	mov	[BYTE cs:@@mark+2],al		; this frame's mark, as an immediate below
+	mov	cx,[laststatobj]			; NEC V30 build (step 49): the bound in CX
 	jmp	@@test
 
 ; Laid out for the V30: an object not seen this frame -- nearly all of them
@@ -628,7 +629,7 @@ PUBLIC	PlaceStatics
 @@next:
 	add	si,ST_SIZE
 @@test:
-	cmp	si,[laststatobj]
+	cmp	si,cx
 	jne	@@loop
 	jmp	@@statdone
 
@@ -648,6 +649,7 @@ PUBLIC	PlaceStatics
 	push	ax						; (AH still 0)
 	call	TransformTile
 	add	sp,8
+	mov	cx,[laststatobj]			; (C and TransformTile use CX)
 	or	ax,ax
 	jz	@@notbonus
 	test	[BYTE si+ST_FLAGS],FL_BONUS
@@ -655,6 +657,7 @@ PUBLIC	PlaceStatics
 	push	si
 	call	GetBonus
 	add	sp,2
+	mov	cx,[laststatobj]
 	jmp	@@next
 
 @@notbonus:
@@ -682,15 +685,14 @@ ENDP
 ; routines, called NEAR.  They used to reach it through FarScalePost -- a far
 ; call, a near call and a C frame for every post drawn.  The body is the
 ; C's asm exactly: the scaler for the post's height, the column's map masks,
-; up to three bytes wide.  Keeps SI, DI and BP, as the C did.
+; up to three bytes wide.  Keeps SI -- all its callers, the two hit
+; routines, need back (step 49: AsmRefresh reloads the rest after a hit).
 ;
 ;============================
 
 PROC	ScalePostA NEAR
 PUBLIC	ScalePostA					; public only so profiles can name it
 	push	si
-	push	di
-	push	bp
 
 	mov	bx,[postx]
 	mov	di,bx
@@ -736,8 +738,6 @@ PUBLIC	ScalePostA					; public only so profiles can name it
 @@done:
 	mov	ax,ss
 	mov	ds,ax
-	pop	bp
-	pop	di
 	pop	si
 	ret
 ENDP
