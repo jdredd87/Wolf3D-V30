@@ -2778,6 +2778,19 @@ PUBLIC	DoActors
 	push	di
 	mov	si,[player]
 	or	si,si
+	jnz	@@loop
+;
+; NEC V30 build (step 60): @@done and @@next sit above the loop's head, so an
+; actor skipped below -- inactive, outside the player's areas: most of them
+; -- costs one short jump back, and the walk falls into the next one.
+;
+@@done:
+	pop	di
+	pop	si
+	ret
+@@next:
+	mov	si,[si+OB_NEXT]
+	or	si,si
 	jz	@@done
 @@loop:
 	cmp	[WORD si+OB_ACTIVE],0
@@ -2855,14 +2868,7 @@ PUBLIC	DoActors
 	push	si
 	call	RemoveObj
 	add	sp,2
-@@next:
-	mov	si,[si+OB_NEXT]
-	or	si,si
-	jnz	@@loop
-@@done:
-	pop	di
-	pop	si
-	ret
+	jmp	@@next
 ENDP
 
 
