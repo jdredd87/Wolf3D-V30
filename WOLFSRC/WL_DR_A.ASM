@@ -1593,7 +1593,6 @@ entry90:
 	mov	[BYTE cs:vxtileop],OP_INCBX	; xtile += xtilestep
 	mov	[BYTE cs:vtop+2],64			; T += xtilestep<<6
 	mov	[yadj],64
-	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_DECDX		; T += ytilestep
 ;
 ; NEC V30 build (step 47): the frame's constants, into this quadrant's
@@ -1619,7 +1618,7 @@ entry90:
 	mov	[WORD cs:ivx64+1],ax	; xtile<<6
 	mov	dx,[focalty]
 	dec	dx
-	mov	[WORD cs:ivyt+1],dx	; ytile = focalty+ytilestep
+	mov	[WORD cs:ivyt+2],dx	; ytile = focalty+ytilestep
 	add	ax,dx
 	mov	[WORD cs:ivt+1],ax		; T = (xtile<<6)+ytile
 @@q1:
@@ -1663,7 +1662,7 @@ q1z:
 	shl	bx,2
 	mov	ax,[es:bx]
 	mov	di,[es:bx+2]
-	mov	[WORD cs:hxadd+4],ax
+	mov	[WORD cs:hxadd+2],ax
 	mov	[WORD cs:hxadc+2],di
 q1b:
 	mov	bp,1234h			; ypartialdown, patched in per frame
@@ -1677,7 +1676,7 @@ q1x:
 	add	ax,1234h			; viewx, patched in per frame
 q1w:
 	adc	dx,1234h
-	mov	[WORD xintercept],ax
+	mov	bp,ax				; BP = xintercept's low word (step 52)
 	mov	cx,dx				; CX = xinttile
 	jmp	initvars
 
@@ -1706,7 +1705,6 @@ not90:
 	mov	[BYTE cs:vxtileop],OP_DECBX	; xtile += xtilestep
 	mov	[BYTE cs:vtop+2],-64
 	mov	[yadj],-64
-	mov	[BYTE cs:hytileop],OP_DECBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_DECDX
 ;
 ; NEC V30 build (step 47): the frame's constants, into this quadrant's
@@ -1732,7 +1730,7 @@ not90:
 	mov	[WORD cs:ivx64+1],ax	; xtile<<6
 	mov	dx,[focalty]
 	dec	dx
-	mov	[WORD cs:ivyt+1],dx	; ytile = focalty+ytilestep
+	mov	[WORD cs:ivyt+2],dx	; ytile = focalty+ytilestep
 	add	ax,dx
 	mov	[WORD cs:ivt+1],ax		; T = (xtile<<6)+ytile
 @@q2:
@@ -1781,7 +1779,7 @@ q2z:
 	neg	dx
 	neg	si
 	sbb	dx,0				; dx:si = xstep
-	mov	[WORD cs:hxadd+4],si
+	mov	[WORD cs:hxadd+2],si
 	mov	[WORD cs:hxadc+2],dx
 q2b:
 	mov	bp,1234h			; ypartialdown, patched in per frame
@@ -1792,12 +1790,11 @@ q2b:
 	add	ax,si
 	adc	dx,0
 q2x:
-	mov	bx,1234h			; viewx, patched in per frame
+	mov	bp,1234h			; viewx, patched in per frame
 q2w:
 	mov	cx,1234h
-	sub	bx,ax
-	sbb	cx,dx
-	mov	[WORD xintercept],bx	; CX = xinttile
+	sub	bp,ax				; BP = xintercept's low word (step 52)
+	sbb	cx,dx				; CX = xinttile
 	jmp	initvars
 
 not180:
@@ -1824,7 +1821,6 @@ not180:
 	mov	[BYTE cs:vxtileop],OP_DECBX	; xtile += xtilestep
 	mov	[BYTE cs:vtop+2],-64
 	mov	[yadj],-64
-	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_INCDX
 ;
 ; NEC V30 build (step 47): the frame's constants, into this quadrant's
@@ -1850,7 +1846,7 @@ not180:
 	mov	[WORD cs:ivx64+1],ax	; xtile<<6
 	mov	dx,[focalty]
 	inc	dx
-	mov	[WORD cs:ivyt+1],dx	; ytile = focalty+ytilestep
+	mov	[WORD cs:ivyt+2],dx	; ytile = focalty+ytilestep
 	add	ax,dx
 	mov	[WORD cs:ivt+1],ax		; T = (xtile<<6)+ytile
 @@q3:
@@ -1893,7 +1889,7 @@ q3z:
 	neg	dx
 	neg	si
 	sbb	dx,0				; dx:si = xstep
-	mov	[WORD cs:hxadd+4],si
+	mov	[WORD cs:hxadd+2],si
 	mov	[WORD cs:hxadc+2],dx
 q3b:
 	mov	bp,1234h			; ypartialup, patched in per frame
@@ -1904,12 +1900,11 @@ q3b:
 	add	ax,si
 	adc	dx,0
 q3x:
-	mov	bx,1234h			; viewx, patched in per frame
+	mov	bp,1234h			; viewx, patched in per frame
 q3w:
 	mov	cx,1234h
-	sub	bx,ax
-	sbb	cx,dx
-	mov	[WORD xintercept],bx	; CX = xinttile
+	sub	bp,ax				; BP = xintercept's low word (step 52)
+	sbb	cx,dx				; CX = xinttile
 	jmp	initvars
 
 not270:
@@ -1938,7 +1933,6 @@ entry360:
 	mov	[BYTE cs:vxtileop],OP_INCBX	; xtile += xtilestep
 	mov	[BYTE cs:vtop+2],64
 	mov	[yadj],64
-	mov	[BYTE cs:hytileop],OP_INCBP	; ytile += ytilestep
 	mov	[BYTE cs:htop],OP_INCDX
 ;
 ; NEC V30 build (step 47): the frame's constants, into this quadrant's
@@ -1964,7 +1958,7 @@ entry360:
 	mov	[WORD cs:ivx64+1],ax	; xtile<<6
 	mov	dx,[focalty]
 	inc	dx
-	mov	[WORD cs:ivyt+1],dx	; ytile = focalty+ytilestep
+	mov	[WORD cs:ivyt+2],dx	; ytile = focalty+ytilestep
 	add	ax,dx
 	mov	[WORD cs:ivt+1],ax		; T = (xtile<<6)+ytile
 @@q4:
@@ -2002,7 +1996,7 @@ q4z:
 	shl	bx,2
 	mov	ax,[es:bx-DEG270*4]
 	mov	di,[es:bx+2-DEG270*4]
-	mov	[WORD cs:hxadd+4],ax
+	mov	[WORD cs:hxadd+2],ax
 	mov	[WORD cs:hxadc+2],di
 q4b:
 	mov	bp,1234h			; ypartialup, patched in per frame
@@ -2016,7 +2010,7 @@ q4x:
 	add	ax,1234h			; viewx, patched in per frame
 q4w:
 	adc	dx,1234h
-	mov	[WORD xintercept],ax
+	mov	bp,ax				; BP = xintercept's low word (step 52)
 	mov	cx,dx				; CX = xinttile
 	jmp	initvars
 
@@ -2054,13 +2048,13 @@ ivxt:
 ivx64:
 	mov	si,1234h					; xtile<<6
 	add	si,[WORD yintercept+2]		; xspot = (xtile<<6) + yinttile
-ivyt:
-	mov	bp,1234h					; ytile = focalty+ytilestep
 ivt:
 	mov	dx,1234h					; T = (xtile<<6)+ytile
 	mov	di,cx
 	shl	di,6
-	add	di,bp						; yspot = (xinttile<<6) + ytile
+ivyt:
+	add	di,1234h					; yspot = (xinttile<<6) + ytile, ytile
+										; patched in (step 52: BP holds xintercept)
 	mov	ax,[WORD yintercept]		; NEC V30 build: AX = low word of yintercept
 									; (and no screen segment in ES: nothing
 									; from here to the next ray reads it --
@@ -2085,7 +2079,10 @@ ivt:
 ;      (xtile<<6))
 ; SI : xspot (xtile<<6)+yinttile (index into tilemap and spotvis)
 ; DI : yspot (xinttile<<6)+ytile (index into tilemap and spotvis)
-; BP : ytile
+; BP : low word of xintercept -- NEC V30 build (step 52): was ytile, which
+;      the loop does not need: T - (xtile<<6) is ytile, so yspot is
+;      T + ((xinttile-xtile)<<6), unchanged by a vertical step.  Where ytile
+;      is wanted, at a horizontal hit, it is made from T and xtile
 ; ES : screenseg
 ;
 ; NEC V30 build: id's vertical test compared yinttile with ytile.  xspot and
@@ -2149,18 +2146,17 @@ horizentry:
 passhoriz:
 hspotop:
 	mov	[BYTE spotvis+di],1			; = vismark, patched in at +4 per frame
-hytileop:
-	inc	bp							; ytile+=ytilestep: INC BP or DEC BP, patched
 htop:
 	inc	dx							; T += ytilestep: INC DX or DEC DX, patched
 hxadd:
-	add	[WORD xintercept],1234h		; xintercept += xstep (low word at +4)
+	add	bp,1234h					; xintercept += xstep (low word at +2)
 hxadc:
 	adc	cx,1234h					; (high word at +2)
 	mov	di,cx
+	sub	di,bx
 	shl	di,6
-	add	di,bp						; yspot = (xinttile<<6)+ytile
-	cmp	cx,bx
+	add	di,dx						; yspot = (xinttile<<6)+ytile, as
+	cmp	cx,bx						; T + ((xinttile-xtile)<<6)
 horizop2:							; the inverse of id's horizop (jle/jge
 	jl	horizentry					; on xtilestep): 0x7f = jg, 0x7c = jl
 	jmp	vertentry
@@ -2194,13 +2190,18 @@ notvertdoor:
 
 	EVEN
 hithoriz:
-	mov	[WORD yintercept],ax		; the low word back to memory first
+	mov	[WORD xintercept],bp		; the low word back to memory first
+	mov	[WORD yintercept],ax		; (the door path continues with AX)
 	mov	al,[BYTE tilemap+di]		; tilehit = *((byte *)tilemap+yspot);
 	mov	[BYTE tilehit],al
 	or	al,al						; set flags
 	js	horizdoor
 	mov	[WORD xintercept+2],cx
 	mov	[xtile],cx
+	mov	bp,bx						; ytile = T-(xtile<<6)
+	shl	bp,6
+	neg	bp
+	add	bp,dx
 	mov	[WORD yintercept],0
 	mov	[WORD yintercept+2],bp
 	mov	[ytile],bp
@@ -2249,12 +2250,12 @@ horizdoor:
 	and	bx,7fh						; strip high bit
 	shl	bx,1                        ; index into word width door table
 
-	mov	ax,[WORD cs:hxadd+4]		; xstep, as patched into the loop (NEC V30 build:
+	mov	ax,[WORD cs:hxadd+2]		; xstep, as patched into the loop (NEC V30 build:
 	mov	dx,[WORD cs:hxadc+2]		; the rays no longer store it)
 	sar	dx,1
 	rcr ax,1						; half a step gets to door position
 
-	add	ax,[WORD xintercept]		; add half step to current intercept pos
+	add	ax,bp						; add half step to current intercept pos
 	adc	dx,cx						; CX hold high word of xintercept
 
 	cmp	cx,dx						; is it still in the same tile?
@@ -2281,6 +2282,10 @@ hithmid:
 	mov	[WORD xintercept+2],cx
 
 	mov	[WORD yintercept],8000h		; intercept in middle of tile
+	mov	bp,[xtile]					; ytile = T-(xtile<<6)
+	shl	bp,6
+	neg	bp
+	add	bp,[tsave]
 	mov	[WORD yintercept+2],bp
 
 	call	FAR HitHorizDoor
@@ -2296,7 +2301,7 @@ horizpushwall:
 	mov	ax,[WORD cs:hxadc+2]		; multiply xstep by pwallmove (0-63)
 	mul	[pwallpos]
 	mov	bx,ax
-	mov	ax,[WORD cs:hxadd+4]
+	mov	ax,[WORD cs:hxadd+2]
 	mul	[pwallpos]
 	add	dx,bx
 
@@ -2313,7 +2318,7 @@ horizpushwall:
 	sar	dx,1
 	rcr ax,1
 
-	add	ax,[WORD xintercept]		; add partial step to current intercept
+	add	ax,bp						; add partial step to current intercept
 	adc	dx,cx						; CX hold high word of xintercept
 
 	cmp	cx,dx						; is it still in the same tile?
@@ -2325,6 +2330,10 @@ horizpushwall:
 	mov	[WORD xintercept],ax		; save pixel intercept position
 	mov	[WORD xintercept+2],dx
 
+	mov	bp,[xtile]					; ytile = T-(xtile<<6)
+	shl	bp,6
+	neg	bp
+	add	bp,[tsave]
 	mov	[WORD yintercept+2],bp
 	mov	[WORD yintercept],0
 

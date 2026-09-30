@@ -145,7 +145,8 @@ byte for byte.
 | 48 | *(tried, dropped)* `ScaleSpan`'s per-shape values (the shape's segment, `leftpix`, `bufferofs`) as immediates patched by `ScaleShape` -- 832.0 against 832.3: those memory operands cost the V30 next to nothing there | -- | -- |
 | 49 | `ScalePostA` keeps only SI (its callers, the hit routines, need nothing else back); `PlaceStatics` holds its bound in CX, reloaded after the C calls | 812 | 4.46 |
 | 50 | `DoActor` in asm inside the actor loop, statement for statement, every field re-read after a think or action call -- 0.9% over the whole attract loop (19,964 -> 19,788 play ticks, 4.90 -> 4.95 fps); demo 0's first 200 frames, with few actors awake, do not show it | 812 | 4.46 |
-| 51 | "same wall as the last column?" is one compare of a key -- tilehit, side and tile packed in one word by the ray loop, in registers it already holds; id's test was four compares against memory. The C door, pushwall and frame-start code invalidate it. 0.9% (812 -> 805) | **805** | **4.50** |
+| 51 | "same wall as the last column?" is one compare of a key -- tilehit, side and tile packed in one word by the ray loop, in registers it already holds; id's test was four compares against memory. The C door, pushwall and frame-start code invalidate it. 0.9% (812 -> 805) | 805 | 4.50 |
+| 52 | the horizontal tile loop keeps xintercept's low word in BP instead of adding into memory every step: ytile is redundant there, since T - (xtile<<6) is ytile, so yspot is T + ((xinttile-xtile)<<6), a value a vertical step leaves unchanged. 0.3% (805.3 -> 803.0) | **803** | **4.51** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
