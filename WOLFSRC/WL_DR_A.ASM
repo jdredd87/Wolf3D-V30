@@ -1015,7 +1015,7 @@ hvwx:								; step 71: EB (xtilestep 1) or 3C (-1),
 	mov	ax,0fc0h
 	sub	ax,si
 	mov	si,ax
-	inc	[WORD xintercept+2]		; xintercept += TILEGLOBAL
+	inc	bp						; xintercept += TILEGLOBAL (step 75: in BP)
 hvw_tex:
 ;
 ; NEC V30 build (step 51): id's test -- lastside, both words of
@@ -1050,6 +1050,11 @@ cvvxhic:
 	mov	[chvgxhi],dx
 	jmp	cvi_have
 hvw_newcol:
+	mov	[WORD xintercept],0		; step 75: the hit, stored as a post starts
+	mov	[WORD xintercept+2],bp
+	mov	[xtile],bx
+	mov	[WORD yintercept+2],dx
+	mov	[ytile],dx
 ; step 67: CalcHeightV inline, no call
 								; (step 61: nothing kept; the sign is in BP)
 	mov	ax,[WORD xintercept+2]
@@ -1155,6 +1160,11 @@ cvp_short:
 	call	ScalePostA				; (it recomputes; postmin is a least value)
 	jmp	cvp_done
 hvw_newwall:
+	mov	[WORD xintercept],0		; step 75: the hit, stored as a post starts
+	mov	[WORD xintercept+2],bp
+	mov	[xtile],bx
+	mov	[WORD yintercept+2],dx
+	mov	[ytile],dx
 	mov	[lastkey],cx
 	call	CalcHeightV
 	mov	bx,[pixx]
@@ -2460,15 +2470,11 @@ hitvert:
 	jns	notvertdoor
 	jmp	vertdoor
 notvertdoor:
-	mov	[WORD xintercept],0
-	mov	[WORD xintercept+2],bx
-	mov	[xtile],bx
-	mov	dx,bx
-	shl	dx,6
+	mov	bp,bx						; step 75: xintercept's high word, stored
+	mov	dx,bx						; with xtile and yinttile only when a post
+	shl	dx,6						; starts (hvw_newcol, hvw_nwt)
 	neg	dx
 	add	dx,si						; yinttile = xspot-(xtile<<6)
-	mov	[WORD yintercept+2],dx
-	mov	[ytile],dx
 	mov	ch,al						; the wall key: tilehit<<7 | 40h (vertical)
 	xor	cl,cl						;  | xtile -- AL is still tilehit, BX xtile
 	shr	cx,1
@@ -2481,36 +2487,33 @@ hdoor_t:
 	jmp	horizdoor					; step 70: hithoriz's door test's hop
 	EVEN
 hithoriz:
-	mov	[WORD xintercept],bp		; the low word back to memory first
 	mov	[WORD yintercept],ax		; (the door path continues with AX)
 	mov	al,[BYTE tilemap+di]		; tilehit = *((byte *)tilemap+yspot);
 	mov	[BYTE tilehit],al
 	or	al,al						; set flags
 	js	hdoor_t						; step 70: a short hop (see hdoor_t)
-	mov	[WORD xintercept+2],cx
-	mov	[xtile],cx
-	mov	bp,bx						; ytile = T-(xtile<<6)
-	shl	bp,6
-	neg	bp
-	add	bp,dx
-	mov	[WORD yintercept],0
-	mov	[WORD yintercept+2],bp
-	mov	[ytile],bp
+	mov	di,bx						; ytile = T-(xtile<<6)
+	shl	di,6
+	neg	di
+	add	di,dx
+	mov	bx,di						; yintercept's high word (+1 below)
+	mov	dx,cx						; xinttile -- step 75: all stored, with
+									; BP, only when a post starts
 	mov	ch,al						; the wall key: tilehit<<7 | ytile
 	xor	cl,cl
 	shr	cx,1
-	or	cx,bp
+	or	cx,di
 ;
 ; NEC V30 build (step 70): HitHorizWallA follows, falling through
 ;
 HitHorizWallA:
 	PUBLIC	HitHorizWallA				; (public only so profiles can name it)
-	mov	si,[WORD xintercept]
+	mov	si,bp					; xintercept's low word (step 75: BP)
 	shr	si,4
 	and	si,0fc0h				; SI = texture
 hhwy:								; step 71: EB (ytilestep 1) or 3C (-1),
 	jmp	SHORT hhw_mirror			; patched by the quadrant code
-	inc	[WORD yintercept+2]		; yintercept += TILEGLOBAL
+	inc	bx						; yintercept += TILEGLOBAL (step 75: in BX)
 	jmp	hhw_tex
 hhw_mirror:
 	mov	ax,0fc0h
@@ -2550,6 +2553,12 @@ czvyhic:
 	mov	[chhgyhi],dx
 	jmp	czi_have
 hhw_newcol:
+	mov	[WORD xintercept],bp	; step 75: the hit, stored as a post starts
+	mov	[WORD xintercept+2],dx
+	mov	[xtile],dx
+	mov	[WORD yintercept],0
+	mov	[WORD yintercept+2],bx
+	mov	[ytile],di
 ; step 67: CalcHeightH inline, no call -- step 68: its cache test first (gyt,
 ; then gxt: they are independent, and nx = gxt-gyt as before)
 	mov	ax,[WORD yintercept+2]
@@ -2654,6 +2663,12 @@ czp_short:
 	call	ScalePostA				; (it recomputes; postmin is a least value)
 	jmp	czp_done
 hhw_newwall:
+	mov	[WORD xintercept],bp	; step 75: the hit, stored as a post starts
+	mov	[WORD xintercept+2],dx
+	mov	[xtile],dx
+	mov	[WORD yintercept],0
+	mov	[WORD yintercept+2],bx
+	mov	[ytile],di
 	mov	[lastkey],cx
 	call	CalcHeightH
 	mov	bx,[pixx]
