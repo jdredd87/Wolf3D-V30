@@ -52,6 +52,7 @@ shapeseg	dw	?					; segment of this shape's page
 leftpix		dw	?
 rightpix	dw	?
 xcent		dw	?
+onemask		db	1,2,4,8				; step 54: mapmasks1[pixel][0], a width of 1
 
 WIDTHS		=	130					; offset of t_compscale.width[]
 DATAOFS		=	4					; offset of t_compshape.dataofs[]
@@ -312,8 +313,7 @@ PUBLIC	ScaleShape
 	shl	bx,1
 	cmp	[wallheight+bx],bp
 	jae	@@lloop					; obscured by a closer wall
-	call	ScaleSpan
-	jmp	@@lloop
+	jmp	@@l1draw				; step 54: drawn below, then back to @@lloop
 ;
 ; NEC V30 build: TASM's JUMPS turns a conditional jump that cannot reach
 ; into "jump the other way over a JMP", so a branch that is normally NOT
@@ -418,8 +418,7 @@ PUBLIC	ScaleShape
 	shl	bx,1
 	cmp	[wallheight+bx],bp
 	jae	@@rloop
-	call	ScaleSpan
-	jmp	@@rloop
+	jmp	@@r1draw				; step 54: drawn below, then back to @@rloop
 @@done_t:
 	jmp	@@done
 
@@ -488,6 +487,115 @@ PUBLIC	ScaleShape
 	pop	si
 	pop	bp
 	ret
+
+;
+; NEC V30 build (step 54), StevenC & Claude: a one-pixel span -- nearly every
+; span of a sprite that is not close -- drawn here rather than through
+; ScaleSpan.  The work is ScaleSpan's exactly, for a width of 1: one byte,
+; its map mask 1<<pixel, and every post of the column.  Out of line, so the
+; loops' short branches keep their reach (see step 38); the right loop's
+; slinewidth is 1 again on the way back, as ScaleSpan kept it.
+;
+@@l1draw:
+	push	si
+	push	di
+	push	cx
+	push	bp
+	mov	cx,es					; CX = the scaler
+	mov	bx,si
+	sub	bx,[leftpix]
+	shl	bx,1
+	mov	es,[shapeseg]			; ES = the shape
+	mov	bp,[es:bx+DATAOFS]		; its post list for srcx
+	mov	bx,di
+	shr	di,2					; X in bytes
+	add	di,[bufferofs]
+	and	bx,3
+	mov	al,[onemask+bx]
+	mov	dx,SC_INDEX+1
+	out	dx,al					; set map mask register
+	mov	dx,SCREENSEG
+	mov	ds,cx					; DS = the scaler
+	mov	bx,[es:bp]				; table location of the rtl to patch
+	or	bx,bx
+	jz	@@l1done				; 0 ends the post list
+	EVEN
+@@l1post:
+	mov	bx,[bx]
+	mov	ah,[bx]					; save old value
+	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	mov	si,[es:bp+4]			; table location of entry spot
+	mov	si,[si]
+	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+2]			; corrected top of shape for this post
+	add	bp,6					; next post
+	mov	ds,dx					; DS = the screen
+	call	[DWORD ss:linescale]	; scale the post
+	mov	ds,cx					; DS = the scaler
+	mov	[bx],ah					; unpatch the RETF
+	mov	bx,[es:bp]
+	or	bx,bx
+	jnz	@@l1post
+@@l1done:
+	mov	ax,ss
+	mov	ds,ax
+	mov	es,cx					; ES = the scaler again
+	pop	bp
+	pop	cx
+	pop	di
+	pop	si
+	jmp	@@lloop
+
+@@r1draw:
+	push	si
+	push	di
+	push	cx
+	push	bp
+	mov	cx,es					; CX = the scaler
+	mov	bx,si
+	sub	bx,[leftpix]
+	shl	bx,1
+	mov	es,[shapeseg]			; ES = the shape
+	mov	bp,[es:bx+DATAOFS]		; its post list for srcx
+	mov	bx,di
+	shr	di,2					; X in bytes
+	add	di,[bufferofs]
+	and	bx,3
+	mov	al,[onemask+bx]
+	mov	dx,SC_INDEX+1
+	out	dx,al					; set map mask register
+	mov	dx,SCREENSEG
+	mov	ds,cx					; DS = the scaler
+	mov	bx,[es:bp]				; table location of the rtl to patch
+	or	bx,bx
+	jz	@@r1done				; 0 ends the post list
+	EVEN
+@@r1post:
+	mov	bx,[bx]
+	mov	ah,[bx]					; save old value
+	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	mov	si,[es:bp+4]			; table location of entry spot
+	mov	si,[si]
+	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+2]			; corrected top of shape for this post
+	add	bp,6					; next post
+	mov	ds,dx					; DS = the screen
+	call	[DWORD ss:linescale]	; scale the post
+	mov	ds,cx					; DS = the scaler
+	mov	[bx],ah					; unpatch the RETF
+	mov	bx,[es:bp]
+	or	bx,bx
+	jnz	@@r1post
+@@r1done:
+	mov	ax,ss
+	mov	ds,ax
+	mov	es,cx					; ES = the scaler again
+	pop	bp
+	pop	cx
+	pop	di
+	pop	si
+	mov	dx,1					; slinewidth
+	jmp	@@rloop
 ENDP
 
 
