@@ -1506,6 +1506,10 @@ PUBLIC	AsmRefresh
 	mov	[chvkey],8000h			; and the wall caches are empty
 	mov	[chhkey],8000h
 
+	mov	ax,[midangle]			; step 57: the frame's centre angle and width
+	mov	[WORD cs:pxmid+1],ax
+	mov	ax,[viewwidth]
+	mov	[WORD cs:npvw+2],ax
 	mov	[curquad],0				; the first ray patches its quadrant in
 	mov	[WORD cs:qlo+2],7FFFh	; and takes id's chain to get there
 	mov	[pixx],0
@@ -1533,12 +1537,14 @@ PUBLIC	AsmRefresh
 ;---------------------------------------------------------------------------
 	EVEN
 pixxloop:
+	mov	bx,[pixx]
+pixxbx:								; step 57: nextpix comes here with BX = pixx
+	shl	bx,1
 	mov	ax,SEG finetangent
 	mov	es,ax
-	mov	cx,[midangle]			; center of view area
-	mov	bx,[pixx]
-	shl	bx,1
-	add	cx,[pixelangle+bx]		; delta for this pixel
+pxmid:
+	mov	cx,1234h				; midangle, the center of view area (B9 iw:
+	add	cx,[pixelangle+bx]		; patched per frame), + delta for this pixel
 ;
 ; NEC V30 build, StevenC & Claude: a ray is nearly always in the quadrant
 ; of the ray before, and the test chain below cost two to four taken jumps
@@ -1615,7 +1621,7 @@ entry90:
 	inc	ax
 	mov	[WORD cs:ivxt+1],ax	; xtile = focaltx+xtilestep
 	shl	ax,6
-	mov	[WORD cs:ivx64+1],ax	; xtile<<6
+	mov	[WORD cs:ivx64+2],ax	; xtile<<6
 	mov	dx,[focalty]
 	dec	dx
 	mov	[WORD cs:ivyt+2],dx	; ytile = focalty+ytilestep
@@ -1652,8 +1658,8 @@ q1z:
 	mov	si,1234h
 	sub	bx,ax
 	sbb	si,dx
-	mov	[WORD yintercept],bx
-	mov	[WORD yintercept+2],si
+	push	si					; yintercept, for initvars (step 57)
+	push	bx
 ;
 ; xstep = finetangent[...], and times ypartialdown for xintercept
 ;
@@ -1727,7 +1733,7 @@ not90:
 	dec	ax
 	mov	[WORD cs:ivxt+1],ax	; xtile = focaltx+xtilestep
 	shl	ax,6
-	mov	[WORD cs:ivx64+1],ax	; xtile<<6
+	mov	[WORD cs:ivx64+2],ax	; xtile<<6
 	mov	dx,[focalty]
 	dec	dx
 	mov	[WORD cs:ivyt+2],dx	; ytile = focalty+ytilestep
@@ -1765,8 +1771,8 @@ q2z:
 	mov	si,1234h
 	sub	bx,ax
 	sbb	si,dx
-	mov	[WORD yintercept],bx
-	mov	[WORD yintercept+2],si
+	push	si					; yintercept, for initvars (step 57)
+	push	bx
 ;
 ; xstep = -finetangent[...], and times ypartialdown for xintercept
 ;
@@ -1843,7 +1849,7 @@ not180:
 	dec	ax
 	mov	[WORD cs:ivxt+1],ax	; xtile = focaltx+xtilestep
 	shl	ax,6
-	mov	[WORD cs:ivx64+1],ax	; xtile<<6
+	mov	[WORD cs:ivx64+2],ax	; xtile<<6
 	mov	dx,[focalty]
 	inc	dx
 	mov	[WORD cs:ivyt+2],dx	; ytile = focalty+ytilestep
@@ -1874,8 +1880,8 @@ q3y:
 	add	ax,1234h			; viewy, patched in per frame
 q3z:
 	adc	dx,1234h
-	mov	[WORD yintercept],ax
-	mov	[WORD yintercept+2],dx
+	push	dx					; yintercept, for initvars (step 57)
+	push	ax
 ;
 ; xstep = -finetangent[...], and times ypartialup for xintercept
 ;
@@ -1955,7 +1961,7 @@ entry360:
 	inc	ax
 	mov	[WORD cs:ivxt+1],ax	; xtile = focaltx+xtilestep
 	shl	ax,6
-	mov	[WORD cs:ivx64+1],ax	; xtile<<6
+	mov	[WORD cs:ivx64+2],ax	; xtile<<6
 	mov	dx,[focalty]
 	inc	dx
 	mov	[WORD cs:ivyt+2],dx	; ytile = focalty+ytilestep
@@ -1987,8 +1993,8 @@ q4y:
 	add	ax,1234h			; viewy, patched in per frame
 q4z:
 	adc	dx,1234h
-	mov	[WORD yintercept],ax
-	mov	[WORD yintercept+2],dx
+	push	dx					; yintercept, for initvars (step 57)
+	push	ax
 ;
 ; xstep = finetangent[...], and times ypartialup for xintercept
 ;
@@ -2032,8 +2038,8 @@ not360:
 ; viewy/viewx or subtracts it -- the same 32-bit result as id's, which
 ; negated the tangent, tested its sign here, negated it back, multiplied
 ; and negated the product.  The partial is in a register for both MULs,
-; and xtile<<6 is made once for xspot and T.  In: yintercept and
-; xintercept's low word stored, CX = xinttile.
+; and xtile<<6 is made once for xspot and T.  In: yintercept pushed (high
+; word first), BP = xintercept's low word, CX = xinttile.
 ;
 ;---------------------------------------------------------------------------
 initvars:
@@ -2042,12 +2048,12 @@ initvars:
 ; every ray of a quadrant in a frame, so the quadrant code patches them in.
 ;
 ivxt:
-	mov	si,1234h					; xtile = focaltx+xtilestep (BE iw: at +1)
-	mov	[xtile],si
-	mov	bx,si
+	mov	bx,1234h					; xtile = focaltx+xtilestep (BB iw: at +1);
+										; the hits store it (step 57)
+	pop	ax							; yintercept, from the quadrant code: AX
+	pop	si							; the low word, SI yinttile
 ivx64:
-	mov	si,1234h					; xtile<<6
-	add	si,[WORD yintercept+2]		; xspot = (xtile<<6) + yinttile
+	add	si,1234h					; xspot = (xtile<<6) + yinttile (81 C6 iw)
 ivt:
 	mov	dx,1234h					; T = (xtile<<6)+ytile
 	mov	di,cx
@@ -2055,7 +2061,7 @@ ivt:
 ivyt:
 	add	di,1234h					; yspot = (xinttile<<6) + ytile, ytile
 										; patched in (step 52: BP holds xintercept)
-	mov	ax,[WORD yintercept]		; NEC V30 build: AX = low word of yintercept
+										; NEC V30 build: AX = low word of yintercept
 									; (and no screen segment in ES: nothing
 									; from here to the next ray reads it --
 									; ScalePost loads its own)
@@ -2219,12 +2225,13 @@ hithoriz:
 ;---------------------------------------------------------------------------
 
 nextpix:
-	mov	ax,[pixx]
-	inc	ax
-	mov	[pixx],ax
-	cmp	ax,[viewwidth]
+	mov	bx,[pixx]
+	inc	bx
+	mov	[pixx],bx
+npvw:
+	cmp	bx,1234h				; viewwidth, patched per frame (81 FB iw)
 	jge	done
-	jmp	pixxloop
+	jmp	pixxbx
 done:
 	pop	bp
 	pop	di
