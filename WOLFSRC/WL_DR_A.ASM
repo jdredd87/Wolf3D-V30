@@ -1976,7 +1976,8 @@ PUBLIC	AsmRefresh
 ; 6 bytes and never did.)  Found when step 47 put per-frame values in that
 ; block: the whole-loop CRC on the 486 differed, and moved with the layout.
 ;
-	jmp	pixxloop
+	xor	bx,bx					; pixx, which is 0 (step 69: in at pixxbx)
+	jmp	pixxbx
 ;---------------------------------------------------------------------------
 ;
 ; Setup to trace a ray through pixx view pixel
@@ -1991,8 +1992,23 @@ PUBLIC	AsmRefresh
 ;
 ;---------------------------------------------------------------------------
 	EVEN
-pixxloop:
+;
+; NEC V30 build (step 69): a ray ends with one jump, to nextpix, which falls
+; into the next ray's setup; the frame's exit is a short jump back.
+;
+done:
+	pop	bp
+	pop	di
+	pop	si
+	retf
+	EVEN
+nextpix:
 	mov	bx,[pixx]
+	inc	bx
+	mov	[pixx],bx
+npvw:
+	cmp	bx,1234h				; viewwidth, patched per frame (81 FB iw)
+	jge	done
 pixxbx:								; step 57: nextpix comes here with BX = pixx
 	shl	bx,1
 	mov	ax,SEG finetangent
@@ -2041,7 +2057,7 @@ entry90:
 	cmp	[curquad],1				; NEC V30 build: the loop is patched for a
 	je	@@q1					; quadrant, and only a change of quadrant --
 	mov	[curquad],1				; twice a frame at most -- patches it again
-	mov	[WORD cs:qlo+2],0		; and the fast entry at pixxloop
+	mov	[WORD cs:qlo+2],0		; and the fast entry at pixxbx
 	mov	[WORD cs:qhi+2],DEG90
 	mov	ax,OFFSET @@q1		; rel16, computed here: TASM's own
 	sub	ax,OFFSET qjmp+3	; label arithmetic came out 6 bytes off
@@ -2152,7 +2168,7 @@ not90:
 	cmp	[curquad],2
 	je	@@q2
 	mov	[curquad],2
-	mov	[WORD cs:qlo+2],DEG90		; and the fast entry at pixxloop
+	mov	[WORD cs:qlo+2],DEG90		; and the fast entry at pixxbx
 	mov	[WORD cs:qhi+2],DEG180
 	mov	ax,OFFSET @@q2		; rel16, computed here: TASM's own
 	sub	ax,OFFSET qjmp+3	; label arithmetic came out 6 bytes off
@@ -2269,7 +2285,7 @@ not180:
 	cmp	[curquad],3
 	je	@@q3
 	mov	[curquad],3
-	mov	[WORD cs:qlo+2],DEG180		; and the fast entry at pixxloop
+	mov	[WORD cs:qlo+2],DEG180		; and the fast entry at pixxbx
 	mov	[WORD cs:qhi+2],DEG270
 	mov	ax,OFFSET @@q3		; rel16, computed here: TASM's own
 	sub	ax,OFFSET qjmp+3	; label arithmetic came out 6 bytes off
@@ -2380,7 +2396,7 @@ entry360:
 	cmp	[curquad],4
 	je	@@q4
 	mov	[curquad],4
-	mov	[WORD cs:qlo+2],DEG270		; and the fast entry at pixxloop
+	mov	[WORD cs:qlo+2],DEG270		; and the fast entry at pixxbx
 	mov	[WORD cs:qhi+2],DEG360
 	mov	ax,OFFSET @@q4		; rel16, computed here: TASM's own
 	sub	ax,OFFSET qjmp+3	; label arithmetic came out 6 bytes off
@@ -2677,19 +2693,7 @@ hithoriz:
 ;
 ;---------------------------------------------------------------------------
 
-nextpix:
-	mov	bx,[pixx]
-	inc	bx
-	mov	[pixx],bx
-npvw:
-	cmp	bx,1234h				; viewwidth, patched per frame (81 FB iw)
-	jge	done
-	jmp	pixxbx
-done:
-	pop	bp
-	pop	di
-	pop	si
-	retf
+; (step 69: nextpix and done are just before pixxbx, above)
 
 ;===========================================================================
 
