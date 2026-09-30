@@ -26,12 +26,16 @@
 	P186
 	JUMPS
 
+EXTRN	PML_GetPageC:FAR			; ID_PM.C: id's PM_GetPage
+
 DATASEG
 
 EXTRN	PMPages:DWORD				; PageListStruct far *
 EXTRN	ChunksInFile:WORD
 EXTRN	EMSPagesUsed:WORD
 EXTRN	mainOwner:WORD				; int[PMMaxMainMem]: the page in each main block
+EXTRN	MainMemPages:WORD			; memptr[PMMaxMainMem]: segments
+EXTRN	PMFrameCount:DWORD
 PMMAXMAIN	=	100				; PMMaxMainMem (ID_PM.H)
 lrubase		dw	0
 
@@ -44,6 +48,59 @@ P_LASTHIT	=	14
 P_SIZE		=	18
 
 CODESEG
+
+
+;============================
+;
+; PM_GetPage (int pagenum) -- step 58
+;
+; The C's result exactly when the page is in main memory:
+;
+;	if (pagenum < ChunksInFile && PMPages[pagenum].mainPage != -1
+;	 && (result = MainMemPages[PMPages[pagenum].mainPage]))
+;	{
+;		PMPages[pagenum].lastHit = PMFrameCount;
+;		return result;
+;	}
+;
+; and otherwise id's routine, reached with the caller's frame as it was.
+;
+;============================
+
+PROC	PM_GetPage
+PUBLIC	PM_GetPage
+	push	bp
+	mov	bp,sp
+	mov	bx,[bp+6]				; pagenum
+	cmp	bx,[ChunksInFile]
+	jae	@@slow					; unsigned, as the C compares it (and Quits)
+	mov	ax,bx
+	shl	ax,3
+	add	ax,bx
+	shl	ax,1					; pagenum*18
+	les	bx,[PMPages]
+	add	bx,ax					; ES:BX = &PMPages[pagenum]
+	mov	ax,[es:bx+P_MAINPAGE]
+	cmp	ax,-1
+	je	@@slow					; not in main memory
+	mov	dx,bx
+	mov	bx,ax
+	shl	bx,1
+	mov	ax,[MainMemPages+bx]
+	or	ax,ax
+	jz	@@slow
+	mov	bx,dx
+	mov	dx,[WORD PMFrameCount]
+	mov	[WORD es:bx+P_LASTHIT],dx
+	mov	dx,[WORD PMFrameCount+2]
+	mov	[WORD es:bx+P_LASTHIT+2],dx
+	pop	bp
+	ret
+@@slow:
+	pop	bp
+	jmp	PML_GetPageC
+ENDP
+
 
 PROC	PML_FindLRU
 PUBLIC	PML_FindLRU

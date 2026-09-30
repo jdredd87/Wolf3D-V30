@@ -876,8 +876,13 @@ PML_LoadPage(int pagenum,boolean mainonly)
 //		If not in XMS, load into Main Memory or EMS
 //
 #pragma warn -pia
+//
+// NEC V30 build (step 58), StevenC & Claude: PM_GetPage is in ID_PM_A.ASM,
+// which returns a page resident in main memory itself and comes here for
+// everything else.
+//
 memptr
-PM_GetPage(int pagenum)
+PML_GetPageC(int pagenum)
 {
 	memptr	result;
 
