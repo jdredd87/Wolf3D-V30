@@ -171,6 +171,7 @@ byte for byte.
 | 74 | *(tried, dropped)* the ray loop's hot jump targets EVEN-aligned (three quadrant bodies, `initvars`, `notvertdoor` and the new-column paths were at odd addresses): 746.7 -> 746.0, inside the noise, and the 486 slower | -- | -- |
 | 75 | a wall hit's intercepts and tiles stay in registers and are stored only where a post starts (the new-column and new-wall paths): a ray that only widens the current post -- the common case -- stores none of them. 0.54% (747.3 -> 743.3) | 743 | 4.87 |
 | 76 | `tilehit` stored only where it is read: the door paths store it on entry, and the new-wall path takes it from the wall key it has just saved (`lastkey>>7` is `tilehit` exactly) -- one store fewer on every ray. 743.7 -> 743.0, at the edge of the noise | **743** | **4.88** |
+| 77 | *(tried, dropped)* compiled blits for the weapon and the DEMO sign (drawn every frame): generated code writing each screen byte once per colour under a map mask of its planes -- half the screen writes of SimpleScaleShape, identical over the whole loop, and no faster (742.7 -> 744.7): the 18 KB of code cost the page cache 7 pages (87 -> 134 XMS page-ins over 200 frames), and the drawing it replaced was cheaper than it looked | -- | -- |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -196,6 +197,10 @@ frames had been compared with id's picture; the frame counts staying
 whatever the game does with it.
 
 ## Findings worth keeping
+
+**The weapon and the DEMO sign: what skipping them measures is not all drawing.** A build that skips `DrawPlayerWeapon` plays the benchmark 7.1% faster (743 -> 690), but step 77 drew the same shapes with half the screen writes and no call per post, and gained nothing: much of that 7.1% is the two shapes' pages in a page cache of 43, and any memory taken from the cache is paid back in XMS page-ins. Decoded from `VSWAP.WL6` at the 240x120 view: the DEMO sign is 2,418 pixels (8.4% of the view), the ready weapons 190-1,370, the chain gun firing about 3,100.
+
+**Borland C: `far` binds to each declarator, not to the declaration.** `byte far *vals,*planes;` makes `planes` a near pointer; assigning it a far address keeps only the offset, and the writes land in DGROUP. It cost step 77 a wrong picture and a hung 486 before the "suspicious pointer conversion" warning was read. Declare each far pointer on its own.
 
 **The weapon covers less of the view than it looks.** Decoded from `VSWAP.WL6` and placed as `SimpleScaleShape` places it (scale 60, the 120-high scaler, at the 240x120 view): the ready poses cover 1-6% of the view, the chain gun's firing frames about 11%, all of it in the lower half. Skipping the floor and wall pixels under it would save perhaps 0.3-0.5% for a row cut-off table per wall scaler; not yet worth it. (`stage/weapcover.py`.)
 
