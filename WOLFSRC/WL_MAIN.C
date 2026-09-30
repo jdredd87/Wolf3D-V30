@@ -1487,6 +1487,11 @@ void TimeDemo (void)
 		SD_SetSoundMode (sdm_Off);
 		SD_SetDigiDevice (sds_Off);
 	}
+	// the benchmark's view is 240x120 (size 15) whatever CONFIG.WL6 says, so a
+	// window resized in play cannot change what a run measures; MYVIEW keeps
+	// the player's.  TimeDemo exits without WriteConfig, so nothing is saved.
+	if (!MS_CheckParm ("myview") && viewsize != 15)
+		NewViewSize (15);
 	if (MS_CheckParm ("oplid"))
 	{
 		alDelayAddr = 6;		// OPLID: id's fixed OPL waits, for A/B listening

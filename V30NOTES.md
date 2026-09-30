@@ -145,7 +145,7 @@ byte for byte.
 | 48 | *(tried, dropped)* `ScaleSpan`'s per-shape values (the shape's segment, `leftpix`, `bufferofs`) as immediates patched by `ScaleShape` -- 832.0 against 832.3: those memory operands cost the V30 next to nothing there | -- | -- |
 | 49 | `ScalePostA` keeps only SI (its callers, the hit routines, need nothing else back); `PlaceStatics` holds its bound in CX, reloaded after the C calls | 812 | 4.46 |
 | 50 | `DoActor` in asm inside the actor loop, statement for statement, every field re-read after a think or action call -- 0.9% over the whole attract loop (19,964 -> 19,788 play ticks, 4.90 -> 4.95 fps); demo 0's first 200 frames, with few actors awake, do not show it | 812 | 4.46 |
-| 51 | "same wall as the last column?" is one compare of a key, tilehit<<7 | side<<6 | tile, built in registers by the ray loop -- id's test was four compares against memory; the C door, pushwall and frame-start code invalidate it. 1.05% (measured at 256x128: 854.7 -> 845.7; the 240x120 figure is re-measured with step 52) | **812** | **4.46** |
+| 51 | "same wall as the last column?" is one compare of a key -- tilehit, side and tile packed in one word by the ray loop, in registers it already holds; id's test was four compares against memory. The C door, pushwall and frame-start code invalidate it. 0.9% (812 -> 805) | **805** | **4.50** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -171,6 +171,8 @@ frames had been compared with id's picture; the frame counts staying
 whatever the game does with it.
 
 ## Findings worth keeping
+
+**The benchmark's view size is fixed at 240x120 now.** TIMEDEMO used whatever `CONFIG.WL6` held, and a window enlarged in play (size 16, 256x128) turned the next A/B into a comparison of a bigger view against a reference made at the smaller one -- the checksums no longer matched and the ticks were 5% higher, which read as a fault in the step being measured. TIMEDEMO now sets size 15 for the run unless `MYVIEW` is given, and exits without writing the config, so the player's own setting is untouched.
 
 **Borland's global optimiser (`-O2`): only where there is no inline assembly.** `TURBOC.CFG` has id's `-O`, which in Borland C++ 3.1 is jump optimisation only. `-O2` for the whole program built a binary 4 KB smaller that did not run -- it printed nothing and left the 486 unstable enough that the next job hung it (a power cycle). Its register allocation does not respect what id's inline `asm` blocks assume. Confined with `#pragma option -O2` to the four game-logic files that have no inline assembly (`WL_STATE.C`, `WL_ACT1.C`, `WL_ACT2.C`, `WL_AGENT.C`), it is identical to id's over the whole attract loop -- every demo still plays out move for move -- and 1.6 KB smaller. But over the whole attract loop on the V30 it measured 19,801 -> 19,782 play ticks, 0.1%: noise. Borland's C was already close for this code, so the pragmas were not kept -- a known-buggy optimiser for nothing measurable.
 
