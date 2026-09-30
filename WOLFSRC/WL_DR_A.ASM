@@ -34,12 +34,21 @@ EXTRN	PM_GetPage:FAR
 EXTRN	GetBonus:FAR
 EXTRN	CalcRotate:FAR
 EXTRN	RemoveObj:FAR
+EXTRN	SightPlayer:FAR				; step 63: the AI's calls into id's C
+EXTRN	OpenDoor:FAR
+EXTRN	TakeDamage:FAR
+EXTRN	BadWalkDir:FAR				; WL_STATE.C: Quit ("Walk: Bad dir")
+EXTRN	BadMoveDir:FAR				; WL_STATE.C: Quit ("MoveObj: bad dir!")
+EXTRN	TPathHitWall:FAR			; WL_ACT2.C: T_Path's sprintf and Quit
 EXTRN	NOLANGUAGE F_LDIV@:FAR		; Borland's signed long divide (H_LDIV.ASM)
 
 
 DATASEG
 
 EXTRN	viewwidth:WORD
+EXTRN	mapsegs:WORD				; unsigned _seg *mapsegs[MAPPLANES]
+EXTRN	farmapylookup:WORD			; unsigned [MAPSIZE]: y*64
+EXTRN	doorobjlist:BYTE			; doorobj_t [MAXDOORS], 9 bytes each
 
 EXTRN	tilemap:BYTE
 EXTRN	spotvis:BYTE
@@ -144,6 +153,10 @@ ceilcolor	dw	0				; the level's ceiling colour (both bytes)
 	PUBLIC	ceilcolor
 fixn		dw	0				; a short post's rows to fill, each side
 fixofs2		dw	0				; and where its floor part starts
+; step 63: a direction's step in x and in y -- east, northeast, north,
+; northwest, west, southwest, south, southeast
+dirdx		db	1,1,0,-1,-1,-1,0,1
+dirdy		db	0,-1,-1,-1,0,1,1,1
 clx1		dw	0				; CheckLine's working storage
 visord		dw	50 DUP (0)		; DrawVisList's drawing order (MAXVISABLE entries)
 cly1		dw	0
@@ -2654,6 +2667,505 @@ vertpushwall:
 
 
 
+ENDP
+
+
+;============================
+;
+; The path-walking AI -- NEC V30 build (step 63), StevenC & Claude
+;
+; TryWalk and MoveObj (WL_STATE.C), SelectPathDir and T_Path (WL_ACT2.C),
+; statement for statement.  Each is a FAR routine for the C and a NEAR body
+; with the actor in SI for the others, so T_Path -> SelectPathDir ->
+; TryWalk and T_Path -> MoveObj are near calls with no frames.
+;
+;============================
+
+OB_CLASS		=	4
+OB_DISTANCE		=	10
+OB_DIR			=	14
+OB_SPEED		=	46
+FL_SHOOTABLE	=	1
+C_INERT			=	2					; classtype
+C_DOG			=	6
+C_FAKE			=	9
+C_GHOST			=	15
+C_SPECTRE		=	21
+D_NODIR			=	8					; dirtype
+ICONARROWS		=	90
+AREATILE		=	107
+DOOR_ACTION		=	5					; doorobj_t, as the compiler lays it out:
+DOOR_SIZE		=	9					; bytes tilex, tiley, an int vertical, a
+										; byte lock, the int action, ticcount
+
+;
+; boolean TryWalk (objtype *ob)
+;
+;	CHECKDIAG(x,y): temp = actorat[x][y]; if (temp && (temp<256 ||
+;		((objtype *)temp)->flags & FL_SHOOTABLE)) return false;
+;	CHECKSIDE(x,y): temp = actorat[x][y]; if (temp) { if (temp<128) return
+;		false; if (temp<256) doornum = temp&63; else if (((objtype *)temp)->
+;		flags & FL_SHOOTABLE) return false; }
+;
+;	doornum = -1;
+;	if (ob->obclass == inertobj)
+;		ob->tilex/tiley step in ob->dir (nothing for nodir)
+;	else switch (ob->dir):
+;		east, north, west, south: dog or fake: CHECKDIAG, else CHECKSIDE, on
+;			the tile ahead; then step
+;		the diagonals: CHECKDIAG on (x+dx,y+dy), (x+dx,y), (x,y+dy); then step
+;		nodir: return false;  anything else: Quit ("Walk: Bad dir")
+;	if (doornum != -1)
+;		OpenDoor (doornum), ob->distance = -doornum-1, return true;
+;	ob->areanumber = *(mapsegs[0]+farmapylookup[ob->tiley]+ob->tilex)-AREATILE;
+;	ob->distance = TILEGLOBAL;  return true;
+;
+PROC	TryWalk
+PUBLIC	TryWalk
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	si,[bp+6]
+	call	TryWalkN
+	pop	di
+	pop	si
+	pop	bp
+	ret
+ENDP
+
+; SI = the actor; returns AX; keeps SI and BP
+PROC	TryWalkN NEAR
+	mov	di,-1					; doornum
+	mov	bx,[si+OB_DIR]
+	cmp	[WORD si+OB_CLASS],C_INERT
+	jne	@@check
+	cmp	bx,D_NODIR
+	jae	@@placed				; the C's switch has no case for these
+	jmp	@@step
+
+@@check:
+	cmp	bx,D_NODIR
+	jb	@@dir
+	je	@@false
+	call	BadWalkDir			; Quits
+@@dir:
+	mov	al,[dirdx+bx]
+	cbw
+	mov	cx,ax					; CX = dx
+	mov	al,[dirdy+bx]
+	cbw
+	mov	dx,ax					; DX = dy
+	test	bl,1
+	jnz	@@diag
+;
+; east, north, west, south: the tile ahead
+;
+	mov	bx,[si+OB_TILEX]
+	add	bx,cx
+	shl	bx,6
+	add	bx,[si+OB_TILEY]
+	add	bx,dx
+	shl	bx,1
+	mov	bx,[actorat+bx]
+	or	bx,bx
+	jz	@@stepdir
+	mov	ax,[si+OB_CLASS]
+	cmp	ax,C_DOG
+	je	@@cdiag
+	cmp	ax,C_FAKE
+	je	@@cdiag
+	cmp	bx,128					; CHECKSIDE
+	jb	@@false
+	cmp	bx,256
+	jae	@@shoot
+	mov	di,bx
+	and	di,63					; doornum = temp&63
+	jmp	@@stepdir
+@@cdiag:
+	cmp	bx,256					; CHECKDIAG
+	jb	@@false
+@@shoot:
+	test	[BYTE bx+OB_FLAGS],FL_SHOOTABLE
+	jnz	@@false
+	jmp	@@stepdir
+;
+; the diagonals: (x+dx,y+dy), (x+dx,y), (x,y+dy), all CHECKDIAG
+;
+@@diag:
+	mov	bx,[si+OB_TILEX]
+	add	bx,cx
+	shl	bx,6
+	add	bx,[si+OB_TILEY]
+	mov	ax,bx					; (x+dx)<<6 + y
+	add	bx,dx
+	shl	bx,1
+	mov	bx,[actorat+bx]
+	or	bx,bx
+	jz	@@d1
+	cmp	bx,256
+	jb	@@false
+	test	[BYTE bx+OB_FLAGS],FL_SHOOTABLE
+	jnz	@@false
+@@d1:
+	mov	bx,ax
+	shl	bx,1
+	mov	bx,[actorat+bx]
+	or	bx,bx
+	jz	@@d2
+	cmp	bx,256
+	jb	@@false
+	test	[BYTE bx+OB_FLAGS],FL_SHOOTABLE
+	jnz	@@false
+@@d2:
+	mov	bx,[si+OB_TILEX]
+	shl	bx,6
+	add	bx,[si+OB_TILEY]
+	add	bx,dx
+	shl	bx,1
+	mov	bx,[actorat+bx]
+	or	bx,bx
+	jz	@@stepdir
+	cmp	bx,256
+	jb	@@false
+	test	[BYTE bx+OB_FLAGS],FL_SHOOTABLE
+	jnz	@@false
+@@stepdir:
+	mov	bx,[si+OB_DIR]
+@@step:
+	mov	al,[dirdx+bx]
+	cbw
+	add	[si+OB_TILEX],ax
+	mov	al,[dirdy+bx]
+	cbw
+	add	[si+OB_TILEY],ax
+@@placed:
+	cmp	di,-1
+	je	@@area
+	push	di
+	call	OpenDoor
+	add	sp,2
+	mov	ax,di
+	neg	ax
+	dec	ax						; -doornum-1
+	cwd
+	mov	[si+OB_DISTANCE],ax
+	mov	[si+OB_DISTANCE+2],dx
+	mov	ax,1
+	ret
+@@area:
+	mov	bx,[si+OB_TILEY]
+	shl	bx,1
+	mov	bx,[farmapylookup+bx]
+	add	bx,[si+OB_TILEX]
+	shl	bx,1
+	mov	es,[mapsegs]			; plane 0
+	mov	al,[es:bx]
+	sub	al,AREATILE
+	mov	[si+OB_AREANUMBER],al
+	mov	[WORD si+OB_DISTANCE],0
+	mov	[WORD si+OB_DISTANCE+2],1	; TILEGLOBAL
+	mov	ax,1
+	ret
+@@false:
+	xor	ax,ax
+	ret
+ENDP
+
+;
+; void SelectPathDir (objtype *ob)
+;
+;	spot = MAPSPOT(ob->tilex,ob->tiley,1)-ICONARROWS;	(unsigned)
+;	if (spot<8) ob->dir = spot;
+;	ob->distance = TILEGLOBAL;
+;	if (!TryWalk (ob)) ob->dir = nodir;
+;
+PROC	SelectPathDir
+PUBLIC	SelectPathDir
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	si,[bp+6]
+	call	SelectPathDirN
+	pop	di
+	pop	si
+	pop	bp
+	ret
+ENDP
+
+PROC	SelectPathDirN NEAR			; SI = the actor; keeps SI and BP
+	mov	bx,[si+OB_TILEY]
+	shl	bx,1
+	mov	bx,[farmapylookup+bx]
+	add	bx,[si+OB_TILEX]
+	shl	bx,1
+	mov	es,[mapsegs+2]			; plane 1
+	mov	ax,[es:bx]
+	sub	ax,ICONARROWS
+	cmp	ax,8
+	jae	@@same
+	mov	[si+OB_DIR],ax
+@@same:
+	mov	[WORD si+OB_DISTANCE],0
+	mov	[WORD si+OB_DISTANCE+2],1	; TILEGLOBAL
+	call	TryWalkN
+	or	ax,ax
+	jnz	@@ok
+	mov	[WORD si+OB_DIR],D_NODIR
+@@ok:
+	ret
+ENDP
+
+;
+; void MoveObj (objtype *ob, long move)
+;
+;	ob->x, ob->y += move in ob->dir (nodir: return; else Quit)
+;	if (areabyplayer[ob->areanumber])
+;	{
+;		deltax = ob->x - player->x;  if outside +-MINACTORDIST goto moveok
+;		deltay = ob->y - player->y;  likewise
+;		if (ob->obclass == ghostobj || ob->obclass == spectreobj)
+;			TakeDamage (tics*2,ob);
+;		the move taken back;  return;
+;	}
+;	moveok: ob->distance -= move;
+;
+PROC	MoveObj
+PUBLIC	MoveObj
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	si,[bp+6]
+	mov	ax,[bp+8]
+	mov	dx,[bp+10]
+	call	MoveObjN
+	pop	di
+	pop	si
+	pop	bp
+	ret
+ENDP
+
+PROC	MoveObjN NEAR				; SI = the actor, DX:AX = move; keeps SI, BP
+	mov	bx,[si+OB_DIR]
+	cmp	bx,D_NODIR
+	jb	@@go
+	je	@@ret
+	call	BadMoveDir			; Quits
+@@go:
+	mov	cx,ax
+	mov	di,dx					; DI:CX = move
+	cmp	[dirdx+bx],0
+	je	@@noxx
+	jl	@@subx
+	add	[si+OB_X],cx
+	adc	[si+OB_X+2],di
+	jmp	@@noxx
+@@subx:
+	sub	[si+OB_X],cx
+	sbb	[si+OB_X+2],di
+@@noxx:
+	cmp	[dirdy+bx],0
+	je	@@noyy
+	jl	@@suby
+	add	[si+OB_Y],cx
+	adc	[si+OB_Y+2],di
+	jmp	@@noyy
+@@suby:
+	sub	[si+OB_Y],cx
+	sbb	[si+OB_Y+2],di
+@@noyy:
+	mov	bl,[si+OB_AREANUMBER]
+	xor	bh,bh
+	shl	bx,1
+	cmp	[areabyplayer+bx],0
+	je	@@moveok
+	mov	bx,[player]
+	mov	ax,[si+OB_X]
+	mov	dx,[si+OB_X+2]
+	sub	ax,[bx+OB_X]
+	sbb	dx,[bx+OB_X+2]			; deltax
+	cmp	dx,-1
+	jl	@@moveok				; < -MINACTORDIST (FFFF:0000)
+	cmp	dx,1
+	jl	@@xin
+	jg	@@moveok
+	or	ax,ax
+	jnz	@@moveok				; > MINACTORDIST (0001:0000)
+@@xin:
+	mov	ax,[si+OB_Y]
+	mov	dx,[si+OB_Y+2]
+	sub	ax,[bx+OB_Y]
+	sbb	dx,[bx+OB_Y+2]			; deltay
+	cmp	dx,-1
+	jl	@@moveok
+	cmp	dx,1
+	jl	@@yin
+	jg	@@moveok
+	or	ax,ax
+	jnz	@@moveok
+@@yin:
+	mov	ax,[si+OB_CLASS]
+	cmp	ax,C_GHOST
+	je	@@hurt
+	cmp	ax,C_SPECTRE
+	jne	@@back
+@@hurt:
+	push	cx
+	push	si						; TakeDamage (tics*2,ob)
+	mov	ax,[tics]
+	shl	ax,1
+	push	ax
+	call	TakeDamage
+	add	sp,4
+	pop	cx						; (DI is kept by the C)
+@@back:
+	mov	bx,[si+OB_DIR]			; back up
+	cmp	bx,D_NODIR
+	jae	@@ret
+	cmp	[dirdx+bx],0
+	je	@@bnox
+	jl	@@baddx
+	sub	[si+OB_X],cx
+	sbb	[si+OB_X+2],di
+	jmp	@@bnox
+@@baddx:
+	add	[si+OB_X],cx
+	adc	[si+OB_X+2],di
+@@bnox:
+	cmp	[dirdy+bx],0
+	je	@@ret
+	jl	@@baddy
+	sub	[si+OB_Y],cx
+	sbb	[si+OB_Y+2],di
+	ret
+@@baddy:
+	add	[si+OB_Y],cx
+	adc	[si+OB_Y+2],di
+@@ret:
+	ret
+@@moveok:
+	sub	[si+OB_DISTANCE],cx
+	sbb	[si+OB_DISTANCE+2],di
+	ret
+ENDP
+
+;
+; void T_Path (objtype *ob)
+;
+;	if (SightPlayer (ob)) return;
+;	if (ob->dir == nodir) { SelectPathDir (ob); if (ob->dir == nodir) return; }
+;	move = ob->speed*tics;
+;	while (move)
+;	{
+;		if (ob->distance < 0)
+;		{
+;			OpenDoor (-ob->distance-1);
+;			if (doorobjlist[-ob->distance-1].action != dr_open) return;
+;			ob->distance = TILEGLOBAL;
+;		}
+;		if (move < ob->distance) { MoveObj (ob,move); break; }
+;		if (ob->tilex>MAPSIZE || ob->tiley>MAPSIZE) Quit (...);
+;		ob->x = ((long)ob->tilex<<TILESHIFT)+TILEGLOBAL/2;
+;		ob->y = ((long)ob->tiley<<TILESHIFT)+TILEGLOBAL/2;
+;		move -= ob->distance;
+;		SelectPathDir (ob);
+;		if (ob->dir == nodir) return;
+;	}
+;
+PROC	T_Path
+PUBLIC	T_Path
+	push	bp
+	mov	bp,sp
+	sub	sp,4					; move: [bp-4] low, [bp-2] high
+	push	si
+	push	di
+	mov	si,[bp+6]
+	push	si
+	call	SightPlayer
+	add	sp,2
+	or	ax,ax
+	jnz	@@ret
+	cmp	[WORD si+OB_DIR],D_NODIR
+	jne	@@go
+	call	SelectPathDirN
+	cmp	[WORD si+OB_DIR],D_NODIR
+	je	@@ret
+@@go:
+	mov	ax,[si+OB_SPEED]		; move = speed*tics, the low 32 bits
+	mul	[tics]
+	mov	[bp-4],ax
+	mov	cx,dx
+	mov	ax,[si+OB_SPEED+2]
+	mul	[tics]
+	add	ax,cx
+	mov	[bp-2],ax
+	jmp	@@test
+
+@@loop:
+	cmp	[WORD si+OB_DISTANCE+2],0
+	jge	@@notdoor				; distance < 0: waiting for a door
+	mov	ax,[si+OB_DISTANCE]
+	neg	ax
+	dec	ax
+	push	ax
+	call	OpenDoor
+	add	sp,2
+	mov	ax,[si+OB_DISTANCE]
+	neg	ax
+	mov	dx,DOOR_SIZE
+	imul	dx
+	mov	bx,ax
+	cmp	[WORD doorobjlist-DOOR_SIZE+DOOR_ACTION+bx],0	; dr_open
+	jne	@@ret
+	mov	[WORD si+OB_DISTANCE],0
+	mov	[WORD si+OB_DISTANCE+2],1	; TILEGLOBAL
+@@notdoor:
+	mov	ax,[si+OB_DISTANCE+2]
+	cmp	ax,[bp-2]
+	jl	@@whole					; distance < move
+	jg	@@part
+	mov	ax,[si+OB_DISTANCE]
+	cmp	ax,[bp-4]
+	jbe	@@whole
+@@part:
+	mov	ax,[bp-4]				; move < distance: MoveObj (ob,move)
+	mov	dx,[bp-2]
+	call	MoveObjN
+	jmp	@@ret
+@@whole:
+	cmp	[WORD si+OB_TILEX],64
+	ja	@@wall
+	cmp	[WORD si+OB_TILEY],64
+	jbe	@@center
+@@wall:
+	push	si
+	call	TPathHitWall			; Quits
+@@center:
+	mov	ax,[si+OB_TILEX]
+	mov	[WORD si+OB_X],8000h	; tile<<TILESHIFT + TILEGLOBAL/2
+	mov	[si+OB_X+2],ax
+	mov	ax,[si+OB_TILEY]
+	mov	[WORD si+OB_Y],8000h
+	mov	[si+OB_Y+2],ax
+	mov	ax,[si+OB_DISTANCE]
+	sub	[bp-4],ax
+	mov	ax,[si+OB_DISTANCE+2]
+	sbb	[bp-2],ax
+	call	SelectPathDirN
+	cmp	[WORD si+OB_DIR],D_NODIR
+	je	@@ret
+@@test:
+	mov	ax,[bp-4]
+	or	ax,[bp-2]
+	jnz	@@loop
+@@ret:
+	pop	di
+	pop	si
+	mov	sp,bp
+	pop	bp
+	ret
 ENDP
 
 

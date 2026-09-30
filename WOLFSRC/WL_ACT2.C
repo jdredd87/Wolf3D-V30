@@ -3337,23 +3337,9 @@ void T_DogChase (objtype *ob)
 ===============
 */
 
-void SelectPathDir (objtype *ob)
-{
-	unsigned spot;
-
-	spot = MAPSPOT(ob->tilex,ob->tiley,1)-ICONARROWS;
-
-	if (spot<8)
-	{
-	// new direction
-		ob->dir = spot;
-	}
-
-	ob->distance = TILEGLOBAL;
-
-	if (!TryWalk (ob))
-		ob->dir = nodir;
-}
+// SelectPathDir is in WL_DR_A.ASM since the NEC V30 build (step 63,
+// StevenC & Claude)
+void SelectPathDir (objtype *ob);
 
 
 /*
@@ -3364,61 +3350,13 @@ void SelectPathDir (objtype *ob)
 ===============
 */
 
-void T_Path (objtype *ob)
+// T_Path is in WL_DR_A.ASM since the NEC V30 build (step 63, StevenC & Claude)
+
+void TPathHitWall (objtype *ob)		// its Quit, for the asm
 {
-	long 	move;
-	long 	deltax,deltay,size;
-
-	if (SightPlayer (ob))
-		return;
-
-	if (ob->dir == nodir)
-	{
-		SelectPathDir (ob);
-		if (ob->dir == nodir)
-			return;					// all movement is blocked
-	}
-
-
-	move = ob->speed*tics;
-
-	while (move)
-	{
-		if (ob->distance < 0)
-		{
-		//
-		// waiting for a door to open
-		//
-			OpenDoor (-ob->distance-1);
-			if (doorobjlist[-ob->distance-1].action != dr_open)
-				return;
-			ob->distance = TILEGLOBAL;	// go ahead, the door is now opoen
-		}
-
-		if (move < ob->distance)
-		{
-			MoveObj (ob,move);
-			break;
-		}
-
-		if (ob->tilex>MAPSIZE || ob->tiley>MAPSIZE)
-		{
-			sprintf (str,"T_Path hit a wall at %u,%u, dir %u"
-			,ob->tilex,ob->tiley,ob->dir);
-			Quit (str);
-		}
-
-
-
-		ob->x = ((long)ob->tilex<<TILESHIFT)+TILEGLOBAL/2;
-		ob->y = ((long)ob->tiley<<TILESHIFT)+TILEGLOBAL/2;
-		move -= ob->distance;
-
-		SelectPathDir (ob);
-
-		if (ob->dir == nodir)
-			return;					// all movement is blocked
-	}
+	sprintf (str,"T_Path hit a wall at %u,%u, dir %u"
+	,ob->tilex,ob->tiley,ob->dir);
+	Quit (str);
 }
 
 
