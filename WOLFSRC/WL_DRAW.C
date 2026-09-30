@@ -77,6 +77,8 @@ void	ThreeDRefresh (void);
 //
 int		lastside;		// true for vertical
 long	lastintercept;
+extern	unsigned lastkey;	// WL_DR_A.ASM (step 51): invalidated wherever
+							// lastside or lasttilehit change here
 int		lasttilehit;
 
 
@@ -415,6 +417,8 @@ void HitHorizDoor (void)
 			ScalePost ();			// draw last post
 	// first pixel in this door
 		lastside = 2;
+		lastkey = 0xFFFF;
+		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
 		postx = pixx;
 		postwidth = 1;
@@ -487,6 +491,8 @@ void HitVertDoor (void)
 			ScalePost ();			// draw last post
 	// first pixel in this door
 		lastside = 2;
+		lastkey = 0xFFFF;
+		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
 		postx = pixx;
 		postwidth = 1;
@@ -570,6 +576,7 @@ void HitHorizPWall (void)
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();
 
+		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
 		postx = pixx;
 		postwidth = 1;
@@ -638,6 +645,7 @@ void HitVertPWall (void)
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();
 
+		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
 		postx = pixx;
 		postwidth = 1;
@@ -1031,6 +1039,7 @@ void WallRefresh (void)
 	ypartialup = TILEGLOBAL-ypartialdown;
 
 	lastside = -1;			// the first pixel is on a new wall
+	lastkey = 0xFFFF;
 	AsmRefresh ();
 	ScalePost ();			// no more optimization on last post
 }

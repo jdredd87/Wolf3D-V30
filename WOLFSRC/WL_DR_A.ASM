@@ -127,6 +127,8 @@ chhgylo		dw	0
 chhgyhi		dw	0
 tsave		dw	0				; T, across a door or pushwall test
 yadj		dw	64				; xtilestep<<6, as added into vyadc's word
+lastkey		dw	0FFFFh			; step 51: tilehit<<7 | side<<6 | tile of the last
+	PUBLIC	lastkey					; wall post, or FFFFh (C invalidates it)
 clx1		dw	0				; CheckLine's working storage
 visord		dw	50 DUP (0)		; DrawVisList's drawing order (MAXVISABLE entries)
 cly1		dw	0
@@ -806,16 +808,14 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	si,ax
 	inc	[WORD xintercept+2]		; xintercept += TILEGLOBAL
 @@tex:
-	cmp	[lastside],1
-	jne	@@newwall
-	mov	ax,[xtile]
-	cwd							; lastintercept is a long
-	cmp	ax,[WORD lastintercept]
-	jne	@@newwall
-	cmp	dx,[WORD lastintercept+2]
-	jne	@@newwall
-	mov	ax,[tilehit]
-	cmp	ax,[lasttilehit]
+;
+; NEC V30 build (step 51): id's test -- lastside, both words of
+; lastintercept and lasttilehit, four compares against memory -- is one
+; compare of the key AsmRefresh built in CX: tilehit<<7 | side<<6 | tile.
+; Tiles are under 64 and tilehit a byte, so the key holds all three
+; exactly, never FFFFh; C invalidates it wherever it changes that state.
+;
+	cmp	cx,[lastkey]
 	jne	@@newwall
 	cmp	si,[WORD postsource]
 	jne	@@newcol
@@ -837,6 +837,7 @@ PUBLIC	HitVertWallA				; public only so profiles can name it
 	mov	[postx],ax
 	ret
 @@newwall:
+	mov	[lastkey],cx
 	call	CalcHeightV
 	mov	bx,[pixx]
 	shl	bx,1
@@ -897,16 +898,14 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	sub	ax,si
 	mov	si,ax
 @@tex:
-	cmp	[lastside],0
-	jne	@@newwall
-	mov	ax,[ytile]
-	cwd
-	cmp	ax,[WORD lastintercept]
-	jne	@@newwall
-	cmp	dx,[WORD lastintercept+2]
-	jne	@@newwall
-	mov	ax,[tilehit]
-	cmp	ax,[lasttilehit]
+;
+; NEC V30 build (step 51): id's test -- lastside, both words of
+; lastintercept and lasttilehit, four compares against memory -- is one
+; compare of the key AsmRefresh built in CX: tilehit<<7 | side<<6 | tile.
+; Tiles are under 64 and tilehit a byte, so the key holds all three
+; exactly, never FFFFh; C invalidates it wherever it changes that state.
+;
+	cmp	cx,[lastkey]
 	jne	@@newwall
 	cmp	si,[WORD postsource]
 	jne	@@newcol
@@ -928,6 +927,7 @@ PUBLIC	HitHorizWallA				; public only so profiles can name it
 	mov	[postx],ax
 	ret
 @@newwall:
+	mov	[lastkey],cx
 	call	CalcHeightH
 	mov	bx,[pixx]
 	shl	bx,1
@@ -2183,6 +2183,11 @@ notvertdoor:
 	add	dx,si						; yinttile = xspot-(xtile<<6)
 	mov	[WORD yintercept+2],dx
 	mov	[ytile],dx
+	mov	ch,al						; the wall key: tilehit<<7 | 40h (vertical)
+	xor	cl,cl						;  | xtile -- AL is still tilehit, BX xtile
+	shr	cx,1
+	or	cl,bl
+	or	cl,40h
 	call	HitVertWallA			; NEAR, WL_DR_A.ASM (was the far C routine)
 	jmp nextpix
 
@@ -2199,6 +2204,10 @@ hithoriz:
 	mov	[WORD yintercept],0
 	mov	[WORD yintercept+2],bp
 	mov	[ytile],bp
+	mov	ch,al						; the wall key: tilehit<<7 | ytile
+	xor	cl,cl
+	shr	cx,1
+	or	cx,bp
 	call	HitHorizWallA			; NEAR, WL_DR_A.ASM (was the far C routine)
 	jmp nextpix
 

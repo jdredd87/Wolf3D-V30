@@ -144,7 +144,8 @@ byte for byte.
 | 47 | the ray setup's per-frame values -- `viewx`/`viewy`, the partials, and xtile, xtile<<6, ytile and T for the quadrant -- patched in as immediates by the quadrant's patch block, which runs on each frame's first ray and on a change of quadrant | 815 | 4.44 |
 | 48 | *(tried, dropped)* `ScaleSpan`'s per-shape values (the shape's segment, `leftpix`, `bufferofs`) as immediates patched by `ScaleShape` -- 832.0 against 832.3: those memory operands cost the V30 next to nothing there | -- | -- |
 | 49 | `ScalePostA` keeps only SI (its callers, the hit routines, need nothing else back); `PlaceStatics` holds its bound in CX, reloaded after the C calls | 812 | 4.46 |
-| 50 | `DoActor` in asm inside the actor loop, statement for statement, every field re-read after a think or action call -- 0.9% over the whole attract loop (19,964 -> 19,788 play ticks, 4.90 -> 4.95 fps); demo 0's first 200 frames, with few actors awake, do not show it | **812** | **4.46** |
+| 50 | `DoActor` in asm inside the actor loop, statement for statement, every field re-read after a think or action call -- 0.9% over the whole attract loop (19,964 -> 19,788 play ticks, 4.90 -> 4.95 fps); demo 0's first 200 frames, with few actors awake, do not show it | 812 | 4.46 |
+| 51 | "same wall as the last column?" is one compare of a key, tilehit<<7 | side<<6 | tile, built in registers by the ray loop -- id's test was four compares against memory; the C door, pushwall and frame-start code invalidate it. 1.05% (measured at 256x128: 854.7 -> 845.7; the 240x120 figure is re-measured with step 52) | **812** | **4.46** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
