@@ -214,6 +214,36 @@ fraclab:
 done:
 ENDM
 
+; The same with the sign in BP, for CalcHeightV and CalcHeightH (step 61):
+; their callers need SI back and nothing else, so they keep no registers.
+MACRO	FIXBYFRACB	signlab,fraclab
+	LOCAL	pos,done
+	mov	cx,dx
+signlab:
+	mov	bp,1234h
+	or	cx,cx
+	jns	pos
+	neg	cx
+	neg	ax
+	sbb	cx,0
+	xor	bp,8000h
+pos:
+fraclab:
+	mov	bx,1234h
+	mul	bx
+	mov	di,dx
+	mov	ax,cx
+	mul	bx
+	add	ax,di
+	adc	dx,0
+	test	bp,8000h
+	jz	done
+	neg	dx
+	neg	ax
+	sbb	dx,0
+done:
+ENDM
+
 ; NEC V30 build: viewx, viewy, viewcos, viewsin, mindist and heightnumerator
 ; do not change during a frame, so they are immediates here, patched in by
 ; AsmRefresh before it traces the first ray (the 1234h placeholders force
@@ -285,8 +315,7 @@ ENDP
 ; start of every frame, as the view has changed.
 ;
 PROC	CalcHeightV NEAR
-	push	si
-	push	di
+								; (step 61: nothing kept; the sign is in BP)
 	mov	ax,[WORD xintercept+2]
 	cmp	ax,[chvkey]
 	jne	@@miss
@@ -302,7 +331,7 @@ cvvylo:
 	sub	ax,1234h				; viewy
 cvvyhi:
 	sbb	dx,1234h
-	FIXBYFRACI	cvsinsign,cvsinfrac	; dx:ax = gyt
+	FIXBYFRACB	cvsinsign,cvsinfrac	; dx:ax = gyt
 
 	pop	bx
 	pop	cx					; cx:bx = gxt
@@ -330,8 +359,6 @@ cvhnhi:
 	mov	dx,1234h			; (BA iw)
 	idiv	bx
 
-	pop	di
-	pop	si
 	ret
 
 @@miss:
@@ -342,22 +369,21 @@ cvvxlo:
 	sub	ax,1234h				; viewx, low word (2D iw: at +1)
 cvvxhi:
 	sbb	dx,1234h				; high word (81 DA iw: at +2)
-	FIXBYFRACI	cvcossign,cvcosfrac	; dx:ax = gxt
+	FIXBYFRACB	cvcossign,cvcosfrac	; dx:ax = gxt
 	mov	[chvgxlo],ax
 	mov	[chvgxhi],dx
 	jmp	@@have
 ENDP
 
 PROC	CalcHeightH NEAR
-	push	si
-	push	di
+								; (step 61: nothing kept; the sign is in BP)
 	mov	ax,[WORD xintercept]
 	mov	dx,[WORD xintercept+2]
 czvxlo:
 	sub	ax,1234h				; viewx, low word (2D iw: at +1)
 czvxhi:
 	sbb	dx,1234h				; high word (81 DA iw: at +2)
-	FIXBYFRACI	czcossign,czcosfrac	; dx:ax = gxt
+	FIXBYFRACB	czcossign,czcosfrac	; dx:ax = gxt
 	push	dx
 	push	ax
 
@@ -393,8 +419,6 @@ czhnhi:
 	mov	dx,1234h			; (BA iw)
 	idiv	bx
 
-	pop	di
-	pop	si
 	ret
 
 @@miss:
@@ -405,7 +429,7 @@ czvylo:
 	sub	ax,1234h				; viewy
 czvyhi:
 	sbb	dx,1234h
-	FIXBYFRACI	czsinsign,czsinfrac	; dx:ax = gyt
+	FIXBYFRACB	czsinsign,czsinfrac	; dx:ax = gyt
 	mov	[chhgylo],ax
 	mov	[chhgyhi],dx
 	jmp	@@have
