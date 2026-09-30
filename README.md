@@ -29,7 +29,7 @@ were a test suite.
 | speed | **4.90 fps** over all four demos, **4.95 in play** (was 4.05 before steps 27-50); demo 0 in full **2.75 -> 4.56 fps, 1.66x**; the 200-frame benchmark 4.72 fps in play |
 | picture | identical to id's renderer over the whole attract loop -- all four demos, 5,386 frames, every 50th checksummed, the 3-D view and the whole screen (`ab.py --full`, on the 486) |
 | music | identical to id's: the same register writes on the same ticks (`MUSICLOG`) |
-| optimisations | 57 steps so far -- see [V30NOTES.md](V30NOTES.md) |
+| optimisations | 58 steps so far -- see [V30NOTES.md](V30NOTES.md) |
 
 ## Running it
 

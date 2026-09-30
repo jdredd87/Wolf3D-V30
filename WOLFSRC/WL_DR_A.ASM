@@ -619,23 +619,70 @@ PUBLIC	PlaceStatics
 	mov	si,OFFSET statobjlist		; SI = statptr
 	mov	al,[BYTE vismark]
 	mov	[BYTE cs:@@mark+2],al		; this frame's mark, as an immediate below
+	mov	[BYTE cs:@@mark0+2],al
+	mov	[BYTE cs:@@mark1+2],al
+	mov	[BYTE cs:@@mark2+2],al
+	mov	[BYTE cs:@@mark3+2],al
 	mov	cx,[laststatobj]			; NEC V30 build (step 49): the bound in CX
-	jmp	@@test
+	jmp	@@test4						; (taken: a 486 runs the patched bytes)
 
 ; Laid out for the V30: an object not seen this frame -- nearly all of them
 ; -- falls straight through to the next; only a seen one jumps out.
+;
+; NEC V30 build (step 59): four at a time while four are left, then one at
+; a time.  A seen one goes to @@seenstat with SI on it, and @@next carries on
+; from the one after, so the order is the C's.  DX = the bound less three
+; statics, remade after every C call (as CX is).
+;
 	EVEN
+@@loop4:
+	mov	bx,[si+ST_VISSPOT]
+@@mark0:
+	cmp	[BYTE bx],0					; (the 0 is vismark, patched above)
+	je	@@seen0
+	mov	bx,[si+ST_SIZE+ST_VISSPOT]
+@@mark1:
+	cmp	[BYTE bx],0
+	je	@@seen1
+	mov	bx,[si+2*ST_SIZE+ST_VISSPOT]
+@@mark2:
+	cmp	[BYTE bx],0
+	je	@@seen2
+	mov	bx,[si+3*ST_SIZE+ST_VISSPOT]
+@@mark3:
+	cmp	[BYTE bx],0
+	je	@@seen3
+	add	si,4*ST_SIZE
+@@test4:
+	mov	dx,cx
+	sub	dx,3*ST_SIZE
+	cmp	si,dx
+	jb	@@loop4						; four or more left
+	jmp	@@test
+
+@@seen3:
+	add	si,ST_SIZE
+@@seen2:
+	add	si,ST_SIZE
+@@seen1:
+	add	si,ST_SIZE
+@@seen0:
+	jmp	@@seenstat
+
 @@loop:
 	mov	bx,[si+ST_VISSPOT]			; (both tests are pure: order is free)
 @@mark:
 	cmp	[BYTE bx],0					; (the 0 is vismark, patched above)
 	je	@@seenstat
-@@next:
 	add	si,ST_SIZE
 @@test:
 	cmp	si,cx
 	jne	@@loop
 	jmp	@@statdone
+
+@@next:
+	add	si,ST_SIZE
+	jmp	@@test4
 
 @@seenstat:
 	mov	ax,[si+ST_SHAPENUM]
