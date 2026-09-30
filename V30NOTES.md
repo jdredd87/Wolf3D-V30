@@ -158,6 +158,8 @@ byte for byte.
 | 61 | the ray loop jumps into its hit routines, and they jump on to `nextpix` themselves: one JMP per ray where there were a CALL, a RET and a JMP. 0.2% (762.0 -> 760.7) | 761 | 4.76 |
 | 62 | `VGAClearScreen` leaves out the band of rows the last frame's least wall covered -- 32 of 120 on average over the attract loop -- and a post whose wall is shorter this frame fills its own share of the band with the masks it drew the wall with, so the picture never depends on the prediction. Neutral on the quick benchmark (760.7 -> 760.3), 0.34% over the whole attract loop (18,805 -> 18,742 play ticks) | 760 | 4.77 |
 | 63 | the path-walking AI in assembly -- `TryWalk`, `SelectPathDir`, `MoveObj` and `T_Path`, statement for statement, calling one another directly with no frames, and `speed*tics` in two MULs instead of Borland's long-multiply helper. 0.41% over the whole attract loop (18,742 -> 18,665 play ticks, 5.24 fps); the quick benchmark's 200 frames have few patrolling guards (760.7 -> 758.3) | **758** | **4.78** |
+| 64 | *(tried, dropped)* `SightPlayer` and `CheckSight` in assembly, and `MoveDoors` walking a pointer: identical, but no faster -- 759.0 against 758.3 on the quick benchmark, 18,685 against 18,665 play ticks over the whole attract loop | -- | -- |
+| 65 | *(tried, dropped)* `PlaceActors` rejecting an actor outside the box the frame's rays reached (four compares a ray keep it): identical, and 1% slower (766.7 against 759.0) -- the box usually holds most of the level's actors, so the ray loop pays and little is saved | -- | -- |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -183,6 +185,8 @@ frames had been compared with id's picture; the frame counts staying
 whatever the game does with it.
 
 ## Findings worth keeping
+
+**The weapon covers less of the view than it looks.** Decoded from `VSWAP.WL6` and placed as `SimpleScaleShape` places it (scale 60, the 120-high scaler, at the 240x120 view): the ready poses cover 1-6% of the view, the chain gun's firing frames about 11%, all of it in the lower half. Skipping the floor and wall pixels under it would save perhaps 0.3-0.5% for a row cut-off table per wall scaler; not yet worth it. (`stage/weapcover.py`.)
 
 **The ceiling and floor fill can be trimmed after all -- by predicting, not deferring.** Step 53's deferred walls were exact and slower. Step 62 skips the band the *last* frame's least wall covered, and a post whose wall is shorter than that band fills its own share of it (`BandFix`, with the map masks it drew the wall with), so the picture never depends on the prediction being right -- only the speed does. Measured on the V30: the whole fill is 31.6 ticks of the 200-frame benchmark (a build with no clear at all), the band averages 11.5 rows there and 32 of 120 over the whole attract loop, and the posts needing a fill write about 7 byte-rows a frame. What it took to make it pay: the first version tracked the frame's least wall with a taken jump on every post and cost as much as the band saved; with the rare update out of line it is neutral on the benchmark and 0.34% over the whole loop, less than the 1.1% the fill's share promised.
 
