@@ -33,7 +33,7 @@ EXTRN	ScaleShape:FAR
 EXTRN	PM_GetPage:FAR
 EXTRN	GetBonus:FAR
 EXTRN	CalcRotate:FAR
-EXTRN	DoActor:FAR
+EXTRN	RemoveObj:FAR
 EXTRN	NOLANGUAGE F_LDIV@:FAR		; Borland's signed long divide (H_LDIV.ASM)
 
 
@@ -111,6 +111,8 @@ EXTRN	ystep:DWORD
 EXTRN	doorposition:WORD		; table of door position values
 EXTRN	plux:WORD				; the player's x and y in 1/256 tiles
 EXTRN	areabyplayer:WORD		; boolean[NUMAREAS] -- enums are words here
+EXTRN	tics:WORD
+EXTRN	actorat:WORD			; objtype *actorat[64][64] -- near pointers
 EXTRN	pluy:WORD
 
 
@@ -1021,6 +1023,13 @@ OB_VIEWX		=	30
 OB_VIEWHEIGHT	=	32
 OB_X			=	16
 OB_AREANUMBER	=	28
+OB_TICCOUNT		=	2
+SS_TICTIME		=	4					; statetype: think and action are far
+SS_THINK		=	6					; code pointers (medium model), next a
+SS_ACTION		=	10					; near data pointer
+SS_NEXT			=	14
+FL_NEVERMARK	=	4
+FL_NONMARK		=	128
 OB_Y			=	20
 OB_TRANSX		=	34
 OB_TRANSY		=	38
@@ -2660,21 +2669,41 @@ ENDP
 ;
 ; DoActors -- for (obj = player;obj;obj = obj->next) DoActor (obj);
 ;
-; NEC V30 build, StevenC & Claude: PlayLoop's actor loop.  Most actors on a
-; level are asleep in an area the player is not in, and id's DoActor
-; returned at its first test for each of them -- after a far call and a C
-; frame, every frame.  That test is made here instead,
+; NEC V30 build, StevenC & Claude.  PlayLoop's actor loop (step 35), and
+; since step 50 WL_PLAY.C's DoActor inside it, statement for statement --
+; an actor that is awake cost a far call and a C frame, and a whole-loop
+; profile put DoActor at 1.75% once the later demos filled up with enemies:
 ;
 ;	if (!ob->active && !areabyplayer[ob->areanumber]) skip;
+;	if (!(ob->flags&(FL_NONMARK|FL_NEVERMARK)))
+;		actorat[ob->tilex][ob->tiley] = NULL;
+;	if (!ob->ticcount)
+;		goto think;						(id's code repeats the think block)
+;	ob->ticcount -= tics;
+;	while (ob->ticcount <= 0)
+;	{
+;		if (ob->state->action) { action (ob); if (!ob->state) remove; }
+;		ob->state = ob->state->next;
+;		if (!ob->state) remove;
+;		if (!ob->state->tictime) { ob->ticcount = 0; goto think; }
+;		ob->ticcount += ob->state->tictime;
+;	}
+; think:
+;	if (ob->state->think) { think (ob); if (!ob->state) remove; }
+;	if (ob->flags&FL_NEVERMARK) next;
+;	if ((ob->flags&FL_NONMARK) && actorat[ob->tilex][ob->tiley]) next;
+;	actorat[ob->tilex][ob->tiley] = ob;
 ;
-; and DoActor, unchanged, is called for the rest.  ob->next is read after
-; the call, as the C for loop read it.
+; Every field is read from the actor again after a call, as the C did: the
+; think and action routines move actors, change states and remove them.
+; ob->next is read after the actor is done with, as the C for loop read it.
 ;
 ;============================
 
 PROC	DoActors
 PUBLIC	DoActors
 	push	si
+	push	di
 	mov	si,[player]
 	or	si,si
 	jz	@@done
@@ -2687,14 +2716,79 @@ PUBLIC	DoActors
 	cmp	[areabyplayer+bx],0
 	je	@@next
 @@do:
+	test	[BYTE si+OB_FLAGS],FL_NONMARK OR FL_NEVERMARK
+	jnz	@@marked
+	mov	di,[si+OB_TILEX]
+	shl	di,6
+	add	di,[si+OB_TILEY]
+	shl	di,1
+	mov	[actorat+di],0				; actorat[tilex][tiley] = NULL
+@@marked:
+	cmp	[WORD si+OB_TICCOUNT],0
+	je	@@think
+	mov	ax,[tics]
+	sub	[si+OB_TICCOUNT],ax
+@@tloop:
+	cmp	[WORD si+OB_TICCOUNT],0
+	jg	@@think						; while (ob->ticcount <= 0), signed
+	mov	bx,[si+OB_STATE]
+	mov	ax,[bx+SS_ACTION]
+	or	ax,[bx+SS_ACTION+2]
+	jz	@@noaction
 	push	si
-	call	DoActor
+	call	[DWORD bx+SS_ACTION]
+	add	sp,2
+	cmp	[WORD si+OB_STATE],0
+	je	@@remove
+@@noaction:
+	mov	bx,[si+OB_STATE]
+	mov	bx,[bx+SS_NEXT]
+	mov	[si+OB_STATE],bx
+	or	bx,bx
+	jz	@@remove
+	mov	ax,[bx+SS_TICTIME]
+	or	ax,ax
+	jnz	@@addtic
+	mov	[WORD si+OB_TICCOUNT],0
+	jmp	@@think
+@@addtic:
+	add	[si+OB_TICCOUNT],ax
+	jmp	@@tloop
+
+@@think:
+	mov	bx,[si+OB_STATE]
+	mov	ax,[bx+SS_THINK]
+	or	ax,[bx+SS_THINK+2]
+	jz	@@mark
+	push	si
+	call	[DWORD bx+SS_THINK]
+	add	sp,2
+	cmp	[WORD si+OB_STATE],0
+	je	@@remove
+@@mark:
+	test	[BYTE si+OB_FLAGS],FL_NEVERMARK
+	jnz	@@next
+	mov	di,[si+OB_TILEX]
+	shl	di,6
+	add	di,[si+OB_TILEY]
+	shl	di,1
+	test	[BYTE si+OB_FLAGS],FL_NONMARK
+	jz	@@setmark
+	cmp	[actorat+di],0
+	jne	@@next
+@@setmark:
+	mov	[actorat+di],si				; actorat[tilex][tiley] = ob
+	jmp	@@next
+@@remove:
+	push	si
+	call	RemoveObj
 	add	sp,2
 @@next:
 	mov	si,[si+OB_NEXT]
 	or	si,si
 	jnz	@@loop
 @@done:
+	pop	di
 	pop	si
 	ret
 ENDP
