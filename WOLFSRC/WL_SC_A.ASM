@@ -34,6 +34,7 @@ DATASEG
 EXTRN	PMSpriteStart:WORD
 EXTRN	scaledirectory:WORD			; t_compscale _seg *[] -- segments
 EXTRN	maxscale:WORD
+EXTRN	stepbytwo:WORD				; scalers from here up are shared by threes
 EXTRN	viewwidth:WORD
 EXTRN	wallheight:WORD
 EXTRN	slinex:WORD
@@ -53,6 +54,9 @@ leftpix		dw	?
 rightpix	dw	?
 xcent		dw	?
 onemask		db	1,2,4,8				; step 54: mapmasks1[pixel][0], a width of 1
+hh			dw	?					; step 55: the scaler's height, and 64 divided
+q64			dw	?					; by it
+r64			dw	?
 
 WIDTHS		=	130					; offset of t_compscale.width[]
 DATAOFS		=	4					; offset of t_compshape.dataofs[]
@@ -282,6 +286,18 @@ PUBLIC	ScaleShape
 	mov	[rightpix],bx
 	mov	es,ax					; ES = comptable from here on
 
+;
+; NEC V30 build (step 55): under 64 pixels high, walk the pixels instead
+; (below the routine's RET)
+;
+	mov	ax,bp
+	shr	ax,3					; scale
+	cmp	ax,32
+	jae	@@bycolumn
+	cmp	ax,[stepbytwo]
+	jae	@@bycolumn				; a shared scaler: its height is not 2*scale
+	jmp	@@bypixel
+@@bycolumn:
 ;----------------------------------------------------------------------------
 ;
 ; scale to the left (from pixel 31 to shape->leftpix)
@@ -596,6 +612,202 @@ PUBLIC	ScaleShape
 	pop	si
 	mov	dx,1					; slinewidth
 	jmp	@@rloop
+
+;
+; NEC V30 build (step 55), StevenC & Claude: a sprite under 64 pixels high,
+; pixel by pixel.  Its scaler's height is h = 2*scale, and the width table
+; the loops above read is width[s] = F(s+1)-F(s), F(s) = s*h/64 rounded
+; down -- so under 64 every width is 0 or 1, and most of their turns were
+; spent on the zeros.  Pixel p (counting F from the shape's left) is drawn
+; by the one source column with width 1 there, s(p) = (64p+63)/h rounded
+; down, which the DDA below steps exactly without dividing.  The pixels,
+; their x and every test are the loops' own: a pixel off the left edge ends
+; the left half, one at viewwidth ends the right half, and one off the
+; other edge or behind a wall is skipped.
+;
+; SI is the source column, DI the pixel's x, CX the DDA's remainder.
+;
+@@bypixel:
+	shl	ax,1
+	mov	[hh],ax					; h = 2*scale
+	mov	cx,ax
+	mov	ax,64
+	xor	dx,dx
+	div	cx
+	mov	[q64],ax				; 64 = q64*h + r64
+	mov	[r64],dx
+;
+; the left half: pixel p = h/2-1 down, x = xcenter-1 down; s(h/2-1) = 31
+; with remainder h-1 (64p+63 = 32h-1)
+;
+	mov	si,31
+	mov	cx,[hh]
+	dec	cx
+	mov	di,[xcent]
+	EVEN
+@@pl:
+	cmp	si,[leftpix]
+	jl	@@pr_start				; past leftpix (signed: s is -1 after pixel 0)
+	dec	di
+	js	@@pr_start				; off the left edge: the C's slinex > 0
+	cmp	di,[viewwidth]
+	jge	@@pl_next
+	mov	bx,di
+	shl	bx,1
+	cmp	[wallheight+bx],bp
+	jae	@@pl_next				; obscured by a closer wall
+	jmp	@@pl1draw
+@@pl_next:
+	sub	si,[q64]				; p-1: 64p+63 less 64
+	sub	cx,[r64]
+	jns	@@pl
+	add	cx,[hh]
+	dec	si
+	jmp	@@pl
+;
+; the right half: first = leftpix<31 ? 32 : leftpix, drawn at xcenter, so
+; pixel p = F(first) up, x = xcenter up
+;
+@@pr_start:
+	mov	ax,32
+	mov	bx,[leftpix]
+	cmp	bx,31
+	jb	@@pr_first
+	mov	ax,bx
+@@pr_first:
+	mul	[hh]
+	shr	ax,6					; F(first) = first*h/64
+	shl	ax,6
+	add	ax,63					; 64p+63
+	xor	dx,dx
+	div	[hh]
+	mov	si,ax					; s(p), and the remainder
+	mov	cx,dx
+	mov	di,[xcent]
+	EVEN
+@@pr:
+	cmp	si,[rightpix]
+	ja	@@pdone					; unsigned, as the C's srcx <= stopx
+	cmp	di,[viewwidth]
+	jge	@@pdone
+	or	di,di
+	jl	@@pr_next				; still off the left edge
+	mov	bx,di
+	shl	bx,1
+	cmp	[wallheight+bx],bp
+	jae	@@pr_next
+	jmp	@@pr1draw
+@@pr_next:
+	inc	di
+	add	si,[q64]				; p+1: 64p+63 plus 64
+	add	cx,[r64]
+	cmp	cx,[hh]
+	jb	@@pr
+	sub	cx,[hh]
+	inc	si
+	jmp	@@pr
+@@pdone:
+	jmp	@@ret					; (slinex and slinewidth: nothing reads them now)
+
+@@pl1draw:
+	push	si
+	push	di
+	push	cx
+	push	bp
+	mov	cx,es					; CX = the scaler
+	mov	bx,si
+	sub	bx,[leftpix]
+	shl	bx,1
+	mov	es,[shapeseg]			; ES = the shape
+	mov	bp,[es:bx+DATAOFS]		; its post list for srcx
+	mov	bx,di
+	shr	di,2					; X in bytes
+	add	di,[bufferofs]
+	and	bx,3
+	mov	al,[onemask+bx]
+	mov	dx,SC_INDEX+1
+	out	dx,al					; set map mask register
+	mov	dx,SCREENSEG
+	mov	ds,cx					; DS = the scaler
+	mov	bx,[es:bp]				; table location of the rtl to patch
+	or	bx,bx
+	jz	@@pl1done				; 0 ends the post list
+	EVEN
+@@pl1post:
+	mov	bx,[bx]
+	mov	ah,[bx]					; save old value
+	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	mov	si,[es:bp+4]			; table location of entry spot
+	mov	si,[si]
+	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+2]			; corrected top of shape for this post
+	add	bp,6					; next post
+	mov	ds,dx					; DS = the screen
+	call	[DWORD ss:linescale]	; scale the post
+	mov	ds,cx					; DS = the scaler
+	mov	[bx],ah					; unpatch the RETF
+	mov	bx,[es:bp]
+	or	bx,bx
+	jnz	@@pl1post
+@@pl1done:
+	mov	ax,ss
+	mov	ds,ax
+	mov	es,cx					; ES = the scaler again
+	pop	bp
+	pop	cx
+	pop	di
+	pop	si
+	jmp	@@pl_next
+
+@@pr1draw:
+	push	si
+	push	di
+	push	cx
+	push	bp
+	mov	cx,es					; CX = the scaler
+	mov	bx,si
+	sub	bx,[leftpix]
+	shl	bx,1
+	mov	es,[shapeseg]			; ES = the shape
+	mov	bp,[es:bx+DATAOFS]		; its post list for srcx
+	mov	bx,di
+	shr	di,2					; X in bytes
+	add	di,[bufferofs]
+	and	bx,3
+	mov	al,[onemask+bx]
+	mov	dx,SC_INDEX+1
+	out	dx,al					; set map mask register
+	mov	dx,SCREENSEG
+	mov	ds,cx					; DS = the scaler
+	mov	bx,[es:bp]				; table location of the rtl to patch
+	or	bx,bx
+	jz	@@pr1done				; 0 ends the post list
+	EVEN
+@@pr1post:
+	mov	bx,[bx]
+	mov	ah,[bx]					; save old value
+	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	mov	si,[es:bp+4]			; table location of entry spot
+	mov	si,[si]
+	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+2]			; corrected top of shape for this post
+	add	bp,6					; next post
+	mov	ds,dx					; DS = the screen
+	call	[DWORD ss:linescale]	; scale the post
+	mov	ds,cx					; DS = the scaler
+	mov	[bx],ah					; unpatch the RETF
+	mov	bx,[es:bp]
+	or	bx,bx
+	jnz	@@pr1post
+@@pr1done:
+	mov	ax,ss
+	mov	ds,ax
+	mov	es,cx					; ES = the scaler again
+	pop	bp
+	pop	cx
+	pop	di
+	pop	si
+	jmp	@@pr_next
 ENDP
 
 

@@ -148,7 +148,8 @@ byte for byte.
 | 51 | "same wall as the last column?" is one compare of a key -- tilehit, side and tile packed in one word by the ray loop, in registers it already holds; id's test was four compares against memory. The C door, pushwall and frame-start code invalidate it. 0.9% (812 -> 805) | 805 | 4.50 |
 | 52 | the horizontal tile loop keeps xintercept's low word in BP instead of adding into memory every step: ytile is redundant there, since T - (xtile<<6) is ytile, so yspot is T + ((xinttile-xtile)<<6), a value a vertical step leaves unchanged. 0.3% (805.3 -> 803.0) | 803 | 4.51 |
 | 53 | *(tried, dropped)* the walls cast first and drawn after the clear, so `VGAClearScreen` skips the band of rows every column's wall covers -- 3% slower (803.7 -> 828.7): recording each post and drawing it in a second loop costs more than the band saves | -- | -- |
-| 54 | a one-pixel sprite span -- nearly every span of a sprite that is not close -- is drawn by `ScaleShape` itself, out of line, not through `ScaleSpan`: no call and return, no DX kept, no multi-byte test, the map mask straight from the pixel. 1.1% (804.7 -> 795.7) | **796** | **4.55** |
+| 54 | a one-pixel sprite span -- nearly every span of a sprite that is not close -- is drawn by `ScaleShape` itself, out of line, not through `ScaleSpan`: no call and return, no DX kept, no multi-byte test, the map mask straight from the pixel. 1.1% (804.7 -> 795.7) | 796 | 4.55 |
+| 55 | a sprite under 64 pixels high is walked pixel by pixel, not source column by source column: under 64 every width in the scaler's table is 0 or 1, and pixel p is drawn by source column (64p+63)/h, which an exact integer DDA steps without dividing. Same pixels, same tests at the same points. 1.8% (797.0 -> 782.3) | **782** | **4.63** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
