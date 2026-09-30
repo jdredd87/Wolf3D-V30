@@ -1097,12 +1097,63 @@ cvhnhic:
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
-	call	ScalePostA
+	push	si						; step 68: ScalePostA inline -- the post
+	mov	bx,[postx]				; this column closes
+	mov	di,bx
+	shl	bx,1
+	mov	bp,[wallheight+bx]		; fractional height (low 3 bits frac)
+	and	bp,0fff8h				; bp = heightscaler*4
+	shr	bp,1
+	cmp	bp,[maxscaleshl2]
+	jle	cvp_hok
+	mov	bp,[maxscaleshl2]
+cvp_hok:
+	cmp	bp,[postmin]			; the least wall of the frame (rarely new)
+	jb	cvp_newmin
+cvp_minok:
+	cmp	bp,[bandlim]
+	jb	cvp_short				; shorter than the band: ScalePostA's own path
+	add	bp,OFFSET fullscalefarcall
+	mov	bx,di
+	shr	di,2					; X in bytes
+	add	di,[bufferofs]
+	and	bx,3
+	shl	bx,3
+	add	bx,[postwidth]			; bx = pixel*8+pixwidth
+	mov	al,[mapmasks1-1+bx]		; -1 because no widths of 0
+	mov	dx,SC_INDEX+1
+	out	dx,al					; set bit mask register
+	les	si,[postsource]			; ES:SI = the texture column
+	mov	cx,SCREENSEG
+	mov	ds,cx					; DS = the screen
+	call	[DWORD bp]				; SS:BP -- scale the line of pixels
+	mov	al,[ss:mapmasks2-1+bx]
+	or	al,al
+	jz	cvp_done
+	inc	di						; a strip that crosses two bytes
+	out	dx,al
+	call	[DWORD bp]
+	mov	al,[ss:mapmasks3-1+bx]
+	or	al,al
+	jz	cvp_done
+	inc	di						; three bytes
+	out	dx,al
+	call	[DWORD bp]
+cvp_done:
+	mov	ax,ss
+	mov	ds,ax
+	pop	si
 	mov	[WORD postsource],si
 	mov	[postwidth],1
 	mov	ax,[pixx]
 	mov	[postx],ax
-	jmp	nextpix				; step 62: jumped to, not called
+	jmp	nextpix
+cvp_newmin:
+	mov	[postmin],bp
+	jmp	cvp_minok
+cvp_short:
+	call	ScalePostA				; (it recomputes; postmin is a least value)
+	jmp	cvp_done
 hvw_newwall:
 	mov	[lastkey],cx
 	call	CalcHeightV
@@ -1184,9 +1235,30 @@ hhw_tex:
 	jmp	nextpix				; step 62: jumped to, not called
 hhw_nwt:
 	jmp	hhw_newwall			; step 67: the new-wall test's hop
+; step 67: the inline height's cache miss, within reach of its test
+czi_miss:
+	mov	[chhkey],ax
+	mov	ax,[WORD yintercept]
+	mov	dx,[WORD yintercept+2]
+czvyloc:
+	sub	ax,1234h				; viewy
+czvyhic:
+	sbb	dx,1234h
+	FIXBYFRACB	czsinsignc,czsinfracc	; dx:ax = gyt
+	mov	[chhgylo],ax
+	mov	[chhgyhi],dx
+	jmp	czi_have
 hhw_newcol:
-; step 67: CalcHeightH inline, no call
-								; (step 61: nothing kept; the sign is in BP)
+; step 67: CalcHeightH inline, no call -- step 68: its cache test first (gyt,
+; then gxt: they are independent, and nx = gxt-gyt as before)
+	mov	ax,[WORD yintercept+2]
+	cmp	ax,[chhkey]
+	jne	czi_miss
+	mov	ax,[chhgylo]			; dx:ax = gyt, as for the last column
+	mov	dx,[chhgyhi]
+czi_have:
+	push	dx
+	push	ax
 	mov	ax,[WORD xintercept]
 	mov	dx,[WORD xintercept+2]
 czvxloc:
@@ -1194,20 +1266,12 @@ czvxloc:
 czvxhic:
 	sbb	dx,1234h				; high word (81 DA iw: at +2)
 	FIXBYFRACB	czcossignc,czcosfracc	; dx:ax = gxt
-	push	dx
-	push	ax
-
-	mov	ax,[WORD yintercept+2]
-	cmp	ax,[chhkey]
-	jne	czi_miss
-	mov	ax,[chhgylo]			; dx:ax = gyt, as for the last column
-	mov	dx,[chhgyhi]
-czi_have:
 	pop	bx
-	pop	cx					; cx:bx = gxt
-	sub	bx,ax
-	sbb	cx,dx				; cx:bx = nx = gxt-gyt
-
+	pop	cx					; cx:bx = gyt
+	sub	ax,bx
+	sbb	dx,cx
+	mov	bx,ax
+	mov	cx,dx				; cx:bx = nx = gxt-gyt
 czmdhic:
 	cmp	cx,1234h			; if (nx < mindist) nx = mindist -- signed (81 F9 iw)
 	jg	czi_distok
@@ -1231,25 +1295,63 @@ czhnhic:
 	mov	bx,[pixx]
 	shl	bx,1
 	mov	[wallheight+bx],ax
-	call	ScalePostA
+	push	si						; step 68: ScalePostA inline -- the post
+	mov	bx,[postx]				; this column closes
+	mov	di,bx
+	shl	bx,1
+	mov	bp,[wallheight+bx]		; fractional height (low 3 bits frac)
+	and	bp,0fff8h				; bp = heightscaler*4
+	shr	bp,1
+	cmp	bp,[maxscaleshl2]
+	jle	czp_hok
+	mov	bp,[maxscaleshl2]
+czp_hok:
+	cmp	bp,[postmin]			; the least wall of the frame (rarely new)
+	jb	czp_newmin
+czp_minok:
+	cmp	bp,[bandlim]
+	jb	czp_short				; shorter than the band: ScalePostA's own path
+	add	bp,OFFSET fullscalefarcall
+	mov	bx,di
+	shr	di,2					; X in bytes
+	add	di,[bufferofs]
+	and	bx,3
+	shl	bx,3
+	add	bx,[postwidth]			; bx = pixel*8+pixwidth
+	mov	al,[mapmasks1-1+bx]		; -1 because no widths of 0
+	mov	dx,SC_INDEX+1
+	out	dx,al					; set bit mask register
+	les	si,[postsource]			; ES:SI = the texture column
+	mov	cx,SCREENSEG
+	mov	ds,cx					; DS = the screen
+	call	[DWORD bp]				; SS:BP -- scale the line of pixels
+	mov	al,[ss:mapmasks2-1+bx]
+	or	al,al
+	jz	czp_done
+	inc	di						; a strip that crosses two bytes
+	out	dx,al
+	call	[DWORD bp]
+	mov	al,[ss:mapmasks3-1+bx]
+	or	al,al
+	jz	czp_done
+	inc	di						; three bytes
+	out	dx,al
+	call	[DWORD bp]
+czp_done:
+	mov	ax,ss
+	mov	ds,ax
+	pop	si
 	mov	[WORD postsource],si
 	mov	[postwidth],1
 	mov	ax,[pixx]
 	mov	[postx],ax
-	jmp	nextpix				; step 62: jumped to, not called
-; step 67: the inline height's cache miss, within reach of its test
-czi_miss:
-	mov	[chhkey],ax
-	mov	ax,[WORD yintercept]
-	mov	dx,[WORD yintercept+2]
-czvyloc:
-	sub	ax,1234h				; viewy
-czvyhic:
-	sbb	dx,1234h
-	FIXBYFRACB	czsinsignc,czsinfracc	; dx:ax = gyt
-	mov	[chhgylo],ax
-	mov	[chhgyhi],dx
-	jmp	czi_have
+	jmp	nextpix
+czp_newmin:
+	mov	[postmin],bp
+	jmp	czp_minok
+czp_short:
+	call	ScalePostA				; (it recomputes; postmin is a least value)
+	jmp	czp_done
 hhw_newwall:
 	mov	[lastkey],cx
 	call	CalcHeightH
