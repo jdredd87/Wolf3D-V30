@@ -172,6 +172,7 @@ byte for byte.
 | 75 | a wall hit's intercepts and tiles stay in registers and are stored only where a post starts (the new-column and new-wall paths): a ray that only widens the current post -- the common case -- stores none of them. 0.54% (747.3 -> 743.3) | 743 | 4.87 |
 | 76 | `tilehit` stored only where it is read: the door paths store it on entry, and the new-wall path takes it from the wall key it has just saved (`lastkey>>7` is `tilehit` exactly) -- one store fewer on every ray. 743.7 -> 743.0, at the edge of the noise | **743** | **4.88** |
 | 77 | *(tried, dropped)* compiled blits for the weapon and the DEMO sign (drawn every frame): generated code writing each screen byte once per colour under a map mask of its planes -- half the screen writes of SimpleScaleShape, identical over the whole loop, and no faster (742.7 -> 744.7): the 18 KB of code cost the page cache 7 pages (87 -> 134 XMS page-ins over 200 frames), and the drawing it replaced was cheaper than it looked | -- | -- |
+| 78 | *(tried, dropped)* `PlaceActors` reading its spotvis neighbours two at a time (three word loads and register compares for six of the nine byte compares): identical, and flat (743.0 -> 743.3) | -- | -- |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
