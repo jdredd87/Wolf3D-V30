@@ -147,6 +147,7 @@ byte for byte.
 | 50 | `DoActor` in asm inside the actor loop, statement for statement, every field re-read after a think or action call -- 0.9% over the whole attract loop (19,964 -> 19,788 play ticks, 4.90 -> 4.95 fps); demo 0's first 200 frames, with few actors awake, do not show it | 812 | 4.46 |
 | 51 | "same wall as the last column?" is one compare of a key -- tilehit, side and tile packed in one word by the ray loop, in registers it already holds; id's test was four compares against memory. The C door, pushwall and frame-start code invalidate it. 0.9% (812 -> 805) | 805 | 4.50 |
 | 52 | the horizontal tile loop keeps xintercept's low word in BP instead of adding into memory every step: ytile is redundant there, since T - (xtile<<6) is ytile, so yspot is T + ((xinttile-xtile)<<6), a value a vertical step leaves unchanged. 0.3% (805.3 -> 803.0) | **803** | **4.51** |
+| 53 | *(tried, dropped)* the walls cast first and drawn after the clear, so `VGAClearScreen` skips the band of rows every column's wall covers -- 3% slower (803.7 -> 828.7): recording each post and drawing it in a second loop costs more than the band saves | -- | -- |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -172,6 +173,8 @@ frames had been compared with id's picture; the frame counts staying
 whatever the game does with it.
 
 ## Findings worth keeping
+
+**The ceiling and floor fill cannot be trimmed by deferring the walls.** A wall post always draws its whole texture column, and the scaler for scale *i* covers exactly rows `viewheight/2-i` to `viewheight/2+i-1` (scaler 0 is scaler 1; from `stepbytwo` up every scaler covers the view). So the rows within the least scale of a frame are wall in every column, and `VGAClearScreen`'s fill there (4.2% of the whole loop) is always overwritten. Step 53 recorded each post during the cast, cleared around the band, and then drew the posts -- identical to id's over the whole loop, and 3% slower on the V30. Every post was handled twice, and the band is set by the frame's smallest wall, which is usually a distant one. A padded build ruled out the buffer's memory: it cost a page of cache (44 -> 43) and about ten more XMS page-ins per 200 frames, which measured as nothing. The sources are in `stage/step53/`.
 
 **The benchmark's view size is fixed at 240x120 now.** TIMEDEMO used whatever `CONFIG.WL6` held, and a window enlarged in play (size 16, 256x128) turned the next A/B into a comparison of a bigger view against a reference made at the smaller one -- the checksums no longer matched and the ticks were 5% higher, which read as a fault in the step being measured. TIMEDEMO now sets size 15 for the run unless `MYVIEW` is given, and exits without writing the config, so the player's own setting is untouched.
 
