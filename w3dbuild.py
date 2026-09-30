@@ -116,8 +116,8 @@ def cmd_build():
 def cmd_listings(names):
     """Assembler listings of the given modules, for reading profiles against:
     TASM /l for an .ASM, BCC -S (the compiler's own assembly) for a .C.
-    Uses the sources already on the 486 -- run `build` first."""
-    cmds = [r"CD C:\W3D", r"IF NOT EXIST C:\W3D\LST\NUL MD C:\W3D\LST"]
+    Uses the sources already on the 486 (in W3D_REMOTE) -- run `build` first."""
+    cmds = ["CD " + REMOTE, "IF NOT EXIST %s\\LST\\NUL MD %s\\LST" % (REMOTE, REMOTE)]
     pulls = []
     for n in names:
         base, ext = os.path.splitext(n.upper())
@@ -134,7 +134,7 @@ def cmd_listings(names):
     out = os.path.join(STAGE, "lst")
     os.makedirs(out, exist_ok=True)
     for f in pulls:
-        dosctl("pull", "C:\\W3D\\LST\\" + f, "--out", os.path.join(out, f), "--box", BUILD_BOX)
+        dosctl("pull", REMOTE + "\\LST\\" + f, "--out", os.path.join(out, f), "--box", BUILD_BOX)
     print("listings in", out)
 
 
