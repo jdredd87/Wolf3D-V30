@@ -129,6 +129,21 @@ tsave		dw	0				; T, across a door or pushwall test
 yadj		dw	64				; xtilestep<<6, as added into vyadc's word
 lastkey		dw	0FFFFh			; step 51: tilehit<<7 | side<<6 | tile of the last
 	PUBLIC	lastkey					; wall post, or FFFFh (C invalidates it)
+;
+; step 63: the band of rows VGAClearScreen leaves to the walls
+;
+postmin		dw	0				; the least scale*4 of the frame's wall posts
+	PUBLIC	postmin					; (0 until a frame has been drawn: no band)
+bandlim		dw	0				; B*4, B the band's half height; 0 for no band
+	PUBLIC	bandlim
+bandhalf	dw	0				; B
+	PUBLIC	bandhalf
+bandtop		dw	0				; (half-B)*80, the band's first row
+	PUBLIC	bandtop
+ceilcolor	dw	0				; the level's ceiling colour (both bytes)
+	PUBLIC	ceilcolor
+fixn		dw	0				; a short post's rows to fill, each side
+fixofs2		dw	0				; and where its floor part starts
 clx1		dw	0				; CheckLine's working storage
 visord		dw	50 DUP (0)		; DrawVisList's drawing order (MAXVISABLE entries)
 cly1		dw	0
@@ -779,6 +794,11 @@ PUBLIC	ScalePostA					; public only so profiles can name it
 	jle	@@heightok
 	mov	bp,[maxscaleshl2]
 @@heightok:
+	cmp	bp,[postmin]			; the least wall of the frame so far (a new
+	jb	@@newmin				; one is rare: kept out of the way)
+@@minok:
+	cmp	bp,[bandlim]
+	jb	@@short					; shorter than the band left uncleared
 	add	bp,OFFSET fullscalefarcall
 
 	mov	bx,di
@@ -815,6 +835,110 @@ PUBLIC	ScalePostA					; public only so profiles can name it
 	mov	ds,ax
 	pop	si
 	ret
+
+@@newmin:
+	mov	[postmin],bp
+	jmp	@@minok
+
+;
+; NEC V30 build (step 63): this wall covers rows half-c .. half+c-1, c the
+; scale (scaler 0 is scaler 1), and VGAClearScreen left half-B .. half+B-1
+; to the walls: fill the difference in each byte the post draws, after its
+; wall and with its masks.  (c < B <= half, so none of it is wall.)
+;
+@@short:
+	mov	ax,bp
+	shr	ax,2					; the scale
+	jnz	@@cok
+	inc	ax
+@@cok:
+	mov	cx,[bandhalf]
+	sub	cx,ax
+	mov	[fixn],cx				; B-c rows each side
+	add	ax,[bandhalf]
+	mov	cx,ax
+	shl	ax,4
+	shl	cx,6
+	add	ax,cx					; (B+c)*80
+	add	ax,[bandtop]
+	mov	[fixofs2],ax			; row half+c
+	add	bp,OFFSET fullscalefarcall
+
+	mov	bx,di
+	shr	di,2					; X in bytes
+	add	di,[bufferofs]
+	and	bx,3
+	shl	bx,3
+	add	bx,[postwidth]			; bx = pixel*8+pixwidth
+
+	mov	al,[mapmasks1-1+bx]		; -1 because no widths of 0
+	mov	dx,SC_INDEX+1
+	out	dx,al					; set bit mask register
+	les	si,[postsource]			; ES:SI = the texture column
+	mov	cx,SCREENSEG
+	mov	ds,cx					; DS = the screen
+	call	[DWORD bp]				; SS:BP -- scale the line of pixels
+	call	BandFix
+
+	mov	al,[ss:mapmasks2-1+bx]
+	or	al,al
+	jz	@@done
+	inc	di						; a strip that crosses two bytes
+	out	dx,al
+	call	[DWORD bp]
+	call	BandFix
+
+	mov	al,[ss:mapmasks3-1+bx]
+	or	al,al
+	jz	@@done
+	inc	di						; three bytes
+	out	dx,al
+	call	[DWORD bp]
+	call	BandFix
+	jmp	@@done
+ENDP
+
+
+;
+; BandFix: the ceiling and floor rows a short post owes the band, in the
+; byte at DI (row 0 of the view) with the map mask already set.  DS is the
+; screen; keeps every register but AX and CX.
+;
+PROC	BandFix NEAR
+	push	di
+	add	di,[ss:bandtop]
+	mov	cx,[ss:fixn]
+	mov	al,[BYTE ss:ceilcolor]
+@@ceiling:
+	mov	[di],al
+	add	di,80
+	loop	@@ceiling
+	pop	di
+	push	di
+	add	di,[ss:fixofs2]
+	mov	cx,[ss:fixn]
+	mov	al,19h					; the floor, as VGAClearScreen fills it
+@@floor:
+	mov	[di],al
+	add	di,80
+	loop	@@floor
+	pop	di
+	ret
+ENDP
+
+
+;
+; ScalePostF: ScalePostA for WL_DRAW.C's door and pushwall routines and the
+; frame's last post, keeping the registers a C caller relies on
+;
+PROC	ScalePostF FAR
+PUBLIC	ScalePostF
+	push	di
+	push	bp
+	call	ScalePostA
+	pop	bp
+	pop	di
+	retf
 ENDP
 
 
@@ -1577,6 +1701,7 @@ PUBLIC	AsmRefresh
 	mov	[WORD cs:czhnhi+1],ax
 	mov	[chvkey],8000h			; and the wall caches are empty
 	mov	[chhkey],8000h
+	mov	[postmin],7FFFh			; step 63: no posts yet this frame
 
 	mov	ax,[midangle]			; step 57: the frame's centre angle and width
 	mov	[WORD cs:pxmid+1],ax

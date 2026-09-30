@@ -274,8 +274,8 @@ long		postsource;
 unsigned	postx;
 unsigned	postwidth;
 
-void	near ScalePost (void)		// VGA version
-{
+void	near ScalePostNow (void)		// VGA version (NEC V30 build: FarScalePost's,
+{									// which draws outside a frame, for WL_DEBUG)
 	// NEC V30 build (StevenC & Claude): the scalers load from ES and store to
 	// DS, so the texture goes in ES and the screen in DS -- see BuildCompScale.
 	asm	mov	bx,[postx]
@@ -337,7 +337,19 @@ nomore:
 
 void  FarScalePost (void)				// just so other files can call
 {
-	ScalePost ();
+	ScalePostNow ();
+}
+
+//
+// NEC V30 build (step 63), StevenC & Claude: the frame's posts are drawn by
+// ScalePostA (WL_DR_A.ASM), which also fills the rows VGAClearScreen left to
+// a wall when the wall turns out shorter.
+//
+void	ScalePostF (void);
+
+void	near ScalePost (void)
+{
+	ScalePostF ();
 }
 
 
@@ -418,7 +430,6 @@ void HitHorizDoor (void)
 	// first pixel in this door
 		lastside = 2;
 		lastkey = 0xFFFF;
-		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
 		postx = pixx;
 		postwidth = 1;
@@ -491,7 +502,6 @@ void HitVertDoor (void)
 			ScalePost ();			// draw last post
 	// first pixel in this door
 		lastside = 2;
-		lastkey = 0xFFFF;
 		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
 		postx = pixx;
@@ -755,6 +765,30 @@ unsigned vgaCeiling[]=
 void VGAClearScreen (void)
 {
  unsigned ceiling=vgaCeiling[gamestate.episode*10+mapon];
+ unsigned half;
+ static unsigned fill,skip;			// static: named in the asm below
+ extern unsigned postmin,bandlim,bandhalf,bandtop,ceilcolor;
+
+  //
+  // NEC V30 build (step 63), StevenC & Claude: the scaler for scale i covers
+  // rows half-i .. half+i-1 of every column it draws (scaler 0 is scaler 1),
+  // and a wall post draws its whole column.  So the band the last frame's
+  // least wall covered -- 32 of 120 rows on average -- is left out here, and
+  // a post whose wall is shorter this frame fills its own part of it
+  // (ScalePostA).  The walls always come next: only ThreeDRefresh calls this.
+  //
+ half = viewheight/2;
+ skip = postmin>>2;					// the last frame's least scale
+ if (!skip)
+	skip = 1;
+ if (skip > half)
+	skip = half;
+ fill = half-skip;					// rows of ceiling, and of floor
+ bandhalf = skip;
+ bandlim = skip >= 2 ? skip<<2 : 0;	// a coverage of 1 is every wall's
+ bandtop = fill*SCREENBWIDE;
+ ceilcolor = ceiling;
+ skip *= 2*SCREENBWIDE;				// the band, in bytes
 
   //
   // clear the screen
@@ -770,8 +804,7 @@ asm	sub	dx,ax					// dx = 40-viewwidth/2
 
 asm	mov	bx,[viewwidth]
 asm	shr	bx,3					// bl = viewwidth/8
-asm	mov	bh,BYTE PTR [viewheight]
-asm	shr	bh,1					// half height
+asm	mov	bh,BYTE PTR [fill]
 
 asm	mov	es,[screenseg]
 asm	mov	di,[bufferofs]
@@ -785,15 +818,20 @@ asm	xor	ch,ch					// NEC V30 build (StevenC & Claude): the loops
 									// bar and all.  The view itself was redrawn
 									// over it, so the view checksums never saw it.
 
+asm	or	bh,bh
+asm	jz	noceiling
 toploop:
 asm	mov	cl,bl
 asm	rep	stosw
 asm	add	di,dx
 asm	dec	bh
 asm	jnz	toploop
+noceiling:
 
-asm	mov	bh,BYTE PTR [viewheight]
-asm	shr	bh,1					// half height
+asm	add	di,[skip]				// over the band the walls cover
+asm	mov	bh,BYTE PTR [fill]
+asm	or	bh,bh
+asm	jz	nofloor
 asm	mov	ax,0x1919
 
 bottomloop:
@@ -802,6 +840,8 @@ asm	rep	stosw
 asm	add	di,dx
 asm	dec	bh
 asm	jnz	bottomloop
+nofloor:
+	;
 }
 
 //==========================================================================

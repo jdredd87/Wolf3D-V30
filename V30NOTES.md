@@ -155,7 +155,8 @@ byte for byte.
 | 58 | `PlaceStatics`' scan unrolled by four: an unseen static -- nearly all of up to 400 -- costs three instructions and a quarter of the loop's. A seen one leaves for the same handler as before, which carries on from the next, so the order of `TransformTile` and `GetBonus` calls is unchanged. 0.1% (768.3 -> 767.3) | 767 | 4.72 |
 | 59 | `DoActors` laid out so a skipped actor -- inactive, outside the player's areas: most of a level's -- costs one short jump back instead of two jumps, one of them TASM's JUMPS expansion. 0.1% over the whole attract loop (18,759 -> 18,742 play ticks); within the noise of the quick benchmark | 767 | 4.72 |
 | 60 | `CalcHeightV` and `CalcHeightH` keep no registers: their only callers, the asm hit routines, need SI back and nothing else, so the multiply's sign moves from SI to the free BP and four pushes and pops go from every wall hit's height. 0.65% (767.0 -> 762.0) | 762 | 4.75 |
-| 61 | the ray loop jumps into its hit routines, and they jump on to `nextpix` themselves: one JMP per ray where there were a CALL, a RET and a JMP. 0.2% (762.0 -> 760.7) | **761** | **4.76** |
+| 61 | the ray loop jumps into its hit routines, and they jump on to `nextpix` themselves: one JMP per ray where there were a CALL, a RET and a JMP. 0.2% (762.0 -> 760.7) | 761 | 4.76 |
+| 62 | `VGAClearScreen` leaves out the band of rows the last frame's least wall covered -- 32 of 120 on average over the attract loop -- and a post whose wall is shorter this frame fills its own share of the band with the masks it drew the wall with, so the picture never depends on the prediction. Neutral on the quick benchmark (760.7 -> 760.3), 0.34% over the whole attract loop (18,805 -> 18,742 play ticks) | **760** | **4.77** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -181,6 +182,8 @@ frames had been compared with id's picture; the frame counts staying
 whatever the game does with it.
 
 ## Findings worth keeping
+
+**The ceiling and floor fill can be trimmed after all -- by predicting, not deferring.** Step 53's deferred walls were exact and slower. Step 62 skips the band the *last* frame's least wall covered, and a post whose wall is shorter than that band fills its own share of it (`BandFix`, with the map masks it drew the wall with), so the picture never depends on the prediction being right -- only the speed does. Measured on the V30: the whole fill is 31.6 ticks of the 200-frame benchmark (a build with no clear at all), the band averages 11.5 rows there and 32 of 120 over the whole attract loop, and the posts needing a fill write about 7 byte-rows a frame. What it took to make it pay: the first version tracked the frame's least wall with a taken jump on every post and cost as much as the band saved; with the rare update out of line it is neutral on the benchmark and 0.34% over the whole loop, less than the 1.1% the fill's share promised.
 
 **The ceiling and floor fill cannot be trimmed by deferring the walls.** A wall post always draws its whole texture column, and the scaler for scale *i* covers exactly rows `viewheight/2-i` to `viewheight/2+i-1` (scaler 0 is scaler 1; from `stepbytwo` up every scaler covers the view). So the rows within the least scale of a frame are wall in every column, and `VGAClearScreen`'s fill there (4.2% of the whole loop) is always overwritten. Step 53 recorded each post during the cast, cleared around the band, and then drew the posts -- identical to id's over the whole loop, and 3% slower on the V30. Every post was handled twice, and the band is set by the frame's smallest wall, which is usually a distant one. A padded build ruled out the buffer's memory: it cost a page of cache (44 -> 43) and about ten more XMS page-ins per 200 frames, which measured as nothing. The sources are in `stage/step53/`.
 
@@ -327,25 +330,33 @@ a glitch at a song's start if one were missed. Parked, not forgotten.
 * `WOLFSRC/OPLTIME.C` -- the cost of a port read on this machine.
 * `profmap.py`, `lstat.py`, `gfxchunks.py` -- profile, listing and data tools.
 
-## Where the time goes now (profile after step 11, EMS+PRELOAD)
+## Where the time goes now (profile after step 55, whole attract loop, EMS+PRELOAD)
 
-Ray casting ~27% (`AsmRefresh` 18% -- mostly its tile-stepping loop --
-id's per-ray multiply helpers 3.4%, `CalcHeight` 4.8%), pixels ~38% (compiled
-wall and sprite scalers 24%, `ScaleLine` 7.9%, `ScalePost` 2.9%,
-`VGAClearScreen` 2.8%), sprite bookkeeping ~6%, game logic ~4%, the fizzle
-(once per level) and the music interrupt.
+849,000 samples over the four demos.  The compiled scalers writing pixels
+34%; the ray loop (`AsmRefresh`) 21%, most of it the vertical and
+horizontal tile steps, which are at the floor of what the V30 can fetch;
+`CalcHeight` 5.7% (two MULs and an IDIV a ray, what id's truncation
+needs to stay exact); `ScaleShape` and `ScaleSpan` together 9.7% (the
+weapon, drawn every frame, and close sprites); `VGAClearScreen` 4.3%;
+`ScalePostA` 4.2% and the two hit routines 3.9%; `PlaceActors` 2.1%,
+`DoActors` 1.8%, `PlaceStatics` 1.2%; game logic in C about 3%; the page
+manager 2.8% (in EMS mode -- XMS, the default, spends less); the level-start
+fizzle and fades about 1.5%.
+
+Measured rather than read off the profile: the whole ceiling and floor fill
+is 31.6 ticks of the 200-frame benchmark (4.1%), and an XMS page-in costs
+about 2 ms.
 
 ## Next
 
-What is left is spread thin: every candidate is worth roughly 0.5-1%.
+What is left is spread thin; every candidate measured or estimated is worth
+0.1-1%:
 
-1. `ScaleLine`'s per-post overhead (~9%): the RETF patch, two segment
-   switches and a far call for every post of every sprite column.
-2. The music interrupt's fast path (~4% in all): a countdown, with id's C
-   music routines invalidating it.
-3. id's per-ray multiply helpers (3%): inline them into `initvars`.
-4. `VGAClearScreen` overdraw (~3%): fill only rows no wall covers -- needs the
-   walls cast before they are drawn, and the page manager kept from evicting
-   a wall's texture in between.
-5. `EVEN`-align the hot loops in the new assembly (taken jumps to odd
-   addresses cost a bus cycle).
+1. The game logic's C (`T_Path`, `SelectPathDir`, `TryWalk`, `T_Chase`,
+   `SightPlayer`, `MoveObj`: 1.7% together) in assembly.
+2. `ScaleSpan`'s per-call overhead for the weapon and close sprites (about
+   3%): every register is in use, so only the call itself can go.
+3. `PlaceActors`' nine spotvis tests per actor: a bounding box of the rays'
+   hit tiles would reject most actors, but keeping it costs the ray loop
+   about as much as it saves.
+4. Long divides (`ny*scale/nx`, 0.4%): already normalised by steps 4 and 42.
