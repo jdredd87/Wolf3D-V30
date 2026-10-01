@@ -136,6 +136,7 @@ void VL_GetColor	(int color, int *red, int *green, int *blue);
 void VL_SetPalette (byte far *palette);
 void VL_GetPalette (byte far *palette);
 void VL_FadeOut (int start, int end, int red, int green, int blue, int steps);
+void VL_LowVert (int on);			// NEC V30 build (step 82)
 void VL_FadeIn (int start, int end, byte far *palette, int steps);
 void VL_ColorBorder (int color);
 

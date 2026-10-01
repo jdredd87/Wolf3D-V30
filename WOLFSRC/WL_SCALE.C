@@ -189,6 +189,13 @@ unsigned BuildCompScale (int height, memptr *finalspot)
 
 		if (startpix == endpix || endpix < 0 || startpix >= viewheight || src == 64)
 			continue;
+		if (lowvert)					// NEC V30 build (step 82): even rows only --
+		{								// no code at all for a texel with none
+			int	s = startpix < 0 ? 0 : startpix;
+			int	e = endpix > viewheight ? viewheight : endpix;
+			if (((s+1)&~1) >= e)
+				continue;
+		}
 
 	//
 	// mov al,es:[si+src]
@@ -209,6 +216,8 @@ unsigned BuildCompScale (int height, memptr *finalspot)
 				break;						// off the bottom of the view area
 			if (startpix < 0)
 				continue;					// not into the view area
+			if (lowvert && (startpix&1))
+				continue;					// NEC V30 build (step 82): an odd row
 
 		//
 		// mov [di+heightofs],al		(DS = the screen)

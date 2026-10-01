@@ -43,6 +43,7 @@ unsigned	wallheight[MAXVIEWWIDTH];
 int			pixstep = 1;				// NEC V30 build (step 79): 2 with LOWWALLS
 int			lowsprites;					// NEC V30 build (step 80): 1 with LOWSPRITES
 int			flatwalls;					// NEC V30 build (step 81): 1 with FLATWALLS, 2 once set up
+int			lowvert;					// NEC V30 build (step 82): 1 with LOWVERT, 2 while displayed
 #define	WALLPAGE(p)	(flatwalls ? FlatPage (p) : (unsigned)PM_GetPage (p))	// step 81
 
 fixed	tileglobal	= TILEGLOBAL;
@@ -770,6 +771,7 @@ void VGAClearScreen (void)
 {
  unsigned ceiling=vgaCeiling[gamestate.episode*10+mapon];
  unsigned half;
+ unsigned rowadd = 0,floorn;		// NEC V30 build (step 82): LOWVERT's even rows
  static unsigned fill,skip;			// static: named in the asm below
  extern unsigned postmin,bandlim,bandhalf,bandtop,ceilcolor;
 
@@ -793,6 +795,16 @@ void VGAClearScreen (void)
  bandtop = fill*SCREENBWIDE;
  ceilcolor = ceiling;
  skip *= 2*SCREENBWIDE;				// the band, in bytes
+ floorn = fill;
+ if (lowvert)						// NEC V30 build (step 82): the even rows only
+ {
+	unsigned fr = half+bandhalf;	// the floor's first row, made even
+	fr += fr&1;
+	floorn = (viewheight-fr)/2;
+	fill = (fill+1)/2;				// the ceiling's even rows
+	skip = (fr-2*fill)*SCREENBWIDE;
+	rowadd = SCREENBWIDE;
+ }
 
   //
   // clear the screen
@@ -805,6 +817,7 @@ asm	mov	dx,80
 asm	mov	ax,[viewwidth]
 asm	shr	ax,2
 asm	sub	dx,ax					// dx = 40-viewwidth/2
+asm	add	dx,[rowadd]				// LOWVERT: and over the odd row
 
 asm	mov	bx,[viewwidth]
 asm	shr	bx,3					// bl = viewwidth/8
@@ -833,7 +846,7 @@ asm	jnz	toploop
 noceiling:
 
 asm	add	di,[skip]				// over the band the walls cover
-asm	mov	bh,BYTE PTR [fill]
+asm	mov	bh,BYTE PTR [floorn]
 asm	or	bh,bh
 asm	jz	nofloor
 asm	mov	ax,0x1919
@@ -1185,6 +1198,11 @@ void	ThreeDRefresh (void)
 // spotvis[x][y] == vismark; the array is cleared only when vismark passes
 // 255, every 255 frames, so no stale mark can ever equal the current one.
 //
+	if (lowvert == 1)			// NEC V30 build (step 82): show the even rows
+	{
+		VL_LowVert (1);
+		lowvert = 2;
+	}
 	if (++vismark > 255)
 	{
 asm	mov	ax,ds

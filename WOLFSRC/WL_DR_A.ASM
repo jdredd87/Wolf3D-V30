@@ -47,6 +47,7 @@ DATASEG
 
 EXTRN	viewwidth:WORD
 EXTRN	viewheight:WORD				; step 81
+EXTRN	lowvert:WORD				; step 82
 EXTRN	pixstep:WORD				; step 79: 1, or 2 for LOWDETAIL
 EXTRN	mapsegs:WORD				; unsigned _seg *mapsegs[MAPPLANES]
 EXTRN	farmapylookup:WORD			; unsigned [MAPSIZE]: y*64
@@ -3859,6 +3860,25 @@ ENDP
 ;
 PROC	FlatSetup FAR
 PUBLIC	FlatSetup
+	cmp	[lowvert],0				; step 82: with LOWVERT, the body writes the
+	je	@@nolv					; even row of each pair only (half is even:
+	mov	bx,OFFSET fr_body		; pair k's row above, half-1-k, is even when
+	mov	cx,FMAX					; k is odd, the row below, half+k, when k is
+	mov	dx,FMAX-1				; even), the other made LEA BX,[BX+0]
+@@lv:
+	test	dl,1
+	jnz	@@kodd
+	mov	[WORD cs:bx],9F8Dh
+	mov	[WORD cs:bx+2],0
+	jmp	@@lvn
+@@kodd:
+	mov	[WORD cs:bx+4],9F8Dh
+	mov	[WORD cs:bx+6],0
+@@lvn:
+	add	bx,8
+	dec	dx
+	loop	@@lv
+@@nolv:
 	mov	ax,OFFSET FlatPost		; ScalePostA: JMP FlatPost
 	sub	ax,OFFSET ScalePostA+3
 	mov	[BYTE cs:ScalePostA],0E9h

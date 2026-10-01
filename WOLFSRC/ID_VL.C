@@ -486,6 +486,38 @@ void VL_FadeOut (int start, int end, int red, int green, int blue, int steps)
 	VL_FillPalette (red,green,blue);
 
 	screenfaded = true;
+	{
+		extern int lowvert;			// NEC V30 build (step 82): the screen is
+		if (lowvert == 2)			// black -- back to every row, for whatever
+		{							// comes next that is not the 3D view
+			VL_LowVert (0);
+			lowvert = 1;
+		}
+	}
+}
+
+
+/*
+=================
+=
+= VL_LowVert
+=
+= NEC V30 build (step 82), StevenC & Claude: LOWVERT's display -- every other
+= row of the page (CRTC offset 80 words, not 40), each shown four times
+= (maximum scan line 3, not 1) -- or the normal one.
+=
+=================
+*/
+
+void VL_LowVert (int on)
+{
+	byte	msl;
+
+	outportb (CRTC_INDEX,9);			// maximum scan line
+	msl = inportb (CRTC_INDEX+1);
+	outportb (CRTC_INDEX+1,(msl&0xe0) | (on ? 3 : 1));
+	outportb (CRTC_INDEX,CRTC_OFFSET);
+	outportb (CRTC_INDEX+1,on ? 80 : 40);
 }
 
 
