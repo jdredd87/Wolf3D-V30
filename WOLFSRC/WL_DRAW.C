@@ -1077,51 +1077,98 @@ void	FixOfs (void)
 =
 = FlatColours
 =
-= NEC V30 build (step 81), StevenC & Claude: FLATWALLS' colour for each wall
-= page -- the palette entry nearest the average of 255 of its pixels (a
-= stride of 17, so no row or column dominates).  A texture's dark twin
-= averages darker, so the walls keep their light and dark sides.
+= NEC V30 build (steps 81, 83), StevenC & Claude: FLATWALLS' colour for each
+= wall page.  Its average -- of 255 of its pixels, a stride of 17 so no row
+= or column dominates -- is taken once; then, at each new ceiling colour,
+= the palette entry nearest it, or failing that nearest a darker or lighter
+= average, that is at least 9 steps from the floor and the ceiling, and
+= from the light twin's colour for a dark one: so no wall melts into what is
+= above or below it, the two sides of a wall stay apart, and grey stays grey.
 =
 =====================
 */
 
-void FlatColours (void)
+#define FLATPAGES	128
+#define FLATMIND	80			// 9 steps of 6-bit RGB, squared
+
+static byte	far flatavg[FLATPAGES][3];
+
+static unsigned FlatNear (byte far *pal, int r, int g, int b)
 {
-	unsigned	page,i,ofs,r,g,b,d,bestd,best;
+	unsigned	i,d,bestd,best;
 	int			dr,dg,db;
+
+	bestd = 0xffff;
+	best = 0;
+	for (i = 0; i < 256; i++, pal += 3)
+	{
+		dr = pal[0]-r;
+		dg = pal[1]-g;
+		db = pal[2]-b;
+		d = dr*dr+dg*dg+db*db;		// at most 3*63*63
+		if (d < bestd)
+		{
+			bestd = d;
+			best = i;
+		}
+	}
+	return best;
+}
+
+static unsigned FlatDist (byte far *pal, unsigned a, unsigned b)
+{
+	int	dr,dg,db;
+
+	dr = pal[a*3]-pal[b*3];
+	dg = pal[a*3+1]-pal[b*3+1];
+	db = pal[a*3+2]-pal[b*3+2];
+	return dr*dr+dg*dg+db*db;
+}
+
+void FlatColours (unsigned ceiling)
+{
+	static char	ks[] = {20,17,23,14,26,11,29,8,32,5};	// in 20ths
+	static int	averaged;
+	unsigned	page,i,ofs,r,g,b,d,c,light;
 	byte		far *src, far *pal;
 
 	pal = &gamepal;
-	for (page = 0; page < PMSpriteStart && page < 128; page++)
+	light = 0;
+	for (page = 0; page < PMSpriteStart && page < FLATPAGES; page++)
 	{
-		src = (byte far *)PM_GetPage (page);
-		r = g = b = 0;					// at most 255*63: no overflow
-		for (i = 0, ofs = 0; i < 255; i++, ofs = (ofs+17)&0xfff)
+		if (!averaged)
 		{
-			d = src[ofs]*3;
-			r += pal[d];
-			g += pal[d+1];
-			b += pal[d+2];
-		}
-		r /= 255;
-		g /= 255;
-		b /= 255;
-		bestd = 0xffff;
-		best = 0;
-		for (i = 0; i < 256; i++)
-		{
-			dr = pal[i*3]-r;
-			dg = pal[i*3+1]-g;
-			db = pal[i*3+2]-b;
-			d = dr*dr+dg*dg+db*db;		// at most 3*63*63
-			if (d < bestd)
+			src = (byte far *)PM_GetPage (page);
+			r = g = b = 0;					// at most 255*63: no overflow
+			for (i = 0, ofs = 0; i < 255; i++, ofs = (ofs+17)&0xfff)
 			{
-				bestd = d;
-				best = i;
+				d = src[ofs]*3;
+				r += pal[d];
+				g += pal[d+1];
+				b += pal[d+2];
 			}
+			flatavg[page][0] = r/255;
+			flatavg[page][1] = g/255;
+			flatavg[page][2] = b/255;
 		}
-		FlatColour (page,best);
+		c = 0;
+		for (i = 0; i < sizeof(ks); i++)
+		{
+			r = flatavg[page][0]*ks[i]/20;
+			g = flatavg[page][1]*ks[i]/20;
+			b = flatavg[page][2]*ks[i]/20;
+			c = FlatNear (pal, r > 63 ? 63 : r, g > 63 ? 63 : g, b > 63 ? 63 : b);
+			if (FlatDist (pal,c,0x19) >= FLATMIND && FlatDist (pal,c,ceiling) >= FLATMIND
+			&& (!(page&1) || FlatDist (pal,c,light) >= FLATMIND))
+				break;
+		}
+		if (i == sizeof(ks))				// nothing far enough: the nearest
+			c = FlatNear (pal, flatavg[page][0], flatavg[page][1], flatavg[page][2]);
+		if (!(page&1))
+			light = c;
+		FlatColour (page,c);
 	}
+	averaged = 1;
 }
 
 
@@ -1153,11 +1200,17 @@ void WallRefresh (void)
 	if (flatwalls)				// NEC V30 build (step 81): every post to
 	{							// FlatPost, which only notes its colour
 		extern unsigned bandlim;
+		static unsigned flatceil = 0xffff;
+		unsigned ceiling = vgaCeiling[gamestate.episode*10+mapon]&0xff;
 		if (flatwalls == 1)
 		{
-			FlatColours ();
 			FlatSetup ();
 			flatwalls = 2;
+		}
+		if (ceiling != flatceil)	// step 83: the colours, against this ceiling
+		{
+			FlatColours (ceiling);
+			flatceil = ceiling;
 		}
 		bandlim = 0xFFFF;
 	}

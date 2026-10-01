@@ -3915,8 +3915,16 @@ PUBLIC	FlatPage
 	mov	bp,sp
 	mov	bx,[bp+6]
 	and	bx,FLATPAGES-1
+	cmp	[BYTE cs:flatart+bx],0	; step 83: artwork is drawn as it is
+	jne	@@art
 	mov	al,[cs:flatcol+bx]
 	xor	ah,ah
+	pop	bp
+	retf
+@@art:
+	push	[WORD bp+6]
+	call	PM_GetPage
+	add	sp,2
 	pop	bp
 	retf
 ENDP
@@ -3942,6 +3950,8 @@ PUBLIC	FlatPost					; public only so profiles can name it
 	jae	@@mok
 	mov	[postmin],ax
 @@mok:
+	cmp	[WORD postsource+2],0FFh
+	ja	@@tex					; step 83: a segment, not a colour -- artwork
 	shr	ax,2
 	jnz	@@nz
 	inc	ax
@@ -3955,6 +3965,68 @@ PUBLIC	FlatPost					; public only so profiles can name it
 	mov	ah,al
 	mov	al,[BYTE postsource+2]	; the colour
 	mov	di,OFFSET wc			; (in this segment: LEA would take it as DGROUP's)
+	add	di,bx
+	mov	cx,[postwidth]
+	push	cs
+	pop	es
+	rep	stosw
+	ret
+;
+; step 83: artwork, drawn by its compiled scaler as ScalePostA draws it
+; (without the band, which FlatRender fills), and its columns marked
+;
+@@tex:
+	push	si
+	push	ax						; its scale*4
+	mov	bp,ax
+	add	bp,OFFSET fullscalefarcall
+	mov	di,[postx]
+	mov	bx,di
+	shr	di,2					; X in bytes
+	add	di,[bufferofs]
+	and	bx,3
+	shl	bx,3
+	add	bx,[postwidth]			; bx = pixel*8+pixwidth
+	mov	al,[mapmasks1-1+bx]
+	mov	dx,SC_INDEX+1
+	out	dx,al
+	les	si,[postsource]			; ES:SI = the texture column
+	mov	cx,SCREENSEG
+	mov	ds,cx					; DS = the screen
+	call	[DWORD bp]
+	mov	al,[ss:mapmasks2-1+bx]
+	or	al,al
+	jz	@@tdone
+	inc	di
+	out	dx,al
+	call	[DWORD bp]
+	mov	al,[ss:mapmasks3-1+bx]
+	or	al,al
+	jz	@@tdone
+	inc	di
+	out	dx,al
+	call	[DWORD bp]
+@@tdone:
+	mov	ax,ss
+	mov	ds,ax
+	pop	ax
+	pop	si
+	shr	ax,2
+	jnz	@@tnz
+	inc	ax
+@@tnz:
+	mov	dx,[viewheight]
+	shr	dx,1
+	cmp	ax,dx
+	jbe	@@tcc
+	mov	ax,dx
+@@tcc:
+	or	al,80h					; drawn already: FlatRender fills its band only
+	mov	ah,al
+	xor	al,al
+	mov	bx,[postx]
+	shl	bx,1
+	mov	di,OFFSET wc
 	add	di,bx
 	mov	cx,[postwidth]
 	push	cs
@@ -3995,6 +4067,11 @@ PUBLIC	FlatRender
 	mov	ax,SCREENSEG
 	mov	ds,ax
 fr_group:
+	mov	al,[cs:si+1]			; step 83: artwork in the group?
+	or	al,[cs:si+3]
+	or	al,[cs:si+5]
+	or	al,[cs:si+7]
+	js	fr_art
 	mov	bl,[cs:si+1]			; BL = m, BH = M: the least and most of the four
 	mov	bh,bl
 	mov	al,[cs:si+3]
@@ -4194,6 +4271,88 @@ fr_done:
 	pop	di
 	pop	si
 	retf
+;
+; step 83: a group with artwork -- column by column, each its wall unless
+; the scaler drew it, then its band
+;
+fr_art:
+	mov	al,[cs:si+1]
+	test	al,80h
+	jnz	fra0
+	mov	al,1
+	out	dx,al
+	mov	al,[cs:si+0]
+	mov	ah,al
+	xor	cx,cx
+	mov	bl,[cs:si+1]
+	xor	bh,bh
+	call	FlatFill
+fra0:
+	mov	al,1
+	out	dx,al
+	mov	cl,[cs:si+1]
+	and	cx,7Fh
+	mov	bx,[cs:fr_band]
+	mov	ax,[cs:fr_cf]
+	call	FlatFill				; rows cc .. B-1, if any
+	mov	al,[cs:si+3]
+	test	al,80h
+	jnz	fra1
+	mov	al,2
+	out	dx,al
+	mov	al,[cs:si+2]
+	mov	ah,al
+	xor	cx,cx
+	mov	bl,[cs:si+3]
+	xor	bh,bh
+	call	FlatFill
+fra1:
+	mov	al,2
+	out	dx,al
+	mov	cl,[cs:si+3]
+	and	cx,7Fh
+	mov	bx,[cs:fr_band]
+	mov	ax,[cs:fr_cf]
+	call	FlatFill				; rows cc .. B-1, if any
+	mov	al,[cs:si+5]
+	test	al,80h
+	jnz	fra2
+	mov	al,4
+	out	dx,al
+	mov	al,[cs:si+4]
+	mov	ah,al
+	xor	cx,cx
+	mov	bl,[cs:si+5]
+	xor	bh,bh
+	call	FlatFill
+fra2:
+	mov	al,4
+	out	dx,al
+	mov	cl,[cs:si+5]
+	and	cx,7Fh
+	mov	bx,[cs:fr_band]
+	mov	ax,[cs:fr_cf]
+	call	FlatFill				; rows cc .. B-1, if any
+	mov	al,[cs:si+7]
+	test	al,80h
+	jnz	fra3
+	mov	al,8
+	out	dx,al
+	mov	al,[cs:si+6]
+	mov	ah,al
+	xor	cx,cx
+	mov	bl,[cs:si+7]
+	xor	bh,bh
+	call	FlatFill
+fra3:
+	mov	al,8
+	out	dx,al
+	mov	cl,[cs:si+7]
+	and	cx,7Fh
+	mov	bx,[cs:fr_band]
+	mov	ax,[cs:fr_cf]
+	call	FlatFill				; rows cc .. B-1, if any
+	jmp	fr_next
 ENDP
 
 ;
@@ -4569,6 +4728,15 @@ PUBLIC	fr_body						; public only so profiles can name it
 
 FLATPAGES	=	128				; wall pages a colour is kept for (WL6 has 106)
 flatcol		db	FLATPAGES DUP (0)
+LABEL	flatart	BYTE			; step 83: 1 for a texture with artwork on it
+	db	0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0
+	db	0,0,1,1,1,1,0,0,0,0,1,1,0,0,1,1
+	db	0,0,1,1,0,0,1,1,1,1,1,1,1,1,0,0
+	db	0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0
+	db	1,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0
+	db	1,1,0,0,1,1,0,0,0,0,0,0,1,1,0,0
+	db	1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	EVEN
 wc			dw	320 DUP (0)		; each column's colour, and its wall's half height
 fr_mm		dw	0				; the group's least (low) and most half height
