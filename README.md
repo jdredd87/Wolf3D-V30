@@ -42,6 +42,8 @@ WOLF3DV
 
 Optional switches trade picture for speed, in any combination: `LOWWALLS`, `LOWSPRITES`, `FLATWALLS`, `LOWVERT`, or `LOWDETAIL` for the first two (`WOLF3DV LOWDETAIL` is about 40% faster) -- see Status. Without them the game draws exactly what id's does.
 
+Or type `PLAY` for a menu of them: a key turns each switch on or off (`A` all, `N` none), `P` plays, `B` runs the 200-frame benchmark with them, `Q` quits, and quitting the game comes back to the menu. It remembers the last choice (`W3MENU.CFG`), and with no key for 30 seconds it quits by itself (`PLAY /T:60` changes that, `/T:0` waits for ever, `/PLAY` makes it start the game instead). The menu is `W3MENU.EXE` (`launcher/w3menu.pas`, built with FPC by `w3dbuild.py deploy`); it writes the game's command line into `W3RUN.BAT` and exits before the game starts, so it takes none of the memory the game's page cache could use.
+
 **Memory: XMS is the default, and the fastest setup on this machine** (step
 29). The page manager keeps textures in conventional memory and XMS (served
 by XMSSC over the PicoMEM's EMS) instead of remapping EMS pages every frame:
