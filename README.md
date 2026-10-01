@@ -46,12 +46,27 @@ Or type `PLAY` for a menu of them: a key turns each switch on or off (`A` all, `
 
 `SHOWCASE` is a demo reel for recording: nine modes, from id's own picture to everything on, each a title screen saying what it shows and with which switches (8 seconds), a minute of demo 0 with them (`TIMEDEMO PRELOAD SECS 60`: the same time each, so the faster modes get further), and its speed report (10 seconds) -- some 15 minutes in all; then every run's figures together. `S` skips a wait, `Q` quits. It is written by `launcher/mkshow.py`, where the modes are listed, and sent by `w3dbuild.py deploy`.
 
-**Memory: XMS is the default, and the fastest setup on this machine** (step
-29). The page manager keeps textures in conventional memory and XMS (served
-by XMSSC over the PicoMEM's EMS) instead of remapping EMS pages every frame:
-3.78 fps against 3.59 for id's EMS+XMS. EMS is used only when there is no
-XMS, or when `EMS` asks for id's original setup; id's `NOEMS` and `NOXMS`
-still work. Everything else is the game as id made it.
+**Memory: XMS served out of EMS, the fastest setup on this machine** (step
+29). An 8086-class PC has no memory above 1 MB, so it has no XMS of its own;
+what the V30 has is the PicoMEM card's 4 MB of EMS. Two drivers StevenC and
+Claude wrote for it turn that into XMS:
+
+| | |
+|---|---|
+| [PMEMMSC](https://github.com/jdredd87/CH375USBTools/tree/main/PicoMEM/emm) | the PicoMEM's EMS driver, rebuilt: page mapping 45% faster, five EMS bugs fixed, loaded low (`CH375USBTools`, `PicoMEM/emm`) |
+| [XMSSC](https://github.com/jdredd87/DOSBridge/tree/main/server/extras/xmssc) | an XMS 3.0 driver that hands out that EMS as XMS; on a PicoMEM it drives the card's page registers itself -- small moves 22% faster than the EMS driver's own move function (`DOSBridge`, an optional extra) |
+
+Why XMS over EMS beats the EMS itself for this game: with EMS, id's page
+manager maps textures into the 64 KB page frame and remaps its four slots
+through INT 67h about nine times a frame, some 1.3 ms each on this card.
+With XMS it copies a 4 KB page into its own cache in conventional memory once
+-- XMSSC moving it straight off the PicoMEM -- and reads it there for as long
+as it stays cached, so a texture used frame after frame costs nothing after
+the first copy. The benchmark at step 29: 3.78 fps against 3.59 for id's
+EMS-first setup. EMS is used only when there is no XMS, or when `EMS` asks
+for id's original order; id's `NOEMS` and `NOXMS` still work. On the V30,
+`CONFIG.SYS` loads `PMEMMSC.SYS /n` and then `XMSSC.SYS`. Everything else
+is the game as id made it.
 
 For measuring, `WOLF3DV TIMEDEMO QUICK PRELOAD` plays demo 0's first 200
 frames flat out and prints the frame rate; `CRC` adds checksums of the picture,
