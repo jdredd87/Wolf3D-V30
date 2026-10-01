@@ -9,6 +9,7 @@ DOS programs.
     python w3dbuild.py build         ship WOLFSRC, build on the 486, pull WOLF3DV.EXE + .MAP back
     python w3dbuild.py deploy        put WOLFSRC\\WOLF3DV.EXE into the V30's C:\\WOLF3D, with the
                                      switches menu (PLAY.BAT and W3MENU.EXE, built here)
+                                     and the demo reel (SHOWCASE.BAT)
     python w3dbuild.py all           build, then deploy
     python w3dbuild.py listings WL_DR_A.ASM WL_DRAW.C ...
                                      assembler listings into stage/lst, to read profiles against
@@ -148,6 +149,9 @@ def cmd_deploy():
     # and the switches menu: PLAY.BAT runs W3MENU.EXE, built here with FPC
     dosctl("deploy", build_launcher(), r"C:\WOLF3D", "--box", RUN_BOX)
     dosctl("deploy", os.path.join(LAUNCHER, "PLAY.BAT"), r"C:\WOLF3D", "--box", RUN_BOX)
+    sys.path.insert(0, LAUNCHER)        # and the demo reel, SHOWCASE.BAT, fresh
+    import mkshow
+    dosctl("deploy", mkshow.write(), r"C:\WOLF3D", "--box", RUN_BOX)
 
 
 def build_launcher():
