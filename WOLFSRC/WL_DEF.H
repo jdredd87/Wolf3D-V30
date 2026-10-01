@@ -920,7 +920,8 @@ extern	boolean		timedemo;		// TIMEDEMO: unpaced demos, timed -- StevenC & Claude
 extern	long		tdticks;		// BIOS ticks (18.2 Hz) the last PlayLoop took
 extern	long		tdlater;		// ...of which after its first frame (the fizzle-in)
 extern	long		tdmaxframes;	// QUICK: end each demo after this many frames
-extern	long		tdmaxticks;		// SECS n: end demo 0 after n seconds of play
+extern	long		tdmaxticks;		// SECS n: end the run after n seconds of play
+extern	long		tdspent;		// ... the play ticks of its demos so far
 #define	TDCRCMAX	8
 extern	boolean		tdcrc;			// CRC: checksum the view every 50 frames
 extern	boolean		tdpreload;		// PRELOAD: fill the page cache first, as play does

@@ -79,6 +79,8 @@ long		tdticks;
 long		tdlater;
 long		tdmaxframes;
 long		tdmaxticks;			// NEC V30 build: TIMEDEMO SECS n, in BIOS ticks
+long		tdspent;			// ... and the play ticks of the demos before this one
+long		tdpreticks;			// TIMEDEMO PRELOAD: the preloads' ticks
 boolean		tdcrc;
 boolean		tdpreload;
 int			tdcrcs;
@@ -1622,7 +1624,7 @@ void PlayLoop (void)
 
 		if (tdmaxframes && frameon >= tdmaxframes)
 			playstate = ex_completed;	// QUICK timedemo: enough frames
-		if (tdmaxticks && frameon > 1 && BiosTicks () - tdlater >= tdmaxticks)
+		if (tdmaxticks && frameon > 1 && tdspent + BiosTicks () - tdlater >= tdmaxticks)
 			playstate = ex_completed;	// SECS timedemo: long enough
 	}while (!playstate && !startgame);
 

@@ -6,16 +6,16 @@ StevenC & Claude, 2026.
 
 On the DOS machine, in C:\\WOLF3D, type SHOWCASE.  For each mode, in order
 from id's own picture to the fastest: a title screen saying what it shows
-and with which switches (8 seconds), SECS seconds of demo 0 with them
-(TIMEDEMO SECS: the same time each, so the faster modes get further), and
-its speed report (10 seconds); at the end, every run's figures
-together.  S skips a wait, Q quits.
+and with which switches (8 seconds), SECS seconds of the game's demos with
+them (TIMEDEMO SECS: the same time each, so the faster modes get further,
+and a fast PC plays on into the next demo), and its speed report (10
+seconds); at the end, every run's figures together.  Each screen names
+the processor, from W3MENU /CPU.  S skips a wait, Q quits.
 
 It runs straight down, no GOTO but to the end -- COMMAND.COM finds a label
 by reading the file from the top.  The game's report goes to SHOWRES.TXT
-and is shown from there, and each run's "demo 0" line -- frames, ticks,
-fps -- is gathered into SHOWSUM1.TXT and SHOWSUM2.TXT for the summary,
-shown a page each (the line is 87 columns: it takes two rows) (FIND reading its
+and is shown from there, and each run's "secs" line -- its frames and speed over all its play, one short line --
+is gathered into SHOWSUM.TXT for the summary (FIND reading its
 input from a redirect prints the matching lines and nothing else).
 """
 import os
@@ -50,30 +50,28 @@ MODES = [
 ]
 INTRO, AFTER, SUMMARY = 8, 10, 15       # seconds
 SECS = 60                               # of play a mode (TIMEDEMO SECS)
-SPLIT = 5                               # runs on the summary's first page
-
-
-def sumfile(i):
-    return "SHOWSUM1.TXT" if i <= SPLIT else "SHOWSUM2.TXT"
+TITLE = "Wolfenstein 3-D  --  optimized by StevenC and Claude"
 
 
 def write():
     n = len(MODES)
     out = [
         "@ECHO OFF",
-        "REM Wolfenstein 3-D for the NEC V30: a demo reel of the detail switches.",
+        "REM Wolfenstein 3-D (the NEC V30 build): a demo reel of the detail switches.",
         "REM Written by launcher\\mkshow.py (StevenC & Claude): edit that, not this.",
         "C:",
         "CD \\WOLF3D",
-        "IF EXIST SHOWSUM1.TXT DEL SHOWSUM1.TXT",
-        "IF EXIST SHOWSUM2.TXT DEL SHOWSUM2.TXT",
+        "IF EXIST SHOWSUM.TXT DEL SHOWSUM.TXT",
+        "IF EXIST SHOWCPU.TXT DEL SHOWCPU.TXT",
+        "IF EXIST W3MENU.EXE W3MENU /CPU > SHOWCPU.TXT",   # this PC's processor, one line
     ]
     for i, (sw, title, lines) in enumerate(MODES, 1):
         cmd = "WOLF3DV TIMEDEMO PRELOAD SECS %d" % SECS + (" " + sw if sw else "")
         out += [
             "CLS",
             "ECHO.",
-            "ECHO   Wolfenstein 3-D on an NEC V30  --  StevenC and Claude",
+            "ECHO   " + TITLE,
+            "IF EXIST SHOWCPU.TXT TYPE SHOWCPU.TXT",
             "ECHO   ------------------------------------------------------------------",
             "ECHO.",
             "ECHO   Demo %d of %d:  %s" % (i, n, title),
@@ -82,8 +80,8 @@ def write():
         out += ["ECHO   " + l for l in lines]
         out += [
             "ECHO.",
-            "ECHO   %d seconds of the game's demo 0, then the speed: the faster" % SECS,
-            "ECHO   the mode, the further it gets in the same time.",
+            "ECHO   %d seconds of the game's own demos, then the speed: the faster" % SECS,
+            "ECHO   the mode, the further it gets (a fast PC plays on into the next).",
             "ECHO.",
             "ECHO   %s" % cmd,
             "ECHO.",
@@ -96,26 +94,23 @@ def write():
             "ECHO   Demo %d of %d:  %s" % (i, n, title),
             "ECHO.",
             "TYPE SHOWRES.TXT",
-            "ECHO %d. %s >> %s" % (i, title, sumfile(i)),
-            'FIND "demo 0" < SHOWRES.TXT >> %s' % sumfile(i),
+            "ECHO %d. %s >> SHOWSUM.TXT" % (i, title),
+            'FIND "secs " < SHOWRES.TXT >> SHOWSUM.TXT',
             "ECHO.",
             "ECHO   Next in %d seconds  (S goes on now, Q quits)" % AFTER,
             "CHOICE /C:SQ /N /T:S,%02d > NUL" % AFTER,
             "IF ERRORLEVEL 2 GOTO END",
         ]
-    out += [":END"]
-    for page, f in ((1, "SHOWSUM1.TXT"), (2, "SHOWSUM2.TXT")):
-        out += [
-            "CLS",
-            "ECHO.",
-            "ECHO   Wolfenstein 3-D on an NEC V30  --  the runs, %d of 2:" % page,
-            "ECHO.",
-            "IF EXIST %s TYPE %s" % (f, f),
-            "ECHO.",
-        ]
-        if page == 1:
-            out += ["CHOICE /C:SQ /N /T:S,%02d > NUL" % SUMMARY]
-    out += ["ECHO   Full detail is id's picture exactly; every switch is optional."]
+    out += [
+        ":END",
+        "CLS",
+        "ECHO   " + TITLE,
+        "IF EXIST SHOWCPU.TXT TYPE SHOWCPU.TXT",
+        "ECHO   -- every run, its frames and speed over %d seconds of play:" % SECS,
+        "ECHO.",
+        "IF EXIST SHOWSUM.TXT TYPE SHOWSUM.TXT",
+        "ECHO   Full detail is id's picture exactly; every switch is optional.",
+    ]
     for line in out:
         assert "|" not in line and ">=" not in line, line
         assert len(line) <= 127, line

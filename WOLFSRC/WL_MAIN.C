@@ -1484,14 +1484,13 @@ void TimeDemo (void)
 		ndemos = 1;					// QUICK: demo 0, first 200 frames only --
 		tdmaxframes = 200;			// the same frames every run, for A/B timing
 	}
-	for (i = 1;i < _argc-1;i++)		// SECS n: demo 0 for n seconds of play, the
+	for (i = 1;i < _argc-1;i++)		// SECS n: the demos for n seconds of play, the
 		if (!_fstricmp (_argv[i],"secs"))	// same time every run (SHOWCASE.BAT)
 		{
 			char	far *p = _argv[i+1];
 			long	n = 0;
 			while (*p >= '0' && *p <= '9')
 				n = n*10 + *p++ - '0';
-			ndemos = 1;
 			tdmaxticks = n*182/10;
 		}
 
@@ -1539,11 +1538,20 @@ void TimeDemo (void)
 			played++;				// it did play, partly -- report it
 			break;
 		}
+		tdspent += tdlater;			// SECS: the time is up, or on to the next
+		if (tdmaxticks && tdspent >= tdmaxticks)
+		{
+			played++;
+			break;
+		}
 	}
 
 	samples = ProfWrite ();			// before ShutdownId frees its memory
 	ShutdownId ();
-	printf ("WOLF3D TIMEDEMO  -- NEC V30 build, StevenC & Claude\n");
+	{
+	extern long tdpreticks;
+	printf ("WOLF3D TIMEDEMO -- StevenC & Claude; preload %ld ticks\n",tdpreticks);
+	}
 	printf ("pages: %u in VSWAP  EMS %s %u  XMS %s %u  main %d\n",ChunksInFile,
 		EMSPresent ? "yes" : "no",EMSPagesAvail,
 		XMSPresent ? "yes" : "no",XMSPagesAvail,MainPagesAvail);
@@ -1565,6 +1573,8 @@ void TimeDemo (void)
 		tt += ticks[i];
 		tl += later[i];
 	}
+	if (tdmaxticks)					// SECS: the run's play in one line
+		printf ("secs %6ld frames %6ld ticks %s\n",tf-played,tl,FpsString(tf-played,tl));
 	if (played > 1)
 	{
 		printf ("total              %5ld frames  %5ld ticks  %s",tf,tt,FpsString(tf,tt));

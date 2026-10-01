@@ -1101,7 +1101,12 @@ void PlayDemo (int demonumber)
 	StartMusic ();
 	PM_CheckMainMem ();
 	if (tdpreload)
+	{
+		extern long tdpreticks;
+		long t = BiosTicks ();
 		PM_Preload (TDPreloadUpdate);	// TIMEDEMO PRELOAD: what "Get Psyched" does
+		tdpreticks += BiosTicks () - t;
+	}
 	fizzlein = true;
 
 	PlayLoop ();

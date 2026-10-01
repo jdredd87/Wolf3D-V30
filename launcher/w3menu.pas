@@ -1,4 +1,4 @@
-{ W3MENU -- the detail switches menu for Wolfenstein 3-D on the NEC V30.
+{ W3MENU -- the detail switches menu for Wolfenstein 3-D (the NEC V30 build).
   Written by StevenC and Claude (Anthropic), 2026.
 
   PLAY.BAT runs it in a loop.  It shows the game's optional switches, each
@@ -14,6 +14,8 @@
 
     W3MENU [/T:secs] [/PLAY]     /T:0 waits for ever; /PLAY makes the
                                  timeout start the game instead of quitting
+    W3MENU /CPU                  print this PC's processor and coprocessor
+                                 on one line, and exit (SHOWCASE.BAT's)
 
   No Crt (it would take over the screen and stdout): text goes through
   DOS, keys come from the BIOS (INT 16h), the time from the BIOS tick.
@@ -21,7 +23,7 @@
 
 program W3Menu;
 
-uses Dos, VidFix;
+uses Dos, Cpu, VidFix;
 
 const
   NSW = 5;
@@ -173,6 +175,77 @@ begin
     Write(#13'  Your choice (quits by itself in ', secs:2, ' s): ');
 end;
 
+{ On a 386 or later, which: 3 if the AC flag (EFLAGS bit 18) will not
+  toggle -- a 386 has none -- else 4, unless the ID flag (bit 21) toggles
+  too, when CPUID gives the family.  32-bit code as bytes: FPC's i8086
+  assembler takes no 32-bit registers.  The flags are put back as found. }
+function Family386: Word; assembler;
+asm
+  db $66,$9C                    { pushfd }
+  db $66,$58                    { pop eax }
+  db $66,$89,$C1                { mov ecx,eax }
+  db $66,$35,$00,$00,$04,$00    { xor eax,40000h -- AC }
+  db $66,$50                    { push eax }
+  db $66,$9D                    { popfd }
+  db $66,$9C                    { pushfd }
+  db $66,$58                    { pop eax }
+  db $66,$51                    { push ecx }
+  db $66,$9D                    { popfd: as found }
+  db $66,$31,$C8                { xor eax,ecx }
+  db $66,$A9,$00,$00,$04,$00    { test eax,40000h }
+  mov ax,3
+  jz @done
+  db $66,$9C                    { pushfd }
+  db $66,$58                    { pop eax }
+  db $66,$89,$C1                { mov ecx,eax }
+  db $66,$35,$00,$00,$20,$00    { xor eax,200000h -- ID }
+  db $66,$50                    { push eax }
+  db $66,$9D                    { popfd }
+  db $66,$9C                    { pushfd }
+  db $66,$58                    { pop eax }
+  db $66,$51                    { push ecx }
+  db $66,$9D                    { popfd: as found }
+  db $66,$31,$C8                { xor eax,ecx }
+  db $66,$A9,$00,$00,$20,$00    { test eax,200000h }
+  mov ax,4
+  jz @done
+  push bx
+  db $66,$B8,$01,$00,$00,$00    { mov eax,1 }
+  db $0F,$A2                    { cpuid }
+  pop bx
+  mov al,ah
+  xor ah,ah
+  and al,$0F                    { the family }
+@done:
+end;
+
+{ This PC's processor and coprocessor, for the showcase's screens. }
+function CpuLine: string;
+var s: string; f: Word;
+begin
+  f := 0;
+  if CpuClass = cpu386 then
+  begin
+    f := Family386;
+    case f of
+      3: s := '80386';
+      4: s := '80486';
+      5: s := 'Pentium-class';
+    else
+      s := 'Pentium Pro or later';
+    end;
+  end
+  else
+    s := CpuName;
+  if not HasFpu then
+    s := s + ', no coprocessor'
+  else if f >= 4 then
+    s := s + ' with FPU'
+  else
+    s := s + ' with ' + FpuName;
+  CpuLine := s;
+end;
+
 procedure ParseArgs;
 var i, code, v: Integer; s: string;
 begin
@@ -185,6 +258,11 @@ begin
     begin
       Val(Copy(s, 4, 5), v, code);
       if (code = 0) and (v >= 0) and (v <= 3600) then Timeout := v;
+    end
+    else if (UpCase(s[2]) = 'C') then
+    begin
+      WriteLn('  This PC:  ', CpuLine);   { /CPU: one line, and done }
+      Halt(0);
     end
     else if (UpCase(s[2]) = 'P') then
       TimeoutPlays := True;
