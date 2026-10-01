@@ -3,3 +3,4 @@ stage/
 !WOLFSRC/OBJ/*.OBJ
 WOLFSRC/WOLF3DV.EXE
 WOLFSRC/WOLF3DV.MAP
+launcher/build/

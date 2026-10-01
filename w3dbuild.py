@@ -7,7 +7,8 @@ DOS programs.
 
     python w3dbuild.py bcpp          ship Borland C++ 3.1 (the subset we need) to the 486
     python w3dbuild.py build         ship WOLFSRC, build on the 486, pull WOLF3DV.EXE + .MAP back
-    python w3dbuild.py deploy        put WOLFSRC\\WOLF3DV.EXE into the V30's C:\\WOLF3D
+    python w3dbuild.py deploy        put WOLFSRC\\WOLF3DV.EXE into the V30's C:\\WOLF3D, with the
+                                     switches menu (PLAY.BAT and W3MENU.EXE, built here)
     python w3dbuild.py all           build, then deploy
     python w3dbuild.py listings WL_DR_A.ASM WL_DRAW.C ...
                                      assembler listings into stage/lst, to read profiles against
@@ -29,6 +30,7 @@ REMOTE = os.environ.get("W3D_REMOTE", r"C:\W3D")
 BRIDGE = os.environ.get("DOSBRIDGE", r"C:\dosbridgeDEV")
 DOSCTL = [sys.executable, os.path.join(BRIDGE, "dosctl.py")]
 BCPP_SRC = os.environ.get("BCPP_SRC", r"C:\Software\86Box\Software\BCPP")
+LAUNCHER = os.path.join(HERE, "launcher")    # W3MENU.EXE and PLAY.BAT, the switches menu
 STAGE = os.path.join(HERE, "stage")          # zips land here; git-ignored
 BUILD_BOX = "dx486"
 RUN_BOX = "v30"
@@ -143,6 +145,22 @@ def cmd_deploy():
     if not os.path.exists(exe):
         sys.exit("no WOLF3DV.EXE yet -- run `build` first")
     dosctl("deploy", exe, r"C:\WOLF3D", "--box", RUN_BOX)
+    # and the switches menu: PLAY.BAT runs W3MENU.EXE, built here with FPC
+    dosctl("deploy", build_launcher(), r"C:\WOLF3D", "--box", RUN_BOX)
+    dosctl("deploy", os.path.join(LAUNCHER, "PLAY.BAT"), r"C:\WOLF3D", "--box", RUN_BOX)
+
+
+def build_launcher():
+    """launcher\\w3menu.pas -> launcher\\build\\W3MENU.EXE, with the FPC
+    i8086 cross-compiler and the bridge's starter units (VidFix)."""
+    out = os.path.join(LAUNCHER, "build")
+    os.makedirs(out, exist_ok=True)
+    r = subprocess.run(["fpc", "-Tmsdos", "-Pi8086", "-WmSmall",
+                        "-Fu" + os.path.join(BRIDGE, "starter"), "-FEbuild", "-FUbuild",
+                        "w3menu.pas"], cwd=LAUNCHER, capture_output=True, text=True)
+    if r.returncode:
+        sys.exit("W3MENU build failed:\n" + r.stdout + r.stderr)
+    return os.path.join(out, "w3menu.exe")
 
 
 def main():
