@@ -36,6 +36,8 @@ EXTRN	scaledirectory:WORD			; t_compscale _seg *[] -- segments
 EXTRN	maxscale:WORD
 EXTRN	stepbytwo:WORD				; scalers from here up are shared by threes
 EXTRN	viewwidth:WORD
+EXTRN	lowsprites:WORD				; step 80: 1 with LOWSPRITES
+EXTRN	pixstep:WORD				; step 79: 2 with LOWWALLS
 EXTRN	wallheight:WORD
 EXTRN	slinex:WORD
 EXTRN	slinewidth:WORD
@@ -54,6 +56,9 @@ leftpix		dw	?
 rightpix	dw	?
 xcent		dw	?
 onemask		db	1,2,4,8				; step 54: mapmasks1[pixel][0], a width of 1
+twomaskr	db	3,0,0Ch,0			; step 80: an even x and x+1
+twomaskl	db	0,3,0,0Ch			; step 80: an odd x and x-1
+dblx		dw	?					; step 80: the x the last double column covered
 hh			dw	?					; step 55: the scaler's height, and 64 divided
 q64			dw	?					; by it
 r64			dw	?
@@ -246,6 +251,9 @@ ENDP
 
 PROC	ScaleShape FAR
 PUBLIC	ScaleShape
+@@once:
+	jmp	@@firstcall				; step 80: ADD AX,0, or LOWSPRITES' reset
+@@onceback:
 	push	bp
 	mov	bp,sp
 	push	si
@@ -329,6 +337,7 @@ PUBLIC	ScaleShape
 	shl	bx,1
 	cmp	[wallheight+bx],bp
 	jae	@@lloop					; obscured by a closer wall
+@@lj1:
 	jmp	@@l1draw				; step 54: drawn below, then back to @@lloop
 ;
 ; NEC V30 build: TASM's JUMPS turns a conditional jump that cannot reach
@@ -434,6 +443,7 @@ PUBLIC	ScaleShape
 	shl	bx,1
 	cmp	[wallheight+bx],bp
 	jae	@@rloop
+@@rj1:
 	jmp	@@r1draw				; step 54: drawn below, then back to @@rloop
 @@done_t:
 	jmp	@@done
@@ -527,6 +537,7 @@ PUBLIC	ScaleShape
 	shr	di,2					; X in bytes
 	add	di,[bufferofs]
 	and	bx,3
+@@lm1:
 	mov	al,[onemask+bx]
 	mov	dx,SC_INDEX+1
 	out	dx,al					; set map mask register
@@ -577,6 +588,7 @@ PUBLIC	ScaleShape
 	shr	di,2					; X in bytes
 	add	di,[bufferofs]
 	and	bx,3
+@@rm1:
 	mov	al,[onemask+bx]
 	mov	dx,SC_INDEX+1
 	out	dx,al					; set map mask register
@@ -656,6 +668,7 @@ PUBLIC	ScaleShape
 	shl	bx,1
 	cmp	[wallheight+bx],bp
 	jae	@@pl_next				; obscured by a closer wall
+@@plj:
 	jmp	@@pl1draw
 @@pl_next:
 	sub	si,[q64]				; p-1: 64p+63 less 64
@@ -696,6 +709,7 @@ PUBLIC	ScaleShape
 	shl	bx,1
 	cmp	[wallheight+bx],bp
 	jae	@@pr_next
+@@prj:
 	jmp	@@pr1draw
 @@pr_next:
 	inc	di
@@ -724,6 +738,7 @@ PUBLIC	ScaleShape
 	shr	di,2					; X in bytes
 	add	di,[bufferofs]
 	and	bx,3
+@@plm:
 	mov	al,[onemask+bx]
 	mov	dx,SC_INDEX+1
 	out	dx,al					; set map mask register
@@ -774,6 +789,7 @@ PUBLIC	ScaleShape
 	shr	di,2					; X in bytes
 	add	di,[bufferofs]
 	and	bx,3
+@@prm:
 	mov	al,[onemask+bx]
 	mov	dx,SC_INDEX+1
 	out	dx,al					; set map mask register
@@ -808,6 +824,217 @@ PUBLIC	ScaleShape
 	pop	di
 	pop	si
 	jmp	@@pr_next
+
+;
+; NEC V30 build (step 80), StevenC & Claude: the first call.  The entry jump
+; becomes ADD AX,0 (83 C0 00) or, with LOWSPRITES, a jump to @@sprst, and the
+; one-pixel blocks are rerouted through the stubs below.  Run once: the
+; switches are read at startup.  The offsets are taken at run time
+; (relocated), as TASM's one pass gets a difference of forward labels wrong,
+; and each jump is written whole, opcode too, as TASM may have made one short.
+;
+@@firstcall:
+	mov	[WORD cs:@@once],0C083h	; ADD AX,0 -- AX is scratch here
+	mov	[BYTE cs:@@once+2],0
+	cmp	[lowsprites],0
+	je	@@fcdone
+	mov	ax,OFFSET @@sprst
+	sub	ax,OFFSET @@once+3
+	mov	[BYTE cs:@@once],0E9h
+	mov	[WORD cs:@@once+1],ax
+	cmp	[pixstep],1
+	jne	@@fcwalls
+	mov	ax,OFFSET @@pl2
+	sub	ax,OFFSET @@plj+3
+	mov	[BYTE cs:@@plj],0E9h
+	mov	[WORD cs:@@plj+1],ax
+	mov	ax,OFFSET @@pr2
+	sub	ax,OFFSET @@prj+3
+	mov	[BYTE cs:@@prj],0E9h
+	mov	[WORD cs:@@prj+1],ax
+	mov	ax,OFFSET @@l2
+	sub	ax,OFFSET @@lj1+3
+	mov	[BYTE cs:@@lj1],0E9h
+	mov	[WORD cs:@@lj1+1],ax
+	mov	ax,OFFSET @@r2
+	sub	ax,OFFSET @@rj1+3
+	mov	[BYTE cs:@@rj1],0E9h
+	mov	[WORD cs:@@rj1+1],ax
+	jmp	@@fcmask
+@@fcwalls:						; LOWWALLS too: the lean stubs
+	mov	ax,OFFSET @@pl2w
+	sub	ax,OFFSET @@plj+3
+	mov	[BYTE cs:@@plj],0E9h
+	mov	[WORD cs:@@plj+1],ax
+	mov	ax,OFFSET @@pr2w
+	sub	ax,OFFSET @@prj+3
+	mov	[BYTE cs:@@prj],0E9h
+	mov	[WORD cs:@@prj+1],ax
+	mov	ax,OFFSET @@l2w
+	sub	ax,OFFSET @@lj1+3
+	mov	[BYTE cs:@@lj1],0E9h
+	mov	[WORD cs:@@lj1+1],ax
+	mov	ax,OFFSET @@r2w
+	sub	ax,OFFSET @@rj1+3
+	mov	[BYTE cs:@@rj1],0E9h
+	mov	[WORD cs:@@rj1+1],ax
+@@fcmask:
+	mov	ax,9F8Dh				; LEA BX,[BX+0]: the stub set AL
+	mov	[WORD cs:@@plm],ax
+	mov	[WORD cs:@@prm],ax
+	mov	[WORD cs:@@lm1],ax
+	mov	[WORD cs:@@rm1],ax
+	xor	ax,ax
+	mov	[WORD cs:@@plm+2],ax
+	mov	[WORD cs:@@prm+2],ax
+	mov	[WORD cs:@@lm1+2],ax
+	mov	[WORD cs:@@rm1+2],ax
+@@fcdone:
+	jmp	@@onceback
+
+;
+; LOWSPRITES.  Each sprite starts with nothing covered; each stub is entered
+; from its loop with BX = 2*x and x in front of the walls, and enters its
+; block with the map mask in AL.  The right column loop's DX is still 1, the
+; span's width, as @@rloop wants it.
+;
+@@sprst:
+	mov	[dblx],8000h
+	jmp	@@onceback
+@@pl2:
+	test	di,1
+	jz	@@pl2m
+	cmp	[wallheight+bx-2],bp
+	jae	@@pl21				; its partner is behind a wall: one pixel
+	lea	ax,[di-1]
+	mov	[dblx],ax
+	mov	bx,di
+	and	bx,3
+	mov	al,[twomaskl+bx]		; odd: x and its partner
+	jmp	@@pl1draw
+@@pl2m:
+	cmp	di,[dblx]
+	jne	@@pl21
+	jmp	@@pl_next					; drawn already, by its partner
+@@pl21:
+	mov	bx,di
+	and	bx,3
+	mov	al,[onemask+bx]		; one pixel
+	jmp	@@pl1draw
+@@pr2:
+	test	di,1
+	jnz	@@pr2m
+	cmp	[wallheight+bx+2],bp
+	jae	@@pr21				; its partner is behind a wall: one pixel
+	lea	ax,[di+1]
+	mov	[dblx],ax
+	mov	bx,di
+	and	bx,3
+	mov	al,[twomaskr+bx]		; even: x and its partner
+	jmp	@@pr1draw
+@@pr2m:
+	cmp	di,[dblx]
+	jne	@@pr21
+	jmp	@@pr_next					; drawn already, by its partner
+@@pr21:
+	mov	bx,di
+	and	bx,3
+	mov	al,[onemask+bx]		; one pixel
+	jmp	@@pr1draw
+@@l2:
+	test	di,1
+	jz	@@l2m
+	cmp	[wallheight+bx-2],bp
+	jae	@@l21				; its partner is behind a wall: one pixel
+	lea	ax,[di-1]
+	mov	[dblx],ax
+	mov	bx,di
+	and	bx,3
+	mov	al,[twomaskl+bx]		; odd: x and its partner
+	jmp	@@l1draw
+@@l2m:
+	cmp	di,[dblx]
+	jne	@@l21
+	jmp	@@lloop					; drawn already, by its partner
+@@l21:
+	mov	bx,di
+	and	bx,3
+	mov	al,[onemask+bx]		; one pixel
+	jmp	@@l1draw
+@@r2:
+	test	di,1
+	jnz	@@r2m
+	cmp	[wallheight+bx+2],bp
+	jae	@@r21				; its partner is behind a wall: one pixel
+	lea	ax,[di+1]
+	mov	[dblx],ax
+	mov	bx,di
+	and	bx,3
+	mov	al,[twomaskr+bx]		; even: x and its partner
+	jmp	@@r1draw
+@@r2m:
+	cmp	di,[dblx]
+	jne	@@r21
+	jmp	@@rloop					; drawn already, by its partner
+@@r21:
+	mov	bx,di
+	and	bx,3
+	mov	al,[onemask+bx]		; one pixel
+	jmp	@@r1draw
+@@pl2w:
+	test	di,1
+	jnz	@@pl2wo
+	mov	bx,di
+	and	bx,3
+	mov	al,[twomaskr+bx]		; even: x and x+1
+	jmp	@@pl1draw
+@@pl2wo:
+	jmp	@@pl_next					; odd: drawn by x-1
+@@pr2w:
+	test	di,1
+	jnz	@@pr2wo
+	mov	bx,di
+	and	bx,3
+	mov	al,[twomaskr+bx]		; even: x and x+1
+	jmp	@@pr1draw
+@@pr2wo:
+	jmp	@@pr_next					; odd: drawn by x-1
+@@l2w:
+	test	di,1
+	jz	@@l2wm
+	lea	ax,[di-1]
+	mov	[dblx],ax
+	mov	bx,di
+	and	bx,3
+	mov	al,[twomaskl+bx]		; odd: x and its partner
+	jmp	@@l1draw
+@@l2wm:
+	cmp	di,[dblx]
+	jne	@@l2w1
+	jmp	@@lloop					; drawn already, by its partner
+@@l2w1:
+	mov	bx,di
+	and	bx,3
+	mov	al,[onemask+bx]		; one pixel
+	jmp	@@l1draw
+@@r2w:
+	test	di,1
+	jnz	@@r2wm
+	lea	ax,[di+1]
+	mov	[dblx],ax
+	mov	bx,di
+	and	bx,3
+	mov	al,[twomaskr+bx]		; even: x and its partner
+	jmp	@@r1draw
+@@r2wm:
+	cmp	di,[dblx]
+	jne	@@r2w1
+	jmp	@@rloop					; drawn already, by its partner
+@@r2w1:
+	mov	bx,di
+	and	bx,3
+	mov	al,[onemask+bx]		; one pixel
+	jmp	@@r1draw
 ENDP
 
 

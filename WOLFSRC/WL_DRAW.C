@@ -40,7 +40,8 @@ long 	lasttimecount;
 long 	frameon;
 
 unsigned	wallheight[MAXVIEWWIDTH];
-int			pixstep = 1;				// NEC V30 build (step 79): 2 with LOWDETAIL
+int			pixstep = 1;				// NEC V30 build (step 79): 2 with LOWWALLS
+int			lowsprites;					// NEC V30 build (step 80): 1 with LOWSPRITES
 
 fixed	tileglobal	= TILEGLOBAL;
 fixed	mindist		= MINDIST;
