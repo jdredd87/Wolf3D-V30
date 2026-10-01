@@ -46,6 +46,7 @@ EXTRN	NOLANGUAGE F_LDIV@:FAR		; Borland's signed long divide (H_LDIV.ASM)
 DATASEG
 
 EXTRN	viewwidth:WORD
+EXTRN	pixstep:WORD				; step 79: 1, or 2 for LOWDETAIL
 EXTRN	mapsegs:WORD				; unsigned _seg *mapsegs[MAPPLANES]
 EXTRN	farmapylookup:WORD			; unsigned [MAPSIZE]: y*64
 EXTRN	doorobjlist:BYTE			; doorobj_t [MAXDOORS], 9 bytes each
@@ -1028,9 +1029,11 @@ hvw_tex:
 	jne	hvw_nwt				; (a short hop: see hvw_nwt)
 	cmp	si,[WORD postsource]
 	jne	hvw_newcol
-	inc	[postwidth]				; wide scale
+wideadd1:								; step 79: pixstep, patched (83 06 iw ib: at +4)
+	add	[WORD postwidth],1		; wide scale
 	mov	bx,[pixx]
 	shl	bx,1
+widecp1:								; step 79: wallheight-2*pixstep, patched
 	mov	ax,[wallheight+bx-2]
 	mov	[wallheight+bx],ax
 	jmp	nextpix				; step 62: jumped to, not called
@@ -1149,7 +1152,8 @@ cvp_done:
 	mov	ds,ax
 	pop	si
 	mov	[WORD postsource],si
-	mov	[postwidth],1
+postw1:								; step 79: pixstep, patched (C7 06 iw iw: at +4)
+	mov	[WORD postwidth],1
 	mov	ax,[pixx]
 	mov	[postx],ax
 	jmp	nextpix
@@ -1184,7 +1188,8 @@ hvw_first:
 	mov	[lasttilehit],bx
 	mov	ax,[pixx]
 	mov	[postx],ax
-	mov	[postwidth],1
+postw2:								; step 79: pixstep, patched (C7 06 iw iw: at +4)
+	mov	[WORD postwidth],1
 	test	bl,40h
 	jz	hvw_plain
 	mov	ax,[WORD yintercept+2]	; ytile = yintercept>>TILESHIFT
@@ -1781,6 +1786,24 @@ PUBLIC	AsmRefresh
 	mov	[WORD cs:pxmid+1],ax
 	mov	ax,[viewwidth]
 	mov	[WORD cs:npvw+2],ax
+	mov	ax,[pixstep]			; step 79: LOWDETAIL's step, everywhere it counts
+	mov	[BYTE cs:wideadd1+4],al
+	mov	[BYTE cs:wideadd2+4],al
+	mov	[WORD cs:postw1+4],ax
+	mov	[WORD cs:postw2+4],ax
+	mov	[WORD cs:postw3+4],ax
+	mov	[WORD cs:postw4+4],ax
+	mov	bl,90h					; NOP
+	cmp	ax,1
+	je	@@pxone
+	mov	bl,43h					; INC BX
+@@pxone:
+	mov	[BYTE cs:pxstep],bl
+	mov	ax,OFFSET wallheight
+	sub	ax,[pixstep]
+	sub	ax,[pixstep]
+	mov	[WORD cs:widecp1+2],ax
+	mov	[WORD cs:widecp2+2],ax
 	mov	[curquad],0				; the first ray patches its quadrant in
 	mov	[WORD cs:qlo+2],7FFFh	; and takes id's chain to get there
 	mov	[pixx],0
@@ -1821,6 +1844,8 @@ done:
 nextpix:
 	mov	bx,[pixx]
 	inc	bx
+pxstep:
+	nop								; step 79: 43h, INC BX, for LOWDETAIL
 	mov	[pixx],bx
 npvw:
 	cmp	bx,1234h				; viewwidth, patched per frame (81 FB iw)
@@ -2532,9 +2557,11 @@ hhw_tex:
 	jne	hhw_nwt				; (a short hop: see hhw_nwt)
 	cmp	si,[WORD postsource]
 	jne	hhw_newcol
-	inc	[postwidth]				; wide scale
+wideadd2:								; step 79: pixstep, patched (83 06 iw ib: at +4)
+	add	[WORD postwidth],1		; wide scale
 	mov	bx,[pixx]
 	shl	bx,1
+widecp2:								; step 79: wallheight-2*pixstep, patched
 	mov	ax,[wallheight+bx-2]
 	mov	[wallheight+bx],ax
 	jmp	nextpix				; step 62: jumped to, not called
@@ -2653,7 +2680,8 @@ czp_done:
 	mov	ds,ax
 	pop	si
 	mov	[WORD postsource],si
-	mov	[postwidth],1
+postw3:								; step 79: pixstep, patched (C7 06 iw iw: at +4)
+	mov	[WORD postwidth],1
 	mov	ax,[pixx]
 	mov	[postx],ax
 	jmp	nextpix
@@ -2689,7 +2717,8 @@ hhw_first:
 	mov	[lasttilehit],bx
 	mov	ax,[pixx]
 	mov	[postx],ax
-	mov	[postwidth],1
+postw4:								; step 79: pixstep, patched (C7 06 iw iw: at +4)
+	mov	[WORD postwidth],1
 	test	bl,40h
 	jz	hhw_plain
 	mov	ax,[WORD xintercept+2]	; xtile = xintercept>>TILESHIFT

@@ -26,10 +26,11 @@ were a test suite.
 | | |
 |---|---|
 | runs on the V30 | yes -- `WOLF3DV.EXE`, alongside the registered 1.4 WL6 data |
-| speed | **5.32 fps** over all four demos, **5.38 in play** (was 4.05 before steps 27-76); demo 0 in full **2.75 -> 4.99 fps, 1.81x**; the 200-frame benchmark 4.88 fps in play |
+| speed | **5.32 fps** over all four demos, **5.38 in play** (was 4.05 before steps 27-76); demo 0 in full **2.75 -> 4.99 fps, 1.81x**; the 200-frame benchmark 4.87 fps in play |
 | picture | identical to id's renderer over the whole attract loop -- all four demos, 5,386 frames, every 50th checksummed, the 3-D view and the whole screen (`ab.py --full`, on the 486) |
 | music | identical to id's: the same register writes on the same ticks (`MUSICLOG`) |
-| optimisations | 76 steps so far -- see [V30NOTES.md](V30NOTES.md) |
+| low detail | optional: `WOLF3DV LOWDETAIL` casts one ray per two screen columns -- **7.32 fps over all four demos, 7.43 in play**, the benchmark 6.57 against 4.88. Not id's picture: the walls are drawn in two-pixel columns (sprites, weapon and status bar stay full resolution), and a narrow tile far off can go unseen for a frame, so an enemy there may notice you a little later |
+| optimisations | 79 steps so far -- see [V30NOTES.md](V30NOTES.md) |
 
 ## Running it
 
@@ -38,6 +39,8 @@ On the V30, in `C:\WOLF3D` beside the game data:
 ```
 WOLF3DV
 ```
+
+`WOLF3DV LOWDETAIL` is about a third faster, at the cost of wall detail -- see Status. Without it the game draws exactly what id's does.
 
 **Memory: XMS is the default, and the fastest setup on this machine** (step
 29). The page manager keeps textures in conventional memory and XMS (served

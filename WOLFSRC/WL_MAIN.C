@@ -1153,6 +1153,8 @@ void InitGame (void)
 		virtualreality = false;
 
 	MM_Startup ();                  // so the signon screen can be freed
+	if (MS_CheckParm ("lowdetail"))
+		pixstep = 2;					// NEC V30 build (step 79): one ray a column pair
 
 	SignonScreen ();
 
@@ -1524,7 +1526,7 @@ void TimeDemo (void)
 		XMSPresent ? "yes" : "no",XMSPagesAvail,MainPagesAvail);
 	printf ("sound mode %d, music mode %d; OPL waits %u and %u reads, %lu ns each (id: 6 and 35)\n",
 		SoundMode,MusicMode,alDelayAddr,alDelayData,alReadNs);
-	printf ("view %d x %d%s%s\n",viewwidth,viewheight,
+	printf ("view %d x %d%s%s%s\n",viewwidth,viewheight,pixstep == 2 ? ", LOWDETAIL" : "",
 		tdmaxframes ? ", QUICK (demo 0, 200 frames)" : "",
 		tdpreload ? ", PRELOAD" : "");
 	tf = tt = tl = 0;

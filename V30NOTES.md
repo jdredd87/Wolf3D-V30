@@ -170,9 +170,10 @@ byte for byte.
 | 73 | *(tried, dropped)* step 55's pixel loops with their per-sprite constants as patched immediates instead of memory operands: no gain (745.7 -> 746.7) -- step 48's finding again, a memory operand costs the V30 next to nothing | -- | -- |
 | 74 | *(tried, dropped)* the ray loop's hot jump targets EVEN-aligned (three quadrant bodies, `initvars`, `notvertdoor` and the new-column paths were at odd addresses): 746.7 -> 746.0, inside the noise, and the 486 slower | -- | -- |
 | 75 | a wall hit's intercepts and tiles stay in registers and are stored only where a post starts (the new-column and new-wall paths): a ray that only widens the current post -- the common case -- stores none of them. 0.54% (747.3 -> 743.3) | 743 | 4.87 |
-| 76 | `tilehit` stored only where it is read: the door paths store it on entry, and the new-wall path takes it from the wall key it has just saved (`lastkey>>7` is `tilehit` exactly) -- one store fewer on every ray. 743.7 -> 743.0, at the edge of the noise | **743** | **4.88** |
+| 76 | `tilehit` stored only where it is read: the door paths store it on entry, and the new-wall path takes it from the wall key it has just saved (`lastkey>>7` is `tilehit` exactly) -- one store fewer on every ray. 743.7 -> 743.0, at the edge of the noise | 743 | 4.88 |
 | 77 | *(tried, dropped)* compiled blits for the weapon and the DEMO sign (drawn every frame): generated code writing each screen byte once per colour under a map mask of its planes -- half the screen writes of SimpleScaleShape, identical over the whole loop, and no faster (742.7 -> 744.7): the 18 KB of code cost the page cache 7 pages (87 -> 134 XMS page-ins over 200 frames), and the drawing it replaced was cheaper than it looked | -- | -- |
 | 78 | *(tried, dropped)* `PlaceActors` reading its spotvis neighbours two at a time (three word loads and register compares for six of the nine byte compares): identical, and flat (743.0 -> 743.3) | -- | -- |
+| 79 | LOWDETAIL, an optional switch: one ray per two screen columns, walls in two-pixel columns, sprites and weapon at full resolution -- 7.43 fps in play over the whole attract loop (5.38 without), 6.57 on the benchmark. Not id's picture, and a narrow distant tile can go unseen for a frame; without the switch the whole loop is id's exactly, for one NOP a ray (742.0 -> 743.7) | **744** | **4.87** |
 
 Like for like with step 0 (`TIMEDEMO QUICK`, EMS+XMS, no preload): 1519 ->
 1183 ticks at step 19, **2.39 -> 3.07 fps, 28% faster**. The whole attract
@@ -198,6 +199,8 @@ frames had been compared with id's picture; the frame counts staying
 whatever the game does with it.
 
 ## Findings worth keeping
+
+**LOWDETAIL (step 79): the one switch that is not id's picture.** Half the rays -- the ray loop, the hit routines and the posts are about a third of a frame -- for walls drawn in two-pixel columns: 6.57 fps on the benchmark against 4.88, 7.43 over the whole loop in play. Two things besides the picture change, and both are why it is a switch and not the default: a tile is marked seen only when a ray crosses it, so a narrow tile far off can be missed and an enemy there wake a little later; and the recorded demos, which replay the player's input and not the outcome, can then drift from what id's renderer showed. In the default mode it costs one NOP a ray (742.0 -> 743.7 on the benchmark, at the edge of the noise), and the whole loop is identical to id's.
 
 **The weapon and the DEMO sign: what skipping them measures is not all drawing.** A build that skips `DrawPlayerWeapon` plays the benchmark 7.1% faster (743 -> 690), but step 77 drew the same shapes with half the screen writes and no call per post, and gained nothing: much of that 7.1% is the two shapes' pages in a page cache of 43, and any memory taken from the cache is paid back in XMS page-ins. Decoded from `VSWAP.WL6` at the 240x120 view: the DEMO sign is 2,418 pixels (8.4% of the view), the ready weapons 190-1,370, the chain gun firing about 3,100.
 

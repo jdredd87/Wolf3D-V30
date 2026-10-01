@@ -1002,6 +1002,7 @@ extern	long 	frameon;
 extern	boolean	fizzlein;
 
 extern	unsigned	wallheight[MAXVIEWWIDTH];
+extern	int			pixstep;		// NEC V30 build (step 79): 2 with LOWDETAIL
 
 extern	fixed	tileglobal;
 extern	fixed	focallength;

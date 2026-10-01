@@ -40,6 +40,7 @@ long 	lasttimecount;
 long 	frameon;
 
 unsigned	wallheight[MAXVIEWWIDTH];
+int			pixstep = 1;				// NEC V30 build (step 79): 2 with LOWDETAIL
 
 fixed	tileglobal	= TILEGLOBAL;
 fixed	mindist		= MINDIST;
@@ -409,8 +410,8 @@ void HitHorizDoor (void)
 		if (texture == (unsigned)postsource)
 		{
 		// wide scale
-			postwidth++;
-			wallheight[pixx] = wallheight[pixx-1];
+			postwidth += pixstep;		// step 79: LOWDETAIL's two columns
+			wallheight[pixx] = wallheight[pixx-pixstep];
 			return;
 		}
 		else
@@ -418,7 +419,7 @@ void HitHorizDoor (void)
 			wallheight[pixx] = CalcHeight();
 			ScalePost ();
 			(unsigned)postsource = texture;
-			postwidth = 1;
+			postwidth = pixstep;
 			postx = pixx;
 		}
 	}
@@ -432,7 +433,7 @@ void HitHorizDoor (void)
 		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
 		postx = pixx;
-		postwidth = 1;
+		postwidth = pixstep;
 
 		switch (doorobjlist[doornum].lock)
 		{
@@ -482,8 +483,8 @@ void HitVertDoor (void)
 		if (texture == (unsigned)postsource)
 		{
 		// wide scale
-			postwidth++;
-			wallheight[pixx] = wallheight[pixx-1];
+			postwidth += pixstep;		// step 79: LOWDETAIL's two columns
+			wallheight[pixx] = wallheight[pixx-pixstep];
 			return;
 		}
 		else
@@ -491,7 +492,7 @@ void HitVertDoor (void)
 			wallheight[pixx] = CalcHeight();
 			ScalePost ();
 			(unsigned)postsource = texture;
-			postwidth = 1;
+			postwidth = pixstep;
 			postx = pixx;
 		}
 	}
@@ -505,7 +506,7 @@ void HitVertDoor (void)
 		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
 		postx = pixx;
-		postwidth = 1;
+		postwidth = pixstep;
 
 		switch (doorobjlist[doornum].lock)
 		{
@@ -566,8 +567,8 @@ void HitHorizPWall (void)
 		if (texture == (unsigned)postsource)
 		{
 		// wide scale
-			postwidth++;
-			wallheight[pixx] = wallheight[pixx-1];
+			postwidth += pixstep;		// step 79: LOWDETAIL's two columns
+			wallheight[pixx] = wallheight[pixx-pixstep];
 			return;
 		}
 		else
@@ -575,7 +576,7 @@ void HitHorizPWall (void)
 			wallheight[pixx] = CalcHeight();
 			ScalePost ();
 			(unsigned)postsource = texture;
-			postwidth = 1;
+			postwidth = pixstep;
 			postx = pixx;
 		}
 	}
@@ -589,7 +590,7 @@ void HitHorizPWall (void)
 		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
 		postx = pixx;
-		postwidth = 1;
+		postwidth = pixstep;
 
 		wallpic = horizwall[tilehit&63];
 
@@ -635,8 +636,8 @@ void HitVertPWall (void)
 		if (texture == (unsigned)postsource)
 		{
 		// wide scale
-			postwidth++;
-			wallheight[pixx] = wallheight[pixx-1];
+			postwidth += pixstep;		// step 79: LOWDETAIL's two columns
+			wallheight[pixx] = wallheight[pixx-pixstep];
 			return;
 		}
 		else
@@ -644,7 +645,7 @@ void HitVertPWall (void)
 			wallheight[pixx] = CalcHeight();
 			ScalePost ();
 			(unsigned)postsource = texture;
-			postwidth = 1;
+			postwidth = pixstep;
 			postx = pixx;
 		}
 	}
@@ -658,7 +659,7 @@ void HitVertPWall (void)
 		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
 		postx = pixx;
-		postwidth = 1;
+		postwidth = pixstep;
 
 		wallpic = vertwall[tilehit&63];
 
@@ -1082,6 +1083,12 @@ void WallRefresh (void)
 	lastkey = 0xFFFF;
 	AsmRefresh ();
 	ScalePost ();			// no more optimization on last post
+	if (pixstep == 2)			// NEC V30 build (step 79): LOWDETAIL cast every
+	{							// other column; the sprites clip against both
+		int	i;
+		for (i = 0; i < viewwidth; i += 2)
+			wallheight[i+1] = wallheight[i];
+	}
 }
 
 //==========================================================================
