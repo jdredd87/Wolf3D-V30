@@ -4,3 +4,4 @@ stage/
 WOLFSRC/WOLF3DV.EXE
 WOLFSRC/WOLF3DV.MAP
 launcher/build/
+__pycache__/
