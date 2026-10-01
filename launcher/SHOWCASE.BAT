@@ -15,14 +15,15 @@ ECHO.
 ECHO   None of our options: every pixel as id Software's 1992 renderer
 ECHO   draws it.  The starting point -- every run after this is faster.
 ECHO.
-ECHO   The first 200 frames of the game's demo 0, then the speed.
+ECHO   60 seconds of the game's demo 0, then the speed: the faster
+ECHO   the mode, the further it gets in the same time.
 ECHO.
-ECHO   WOLF3DV TIMEDEMO QUICK PRELOAD
+ECHO   WOLF3DV TIMEDEMO PRELOAD SECS 60
 ECHO.
 ECHO   Starting in 8 seconds  (S starts it now, Q quits)
 CHOICE /C:SQ /N /T:S,08 > NUL
 IF ERRORLEVEL 2 GOTO END
-WOLF3DV TIMEDEMO QUICK PRELOAD > SHOWRES.TXT
+WOLF3DV TIMEDEMO PRELOAD SECS 60 > SHOWRES.TXT
 CLS
 ECHO.
 ECHO   Demo 1 of 9:  FULL DETAIL -- id's own picture
@@ -44,14 +45,15 @@ ECHO.
 ECHO   Enemies and items in two-pixel-wide columns.
 ECHO   The walls stay as they are.  A small gain.
 ECHO.
-ECHO   The first 200 frames of the game's demo 0, then the speed.
+ECHO   60 seconds of the game's demo 0, then the speed: the faster
+ECHO   the mode, the further it gets in the same time.
 ECHO.
-ECHO   WOLF3DV TIMEDEMO QUICK PRELOAD LOWSPRITES
+ECHO   WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWSPRITES
 ECHO.
 ECHO   Starting in 8 seconds  (S starts it now, Q quits)
 CHOICE /C:SQ /N /T:S,08 > NUL
 IF ERRORLEVEL 2 GOTO END
-WOLF3DV TIMEDEMO QUICK PRELOAD LOWSPRITES > SHOWRES.TXT
+WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWSPRITES > SHOWRES.TXT
 CLS
 ECHO.
 ECHO   Demo 2 of 9:  LOWSPRITES
@@ -73,14 +75,15 @@ ECHO.
 ECHO   Every wall one solid colour, the texture's own, kept apart from
 ECHO   floor and ceiling.  The artwork -- portraits, banners -- stays.
 ECHO.
-ECHO   The first 200 frames of the game's demo 0, then the speed.
+ECHO   60 seconds of the game's demo 0, then the speed: the faster
+ECHO   the mode, the further it gets in the same time.
 ECHO.
-ECHO   WOLF3DV TIMEDEMO QUICK PRELOAD FLATWALLS
+ECHO   WOLF3DV TIMEDEMO PRELOAD SECS 60 FLATWALLS
 ECHO.
 ECHO   Starting in 8 seconds  (S starts it now, Q quits)
 CHOICE /C:SQ /N /T:S,08 > NUL
 IF ERRORLEVEL 2 GOTO END
-WOLF3DV TIMEDEMO QUICK PRELOAD FLATWALLS > SHOWRES.TXT
+WOLF3DV TIMEDEMO PRELOAD SECS 60 FLATWALLS > SHOWRES.TXT
 CLS
 ECHO.
 ECHO   Demo 3 of 9:  FLATWALLS
@@ -102,14 +105,15 @@ ECHO.
 ECHO   Half the vertical resolution: the VGA shows every other row,
 ECHO   each twice as tall.  Walls, enemies and the gun lose half their rows.
 ECHO.
-ECHO   The first 200 frames of the game's demo 0, then the speed.
+ECHO   60 seconds of the game's demo 0, then the speed: the faster
+ECHO   the mode, the further it gets in the same time.
 ECHO.
-ECHO   WOLF3DV TIMEDEMO QUICK PRELOAD LOWVERT
+ECHO   WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWVERT
 ECHO.
 ECHO   Starting in 8 seconds  (S starts it now, Q quits)
 CHOICE /C:SQ /N /T:S,08 > NUL
 IF ERRORLEVEL 2 GOTO END
-WOLF3DV TIMEDEMO QUICK PRELOAD LOWVERT > SHOWRES.TXT
+WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWVERT > SHOWRES.TXT
 CLS
 ECHO.
 ECHO   Demo 4 of 9:  LOWVERT
@@ -131,14 +135,15 @@ ECHO.
 ECHO   One ray for every two screen columns: walls in two-pixel columns.
 ECHO   The biggest single option.
 ECHO.
-ECHO   The first 200 frames of the game's demo 0, then the speed.
+ECHO   60 seconds of the game's demo 0, then the speed: the faster
+ECHO   the mode, the further it gets in the same time.
 ECHO.
-ECHO   WOLF3DV TIMEDEMO QUICK PRELOAD LOWWALLS
+ECHO   WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWWALLS
 ECHO.
 ECHO   Starting in 8 seconds  (S starts it now, Q quits)
 CHOICE /C:SQ /N /T:S,08 > NUL
 IF ERRORLEVEL 2 GOTO END
-WOLF3DV TIMEDEMO QUICK PRELOAD LOWWALLS > SHOWRES.TXT
+WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWWALLS > SHOWRES.TXT
 CLS
 ECHO.
 ECHO   Demo 5 of 9:  LOWWALLS
@@ -159,14 +164,15 @@ ECHO   Demo 6 of 9:  LOWDETAIL  (LOWWALLS and LOWSPRITES)
 ECHO.
 ECHO   Walls, enemies and items all in two-pixel columns.
 ECHO.
-ECHO   The first 200 frames of the game's demo 0, then the speed.
+ECHO   60 seconds of the game's demo 0, then the speed: the faster
+ECHO   the mode, the further it gets in the same time.
 ECHO.
-ECHO   WOLF3DV TIMEDEMO QUICK PRELOAD LOWDETAIL
+ECHO   WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWDETAIL
 ECHO.
 ECHO   Starting in 8 seconds  (S starts it now, Q quits)
 CHOICE /C:SQ /N /T:S,08 > NUL
 IF ERRORLEVEL 2 GOTO END
-WOLF3DV TIMEDEMO QUICK PRELOAD LOWDETAIL > SHOWRES.TXT
+WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWDETAIL > SHOWRES.TXT
 CLS
 ECHO.
 ECHO   Demo 6 of 9:  LOWDETAIL  (LOWWALLS and LOWSPRITES)
@@ -187,14 +193,15 @@ ECHO   Demo 7 of 9:  LOWDETAIL and FLATWALLS
 ECHO.
 ECHO   Two-pixel columns, and solid-colour walls.
 ECHO.
-ECHO   The first 200 frames of the game's demo 0, then the speed.
+ECHO   60 seconds of the game's demo 0, then the speed: the faster
+ECHO   the mode, the further it gets in the same time.
 ECHO.
-ECHO   WOLF3DV TIMEDEMO QUICK PRELOAD LOWDETAIL FLATWALLS
+ECHO   WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWDETAIL FLATWALLS
 ECHO.
 ECHO   Starting in 8 seconds  (S starts it now, Q quits)
 CHOICE /C:SQ /N /T:S,08 > NUL
 IF ERRORLEVEL 2 GOTO END
-WOLF3DV TIMEDEMO QUICK PRELOAD LOWDETAIL FLATWALLS > SHOWRES.TXT
+WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWDETAIL FLATWALLS > SHOWRES.TXT
 CLS
 ECHO.
 ECHO   Demo 7 of 9:  LOWDETAIL and FLATWALLS
@@ -215,14 +222,15 @@ ECHO   Demo 8 of 9:  LOWDETAIL and LOWVERT
 ECHO.
 ECHO   Two-pixel columns and half the rows: a quarter of the view's pixels.
 ECHO.
-ECHO   The first 200 frames of the game's demo 0, then the speed.
+ECHO   60 seconds of the game's demo 0, then the speed: the faster
+ECHO   the mode, the further it gets in the same time.
 ECHO.
-ECHO   WOLF3DV TIMEDEMO QUICK PRELOAD LOWDETAIL LOWVERT
+ECHO   WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWDETAIL LOWVERT
 ECHO.
 ECHO   Starting in 8 seconds  (S starts it now, Q quits)
 CHOICE /C:SQ /N /T:S,08 > NUL
 IF ERRORLEVEL 2 GOTO END
-WOLF3DV TIMEDEMO QUICK PRELOAD LOWDETAIL LOWVERT > SHOWRES.TXT
+WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWDETAIL LOWVERT > SHOWRES.TXT
 CLS
 ECHO.
 ECHO   Demo 8 of 9:  LOWDETAIL and LOWVERT
@@ -243,14 +251,15 @@ ECHO   Demo 9 of 9:  EVERYTHING  (LOWDETAIL, FLATART, LOWVERT)
 ECHO.
 ECHO   All of it at once, artwork walls solid too.  The fastest.
 ECHO.
-ECHO   The first 200 frames of the game's demo 0, then the speed.
+ECHO   60 seconds of the game's demo 0, then the speed: the faster
+ECHO   the mode, the further it gets in the same time.
 ECHO.
-ECHO   WOLF3DV TIMEDEMO QUICK PRELOAD LOWDETAIL FLATART LOWVERT
+ECHO   WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWDETAIL FLATART LOWVERT
 ECHO.
 ECHO   Starting in 8 seconds  (S starts it now, Q quits)
 CHOICE /C:SQ /N /T:S,08 > NUL
 IF ERRORLEVEL 2 GOTO END
-WOLF3DV TIMEDEMO QUICK PRELOAD LOWDETAIL FLATART LOWVERT > SHOWRES.TXT
+WOLF3DV TIMEDEMO PRELOAD SECS 60 LOWDETAIL FLATART LOWVERT > SHOWRES.TXT
 CLS
 ECHO.
 ECHO   Demo 9 of 9:  EVERYTHING  (LOWDETAIL, FLATART, LOWVERT)

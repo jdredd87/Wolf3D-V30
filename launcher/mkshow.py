@@ -6,8 +6,9 @@ StevenC & Claude, 2026.
 
 On the DOS machine, in C:\\WOLF3D, type SHOWCASE.  For each mode, in order
 from id's own picture to the fastest: a title screen saying what it shows
-and with which switches (8 seconds), the 200-frame benchmark run with
-them, and its speed report (10 seconds); at the end, every run's figures
+and with which switches (8 seconds), SECS seconds of demo 0 with them
+(TIMEDEMO SECS: the same time each, so the faster modes get further), and
+its speed report (10 seconds); at the end, every run's figures
 together.  S skips a wait, Q quits.
 
 It runs straight down, no GOTO but to the end -- COMMAND.COM finds a label
@@ -48,6 +49,7 @@ MODES = [
      ["All of it at once, artwork walls solid too.  The fastest."]),
 ]
 INTRO, AFTER, SUMMARY = 8, 10, 15       # seconds
+SECS = 60                               # of play a mode (TIMEDEMO SECS)
 SPLIT = 5                               # runs on the summary's first page
 
 
@@ -67,7 +69,7 @@ def write():
         "IF EXIST SHOWSUM2.TXT DEL SHOWSUM2.TXT",
     ]
     for i, (sw, title, lines) in enumerate(MODES, 1):
-        cmd = "WOLF3DV TIMEDEMO QUICK PRELOAD" + (" " + sw if sw else "")
+        cmd = "WOLF3DV TIMEDEMO PRELOAD SECS %d" % SECS + (" " + sw if sw else "")
         out += [
             "CLS",
             "ECHO.",
@@ -80,7 +82,8 @@ def write():
         out += ["ECHO   " + l for l in lines]
         out += [
             "ECHO.",
-            "ECHO   The first 200 frames of the game's demo 0, then the speed.",
+            "ECHO   %d seconds of the game's demo 0, then the speed: the faster" % SECS,
+            "ECHO   the mode, the further it gets in the same time.",
             "ECHO.",
             "ECHO   %s" % cmd,
             "ECHO.",

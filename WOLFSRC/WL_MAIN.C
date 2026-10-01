@@ -1484,6 +1484,16 @@ void TimeDemo (void)
 		ndemos = 1;					// QUICK: demo 0, first 200 frames only --
 		tdmaxframes = 200;			// the same frames every run, for A/B timing
 	}
+	for (i = 1;i < _argc-1;i++)		// SECS n: demo 0 for n seconds of play, the
+		if (!_fstricmp (_argv[i],"secs"))	// same time every run (SHOWCASE.BAT)
+		{
+			char	far *p = _argv[i+1];
+			long	n = 0;
+			while (*p >= '0' && *p <= '9')
+				n = n*10 + *p++ - '0';
+			ndemos = 1;
+			tdmaxticks = n*182/10;
+		}
 
 	// NOMUSIC / NOSOUND: measure what the AdLib costs (the timer runs at 700 Hz
 	// for music, and every OPL write waits 41 port reads).  Not for playing.
