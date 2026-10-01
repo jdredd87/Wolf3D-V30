@@ -30,7 +30,7 @@ were a test suite.
 | picture | identical to id's renderer over the whole attract loop -- all four demos, 5,386 frames, every 50th checksummed, the 3-D view and the whole screen (`ab.py --full`, on the 486) |
 | music | identical to id's: the same register writes on the same ticks (`MUSICLOG`) |
 | detail switches | optional, in any combination, none on by default: `LOWWALLS` casts one ray per two screen columns (walls in two-pixel columns), `LOWSPRITES` draws enemies and items in two-pixel columns, `LOWDETAIL` is both, and `FLATWALLS` draws every wall in one solid colour, each texture's average, kept apart from the floor and ceiling, with the artwork -- portraits, banners, signs, the walls secrets hide behind -- painted on a flat wall (`FLATART` makes the artwork solid too) (**5.98 fps over all four demos, 6.14 in play** on its own; 7.50 on the benchmark with `LOWDETAIL` too). `LOWVERT` halves the vertical resolution -- the VGA shows every other row, each twice as tall, and the 3D view is drawn on those rows only (**6.31 fps over all four demos, 6.39 in play** on its own; the status bar and border are drawn as ever and lose every other row). With all four, 8.15 on the benchmark. With `LOWDETAIL`, **7.56 fps over all four demos, 7.68 in play**; on the benchmark 6.95 (`LOWDETAIL`), 6.57 (`LOWWALLS`), 5.65 (`FLATWALLS`), 5.68 (`LOWVERT`) and 5.01 (`LOWSPRITES`) against 4.88. Not id's picture: the weapon and status bar stay full resolution, and with `LOWWALLS` a narrow tile far off can go unseen for a frame, so an enemy there may notice you a little later |
-| optimisations | 84 steps so far -- see [V30NOTES.md](V30NOTES.md) |
+| optimisations | 84 steps so far, and two bigger ideas measured and set aside -- coherent rays (step 85, 27% slower) and a BSP, the SNES port's way (step 86, [bsp/](bsp/): 40-77% of the walk's time on the V30, but the walk decides which enemies are visible, which is game logic, so in the default mode it cannot go) -- see [V30NOTES.md](V30NOTES.md) |
 
 ## Running it
 
@@ -90,6 +90,8 @@ python w3dbuild.py all       build there, deploy WOLF3DV.EXE to the V30
 | `v30-8086` | the work (default branch) |
 | `master` | id's source exactly as released, for diffing |
 | `upstream` remote | https://github.com/id-Software/wolf3d |
+
+`bsp/` is step 86's proof of concept, a program apart from the game: `mkbsp.py` and `mktables.py` make its data from your own `GAMEMAPS.WL6` and `MAPHEAD.WL6`, and `bsptest.pas` builds with FPC as `starter/` does in DOS Bridge (`fpc -Tmsdos -Pi8086 -WmLarge -FEbuild -FUbuild bsptest.pas`, with the bridge's `starter` on the unit path for `VidFix`); run it in a directory holding `TABLES.DAT` and the four `BSPnn.DAT`.
 
 The source is id Software's, under the licence in
 [WOLFSRC/README/LICENSE.DOC](WOLFSRC/README/LICENSE.DOC); the game data is not
