@@ -1004,6 +1004,11 @@ extern	boolean	fizzlein;
 extern	unsigned	wallheight[MAXVIEWWIDTH];
 extern	int			pixstep;		// NEC V30 build (step 79): 2 with LOWWALLS
 extern	int			lowsprites;		// NEC V30 build (step 80): 1 with LOWSPRITES
+extern	int			flatwalls;		// NEC V30 build (step 81): FLATWALLS
+unsigned	FlatPage (int page);
+void	FlatSetup (void);
+void	FlatColour (int page, int colour);
+void	FlatRender (void);
 
 extern	fixed	tileglobal;
 extern	fixed	focallength;

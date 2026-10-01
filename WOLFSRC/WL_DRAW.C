@@ -42,6 +42,8 @@ long 	frameon;
 unsigned	wallheight[MAXVIEWWIDTH];
 int			pixstep = 1;				// NEC V30 build (step 79): 2 with LOWWALLS
 int			lowsprites;					// NEC V30 build (step 80): 1 with LOWSPRITES
+int			flatwalls;					// NEC V30 build (step 81): 1 with FLATWALLS, 2 once set up
+#define	WALLPAGE(p)	(flatwalls ? FlatPage (p) : (unsigned)PM_GetPage (p))	// step 81
 
 fixed	tileglobal	= TILEGLOBAL;
 fixed	mindist		= MINDIST;
@@ -452,7 +454,7 @@ void HitHorizDoor (void)
 			break;
 		}
 
-		*( ((unsigned *)&postsource)+1) = (unsigned)PM_GetPage(doorpage);
+		*( ((unsigned *)&postsource)+1) = WALLPAGE(doorpage);
 		(unsigned)postsource = texture;
 	}
 }
@@ -525,7 +527,7 @@ void HitVertDoor (void)
 			break;
 		}
 
-		*( ((unsigned *)&postsource)+1) = (unsigned)PM_GetPage(doorpage+1);
+		*( ((unsigned *)&postsource)+1) = WALLPAGE(doorpage+1);
 		(unsigned)postsource = texture;
 	}
 }
@@ -595,7 +597,7 @@ void HitHorizPWall (void)
 
 		wallpic = horizwall[tilehit&63];
 
-		*( ((unsigned *)&postsource)+1) = (unsigned)PM_GetPage(wallpic);
+		*( ((unsigned *)&postsource)+1) = WALLPAGE(wallpic);
 		(unsigned)postsource = texture;
 	}
 
@@ -664,7 +666,7 @@ void HitVertPWall (void)
 
 		wallpic = vertwall[tilehit&63];
 
-		*( ((unsigned *)&postsource)+1) = (unsigned)PM_GetPage(wallpic);
+		*( ((unsigned *)&postsource)+1) = WALLPAGE(wallpic);
 		(unsigned)postsource = texture;
 	}
 
@@ -1057,6 +1059,59 @@ void	FixOfs (void)
 ====================
 */
 
+/*
+=====================
+=
+= FlatColours
+=
+= NEC V30 build (step 81), StevenC & Claude: FLATWALLS' colour for each wall
+= page -- the palette entry nearest the average of 255 of its pixels (a
+= stride of 17, so no row or column dominates).  A texture's dark twin
+= averages darker, so the walls keep their light and dark sides.
+=
+=====================
+*/
+
+void FlatColours (void)
+{
+	unsigned	page,i,ofs,r,g,b,d,bestd,best;
+	int			dr,dg,db;
+	byte		far *src, far *pal;
+
+	pal = &gamepal;
+	for (page = 0; page < PMSpriteStart && page < 128; page++)
+	{
+		src = (byte far *)PM_GetPage (page);
+		r = g = b = 0;					// at most 255*63: no overflow
+		for (i = 0, ofs = 0; i < 255; i++, ofs = (ofs+17)&0xfff)
+		{
+			d = src[ofs]*3;
+			r += pal[d];
+			g += pal[d+1];
+			b += pal[d+2];
+		}
+		r /= 255;
+		g /= 255;
+		b /= 255;
+		bestd = 0xffff;
+		best = 0;
+		for (i = 0; i < 256; i++)
+		{
+			dr = pal[i*3]-r;
+			dg = pal[i*3+1]-g;
+			db = pal[i*3+2]-b;
+			d = dr*dr+dg*dg+db*db;		// at most 3*63*63
+			if (d < bestd)
+			{
+				bestd = d;
+				best = i;
+			}
+		}
+		FlatColour (page,best);
+	}
+}
+
+
 void WallRefresh (void)
 {
 //
@@ -1082,6 +1137,17 @@ void WallRefresh (void)
 
 	lastside = -1;			// the first pixel is on a new wall
 	lastkey = 0xFFFF;
+	if (flatwalls)				// NEC V30 build (step 81): every post to
+	{							// FlatPost, which only notes its colour
+		extern unsigned bandlim;
+		if (flatwalls == 1)
+		{
+			FlatColours ();
+			FlatSetup ();
+			flatwalls = 2;
+		}
+		bandlim = 0xFFFF;
+	}
 	AsmRefresh ();
 	ScalePost ();			// no more optimization on last post
 	if (pixstep == 2)			// NEC V30 build (step 79): LOWDETAIL cast every
@@ -1090,6 +1156,8 @@ void WallRefresh (void)
 		for (i = 0; i < viewwidth; i += 2)
 			wallheight[i+1] = wallheight[i];
 	}
+	if (flatwalls)
+		FlatRender ();			// NEC V30 build (step 81): the walls, at last
 }
 
 //==========================================================================

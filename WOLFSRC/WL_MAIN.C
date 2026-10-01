@@ -1157,6 +1157,8 @@ void InitGame (void)
 		pixstep = 2;					// NEC V30 build (step 79): one ray a column pair
 	if (MS_CheckParm ("lowsprites") || MS_CheckParm ("lowdetail"))
 		lowsprites = 1;					// NEC V30 build (step 80): sprites in column pairs
+	if (MS_CheckParm ("flatwalls"))
+		flatwalls = 1;					// NEC V30 build (step 81): solid-colour walls
 
 	SignonScreen ();
 
@@ -1528,8 +1530,8 @@ void TimeDemo (void)
 		XMSPresent ? "yes" : "no",XMSPagesAvail,MainPagesAvail);
 	printf ("sound mode %d, music mode %d; OPL waits %u and %u reads, %lu ns each (id: 6 and 35)\n",
 		SoundMode,MusicMode,alDelayAddr,alDelayData,alReadNs);
-	printf ("view %d x %d%s%s%s%s\n",viewwidth,viewheight,pixstep == 2 ? ", LOWWALLS" : "",
-		lowsprites ? ", LOWSPRITES" : "",
+	printf ("view %d x %d%s%s%s%s%s\n",viewwidth,viewheight,pixstep == 2 ? ", LOWWALLS" : "",
+		lowsprites ? ", LOWSPRITES" : "",flatwalls ? ", FLATWALLS" : "",
 		tdmaxframes ? ", QUICK (demo 0, 200 frames)" : "",
 		tdpreload ? ", PRELOAD" : "");
 	tf = tt = tl = 0;
