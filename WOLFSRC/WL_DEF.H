@@ -1005,6 +1005,8 @@ extern	unsigned	wallheight[MAXVIEWWIDTH];
 extern	int			pixstep;		// NEC V30 build (step 79): 2 with LOWWALLS
 extern	int			lowsprites;		// NEC V30 build (step 80): 1 with LOWSPRITES
 extern	int			flatwalls;		// NEC V30 build (step 81): FLATWALLS
+extern	int			solidart;		// NEC V30 build (step 84): FLATART
+extern	memptr		flatbuf;		// NEC V30 build (step 84)
 extern	int			lowvert;		// NEC V30 build (step 82): LOWVERT
 void	VL_LowVert (int on);
 unsigned	FlatPage (int page);

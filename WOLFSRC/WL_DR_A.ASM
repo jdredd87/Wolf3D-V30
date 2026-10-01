@@ -48,6 +48,8 @@ DATASEG
 EXTRN	viewwidth:WORD
 EXTRN	viewheight:WORD				; step 81
 EXTRN	lowvert:WORD				; step 82
+EXTRN	flatbuf:WORD				; step 84: FLATWALLS' buffer (a locked memptr)
+EXTRN	solidart:WORD				; step 84: 1 with FLATART
 EXTRN	pixstep:WORD				; step 79: 1, or 2 for LOWDETAIL
 EXTRN	mapsegs:WORD				; unsigned _seg *mapsegs[MAPPLANES]
 EXTRN	farmapylookup:WORD			; unsigned [MAPSIZE]: y*64
@@ -3860,25 +3862,68 @@ ENDP
 ;
 PROC	FlatSetup FAR
 PUBLIC	FlatSetup
-	cmp	[lowvert],0				; step 82: with LOWVERT, the body writes the
-	je	@@nolv					; even row of each pair only (half is even:
-	mov	bx,OFFSET fr_body		; pair k's row above, half-1-k, is even when
-	mov	cx,FMAX					; k is odd, the row below, half+k, when k is
-	mov	dx,FMAX-1				; even), the other made LEA BX,[BX+0]
-@@lv:
-	test	dl,1
-	jnz	@@kodd
-	mov	[WORD cs:bx],9F8Dh
-	mov	[WORD cs:bx+2],0
-	jmp	@@lvn
-@@kodd:
-	mov	[WORD cs:bx+4],9F8Dh
-	mov	[WORD cs:bx+6],0
-@@lvn:
-	add	bx,8
-	dec	dx
-	loop	@@lv
-@@nolv:
+	mov	ax,[flatbuf]			; step 84: the columns' buffer, allocated at
+	mov	[cs:wcseg],ax			; startup for FLATWALLS only (and locked)
+	push	di						; (C's register variable)
+	push	ax
+	cmp	[solidart],0			; step 84: FLATART -- no artwork, every wall
+	je	@@keepart				; its own colour
+	push	cs
+	pop	es
+	mov	di,OFFSET flatart
+	mov	cx,FLATPAGES
+	xor	al,al
+	rep	stosb
+@@keepart:
+	pop	ax
+; step 84: the fill body, built at wcseg:FBODY -- pair k (FMAX-1 down to 0)
+; is MOV [DI-(k+1)*80],AL and MOV [DI+k*80],AH, then a RETF.  With LOWVERT
+; (step 82) only the even row of each pair is written (half is even: the row
+; above, half-1-k, is even when k is odd, the row below when k is even); the
+; other is LEA BX,[BX+0], which writes nothing.
+	mov	[cs:fr_far+2],ax		; (AX = wcseg)
+	mov	es,ax
+	mov	di,FBODY
+	mov	bx,-80*FMAX				; the row above's displacement, pair FMAX-1
+	mov	dx,80*(FMAX-1)			; the row below's
+	mov	cx,FMAX-1				; k
+@@gen:
+	mov	ax,8588h				; 88 85: MOV [DI+d16],AL
+	cmp	[lowvert],0
+	je	@@up
+	test	cl,1
+	jnz	@@up
+	mov	ax,9F8Dh				; 8D 9F: LEA BX,[BX+0]
+	stosw
+	xor	ax,ax
+	stosw
+	jmp	@@down
+@@up:
+	stosw
+	mov	ax,bx
+	stosw
+@@down:
+	mov	ax,0A588h				; 88 A5: MOV [DI+d16],AH
+	cmp	[lowvert],0
+	je	@@dn
+	test	cl,1
+	jz	@@dn
+	mov	ax,9F8Dh
+	stosw
+	xor	ax,ax
+	stosw
+	jmp	@@nextk
+@@dn:
+	stosw
+	mov	ax,dx
+	stosw
+@@nextk:
+	add	bx,80
+	sub	dx,80
+	dec	cx
+	jns	@@gen
+	mov	al,0CBh					; RETF
+	stosb
 	mov	ax,OFFSET FlatPost		; ScalePostA: JMP FlatPost
 	sub	ax,OFFSET ScalePostA+3
 	mov	[BYTE cs:ScalePostA],0E9h
@@ -3887,6 +3932,7 @@ PUBLIC	FlatSetup
 	mov	[WORD cs:hvwgp+3],cs
 	mov	[WORD cs:hhwgp+1],OFFSET FlatPage
 	mov	[WORD cs:hhwgp+3],cs
+	pop	di
 	retf
 ENDP
 
@@ -3915,16 +3961,80 @@ PUBLIC	FlatPage
 	mov	bp,sp
 	mov	bx,[bp+6]
 	and	bx,FLATPAGES-1
-	cmp	[BYTE cs:flatart+bx],0	; step 83: artwork is drawn as it is
+	mov	al,[cs:flatart+bx]		; step 83: artwork is drawn as it is
+	or	al,al
 	jne	@@art
 	mov	al,[cs:flatcol+bx]
 	xor	ah,ah
 	pop	bp
 	retf
 @@art:
-	push	[WORD bp+6]
+	push	si
+	push	di
+	mov	si,bx					; SI = the page
+	push	ax						; its code
+	push	si
 	call	PM_GetPage
 	add	sp,2
+	pop	bx
+	sub	bl,2
+	jb	@@artret				; no twin: as it is
+	xor	bh,bh
+	mov	di,bx					; DI = k
+	mov	bl,[cs:artbase+di]
+	mov	dl,[cs:flatcol+bx]		; DL = the twin's flat colour now
+	mov	es,ax
+	shl	di,1
+	mov	bx,[cs:arts0+di]
+	cmp	[es:bx],dl
+	jne	@@paint
+	mov	bx,[cs:arts1+di]
+	cmp	[es:bx],dl
+	je	@@artret				; painted with it already
+@@paint:
+	push	di
+	push	dx
+	mov	bx,di
+	shr	bx,1
+	mov	bl,[cs:artbase+bx]
+	xor	bh,bh
+	push	bx
+	call	PM_GetPage				; the twin
+	add	sp,2
+	mov	cx,ax
+	push	si
+	call	PM_GetPage				; the artwork again (it was used just before
+	add	sp,2					; the twin, so it is still in)
+	pop	dx
+	pop	di
+	mov	bx,[cs:artold+di]		; the colour it was painted with, if any
+	cmp	bx,0FFFFh
+	jne	@@old
+	mov	bl,dl
+@@old:
+	xor	dh,dh
+	mov	[cs:artold+di],dx
+	push	ds
+	mov	ds,cx					; DS = the twin, ES = the artwork
+	mov	es,ax
+	xor	si,si
+	mov	cx,4096
+@@px:
+	mov	al,[es:si]
+	cmp	al,[si]
+	je	@@bg					; as the plain wall: background
+	cmp	al,bl
+	jne	@@nx					; (or the colour it was painted with)
+@@bg:
+	mov	[es:si],dl
+@@nx:
+	inc	si
+	loop	@@px
+	pop	ds
+	mov	ax,es
+@@artret:
+	pop	di
+	pop	si
 	pop	bp
 	retf
 ENDP
@@ -3964,11 +4074,9 @@ PUBLIC	FlatPost					; public only so profiles can name it
 @@cc:
 	mov	ah,al
 	mov	al,[BYTE postsource+2]	; the colour
-	mov	di,OFFSET wc			; (in this segment: LEA would take it as DGROUP's)
-	add	di,bx
+	mov	di,bx					; wcseg:2x
 	mov	cx,[postwidth]
-	push	cs
-	pop	es
+	mov	es,[cs:wcseg]
 	rep	stosw
 	ret
 ;
@@ -4026,11 +4134,9 @@ PUBLIC	FlatPost					; public only so profiles can name it
 	xor	al,al
 	mov	bx,[postx]
 	shl	bx,1
-	mov	di,OFFSET wc
-	add	di,bx
+	mov	di,bx
 	mov	cx,[postwidth]
-	push	cs
-	pop	es
+	mov	es,[cs:wcseg]
 	rep	stosw
 	ret
 ENDP
@@ -4063,18 +4169,19 @@ PUBLIC	FlatRender
 	mov	al,2					; the map mask register
 	out	dx,al
 	inc	dx
-	mov	si,OFFSET wc
+	mov	es,[cs:wcseg]		; ES:SI = wc
+	xor	si,si
 	mov	ax,SCREENSEG
 	mov	ds,ax
 fr_group:
-	mov	al,[cs:si+1]			; step 83: artwork in the group?
-	or	al,[cs:si+3]
-	or	al,[cs:si+5]
-	or	al,[cs:si+7]
+	mov	al,[es:si+1]			; step 83: artwork in the group?
+	or	al,[es:si+3]
+	or	al,[es:si+5]
+	or	al,[es:si+7]
 	js	fr_art
-	mov	bl,[cs:si+1]			; BL = m, BH = M: the least and most of the four
+	mov	bl,[es:si+1]			; BL = m, BH = M: the least and most of the four
 	mov	bh,bl
-	mov	al,[cs:si+3]
+	mov	al,[es:si+3]
 	cmp	al,bl
 	jae	frn3
 	mov	bl,al
@@ -4083,7 +4190,7 @@ frn3:
 	jbe	frx3
 	mov	bh,al
 frx3:
-	mov	al,[cs:si+5]
+	mov	al,[es:si+5]
 	cmp	al,bl
 	jae	frn5
 	mov	bl,al
@@ -4092,7 +4199,7 @@ frn5:
 	jbe	frx5
 	mov	bh,al
 frx5:
-	mov	al,[cs:si+7]
+	mov	al,[es:si+7]
 	cmp	al,bl
 	jae	frn7
 	mov	bl,al
@@ -4102,12 +4209,12 @@ frn7:
 	mov	bh,al
 frx7:
 	mov	[cs:fr_mm],bx
-	mov	al,[cs:si]
-	cmp	al,[cs:si+2]
+	mov	al,[es:si]
+	cmp	al,[es:si+2]
 	jne	fr_mixed
-	cmp	al,[cs:si+4]
+	cmp	al,[es:si+4]
 	jne	fr_mixed
-	cmp	al,[cs:si+6]
+	cmp	al,[es:si+6]
 	jne	fr_mixed
 	mov	ah,al
 	mov	[cs:fr_col],ax
@@ -4130,7 +4237,7 @@ frx7:
 	sub	bp,ax
 	sub	bp,80
 	mov	[cs:fr_up],bp
-	mov	cl,[cs:si+1]
+	mov	cl,[es:si+1]
 	sub	cl,[BYTE cs:fr_mm]
 	jz	frr0
 	mov	al,1
@@ -4138,7 +4245,7 @@ frx7:
 	mov	ax,[cs:fr_col]
 	call	FlatRows
 frr0:
-	mov	cl,[cs:si+3]
+	mov	cl,[es:si+3]
 	sub	cl,[BYTE cs:fr_mm]
 	jz	frr1
 	mov	al,2
@@ -4146,7 +4253,7 @@ frr0:
 	mov	ax,[cs:fr_col]
 	call	FlatRows
 frr1:
-	mov	cl,[cs:si+5]
+	mov	cl,[es:si+5]
 	sub	cl,[BYTE cs:fr_mm]
 	jz	frr2
 	mov	al,4
@@ -4154,7 +4261,7 @@ frr1:
 	mov	ax,[cs:fr_col]
 	call	FlatRows
 frr2:
-	mov	cl,[cs:si+7]
+	mov	cl,[es:si+7]
 	sub	cl,[BYTE cs:fr_mm]
 	jz	frr3
 	mov	al,8
@@ -4166,34 +4273,34 @@ frr3:
 fr_mixed:								; four colours not one: column by column
 	mov	al,1
 	out	dx,al
-	mov	al,[cs:si+0]
+	mov	al,[es:si+0]
 	mov	ah,al
 	xor	cx,cx
-	mov	bl,[cs:si+1]
+	mov	bl,[es:si+1]
 	xor	bh,bh
 	call	FlatFill
 	mov	al,2
 	out	dx,al
-	mov	al,[cs:si+2]
+	mov	al,[es:si+2]
 	mov	ah,al
 	xor	cx,cx
-	mov	bl,[cs:si+3]
+	mov	bl,[es:si+3]
 	xor	bh,bh
 	call	FlatFill
 	mov	al,4
 	out	dx,al
-	mov	al,[cs:si+4]
+	mov	al,[es:si+4]
 	mov	ah,al
 	xor	cx,cx
-	mov	bl,[cs:si+5]
+	mov	bl,[es:si+5]
 	xor	bh,bh
 	call	FlatFill
 	mov	al,8
 	out	dx,al
-	mov	al,[cs:si+6]
+	mov	al,[es:si+6]
 	mov	ah,al
 	xor	cx,cx
-	mov	bl,[cs:si+7]
+	mov	bl,[es:si+7]
 	xor	bh,bh
 	call	FlatFill
 ;
@@ -4218,7 +4325,7 @@ fr_bandchk:
 	pop	bx						; each column's band ends at M
 fr_blim:
 	mov	[cs:fr_lim],bx
-	mov	cl,[cs:si+1]
+	mov	cl,[es:si+1]
 	xor	ch,ch
 	mov	bx,[cs:fr_lim]
 	cmp	cx,bx
@@ -4228,7 +4335,7 @@ fr_blim:
 	mov	ax,[cs:fr_cf]
 	call	FlatFill
 frb0:
-	mov	cl,[cs:si+3]
+	mov	cl,[es:si+3]
 	xor	ch,ch
 	mov	bx,[cs:fr_lim]
 	cmp	cx,bx
@@ -4238,7 +4345,7 @@ frb0:
 	mov	ax,[cs:fr_cf]
 	call	FlatFill
 frb1:
-	mov	cl,[cs:si+5]
+	mov	cl,[es:si+5]
 	xor	ch,ch
 	mov	bx,[cs:fr_lim]
 	cmp	cx,bx
@@ -4248,7 +4355,7 @@ frb1:
 	mov	ax,[cs:fr_cf]
 	call	FlatFill
 frb2:
-	mov	cl,[cs:si+7]
+	mov	cl,[es:si+7]
 	xor	ch,ch
 	mov	bx,[cs:fr_lim]
 	cmp	cx,bx
@@ -4276,78 +4383,78 @@ fr_done:
 ; the scaler drew it, then its band
 ;
 fr_art:
-	mov	al,[cs:si+1]
+	mov	al,[es:si+1]
 	test	al,80h
 	jnz	fra0
 	mov	al,1
 	out	dx,al
-	mov	al,[cs:si+0]
+	mov	al,[es:si+0]
 	mov	ah,al
 	xor	cx,cx
-	mov	bl,[cs:si+1]
+	mov	bl,[es:si+1]
 	xor	bh,bh
 	call	FlatFill
 fra0:
 	mov	al,1
 	out	dx,al
-	mov	cl,[cs:si+1]
+	mov	cl,[es:si+1]
 	and	cx,7Fh
 	mov	bx,[cs:fr_band]
 	mov	ax,[cs:fr_cf]
 	call	FlatFill				; rows cc .. B-1, if any
-	mov	al,[cs:si+3]
+	mov	al,[es:si+3]
 	test	al,80h
 	jnz	fra1
 	mov	al,2
 	out	dx,al
-	mov	al,[cs:si+2]
+	mov	al,[es:si+2]
 	mov	ah,al
 	xor	cx,cx
-	mov	bl,[cs:si+3]
+	mov	bl,[es:si+3]
 	xor	bh,bh
 	call	FlatFill
 fra1:
 	mov	al,2
 	out	dx,al
-	mov	cl,[cs:si+3]
+	mov	cl,[es:si+3]
 	and	cx,7Fh
 	mov	bx,[cs:fr_band]
 	mov	ax,[cs:fr_cf]
 	call	FlatFill				; rows cc .. B-1, if any
-	mov	al,[cs:si+5]
+	mov	al,[es:si+5]
 	test	al,80h
 	jnz	fra2
 	mov	al,4
 	out	dx,al
-	mov	al,[cs:si+4]
+	mov	al,[es:si+4]
 	mov	ah,al
 	xor	cx,cx
-	mov	bl,[cs:si+5]
+	mov	bl,[es:si+5]
 	xor	bh,bh
 	call	FlatFill
 fra2:
 	mov	al,4
 	out	dx,al
-	mov	cl,[cs:si+5]
+	mov	cl,[es:si+5]
 	and	cx,7Fh
 	mov	bx,[cs:fr_band]
 	mov	ax,[cs:fr_cf]
 	call	FlatFill				; rows cc .. B-1, if any
-	mov	al,[cs:si+7]
+	mov	al,[es:si+7]
 	test	al,80h
 	jnz	fra3
 	mov	al,8
 	out	dx,al
-	mov	al,[cs:si+6]
+	mov	al,[es:si+6]
 	mov	ah,al
 	xor	cx,cx
-	mov	bl,[cs:si+7]
+	mov	bl,[es:si+7]
 	xor	bh,bh
 	call	FlatFill
 fra3:
 	mov	al,8
 	out	dx,al
-	mov	cl,[cs:si+7]
+	mov	cl,[es:si+7]
 	and	cx,7Fh
 	mov	bx,[cs:fr_band]
 	mov	ax,[cs:fr_cf]
@@ -4385,360 +4492,50 @@ PUBLIC	FlatFill					; public only so profiles can name it
 	mov	bp,FMAX
 	sub	bp,bx
 	shl	bp,3
-	add	bp,OFFSET fr_body		; the pair for row hi-1
+	add	bp,FBODY				; the pair for row hi-1
+	mov	[cs:fr_far],bp
 	jcxz	@@all
 	mov	bx,FMAX
 	sub	bx,cx
 	shl	bx,3
-	add	bx,OFFSET fr_body		; the pair for row lo-1: stop there
-	mov	cl,[cs:bx]
-	mov	[BYTE cs:bx],0C3h
-	call	bp
-	mov	[cs:bx],cl
+	add	bx,FBODY				; the pair for row lo-1: stop there
+	mov	cl,[es:bx]				; (step 84: the body is at ES = wcseg)
+	mov	[BYTE es:bx],0CBh		; RETF
+	call	[DWORD cs:fr_far]
+	mov	[es:bx],cl
 @@none:
 	ret
 @@all:
-	jmp	bp
+	call	[DWORD cs:fr_far]
+	ret
 ENDP
 
-	EVEN
-fr_body:
-PUBLIC	fr_body						; public only so profiles can name it
-	db	88h,85h
-	dw	0E700h				; MOV [DI-6400],AL
-	db	88h,0A5h
-	dw	018B0h				; MOV [DI+6320],AH
-	db	88h,85h
-	dw	0E750h				; MOV [DI-6320],AL
-	db	88h,0A5h
-	dw	01860h				; MOV [DI+6240],AH
-	db	88h,85h
-	dw	0E7A0h				; MOV [DI-6240],AL
-	db	88h,0A5h
-	dw	01810h				; MOV [DI+6160],AH
-	db	88h,85h
-	dw	0E7F0h				; MOV [DI-6160],AL
-	db	88h,0A5h
-	dw	017C0h				; MOV [DI+6080],AH
-	db	88h,85h
-	dw	0E840h				; MOV [DI-6080],AL
-	db	88h,0A5h
-	dw	01770h				; MOV [DI+6000],AH
-	db	88h,85h
-	dw	0E890h				; MOV [DI-6000],AL
-	db	88h,0A5h
-	dw	01720h				; MOV [DI+5920],AH
-	db	88h,85h
-	dw	0E8E0h				; MOV [DI-5920],AL
-	db	88h,0A5h
-	dw	016D0h				; MOV [DI+5840],AH
-	db	88h,85h
-	dw	0E930h				; MOV [DI-5840],AL
-	db	88h,0A5h
-	dw	01680h				; MOV [DI+5760],AH
-	db	88h,85h
-	dw	0E980h				; MOV [DI-5760],AL
-	db	88h,0A5h
-	dw	01630h				; MOV [DI+5680],AH
-	db	88h,85h
-	dw	0E9D0h				; MOV [DI-5680],AL
-	db	88h,0A5h
-	dw	015E0h				; MOV [DI+5600],AH
-	db	88h,85h
-	dw	0EA20h				; MOV [DI-5600],AL
-	db	88h,0A5h
-	dw	01590h				; MOV [DI+5520],AH
-	db	88h,85h
-	dw	0EA70h				; MOV [DI-5520],AL
-	db	88h,0A5h
-	dw	01540h				; MOV [DI+5440],AH
-	db	88h,85h
-	dw	0EAC0h				; MOV [DI-5440],AL
-	db	88h,0A5h
-	dw	014F0h				; MOV [DI+5360],AH
-	db	88h,85h
-	dw	0EB10h				; MOV [DI-5360],AL
-	db	88h,0A5h
-	dw	014A0h				; MOV [DI+5280],AH
-	db	88h,85h
-	dw	0EB60h				; MOV [DI-5280],AL
-	db	88h,0A5h
-	dw	01450h				; MOV [DI+5200],AH
-	db	88h,85h
-	dw	0EBB0h				; MOV [DI-5200],AL
-	db	88h,0A5h
-	dw	01400h				; MOV [DI+5120],AH
-	db	88h,85h
-	dw	0EC00h				; MOV [DI-5120],AL
-	db	88h,0A5h
-	dw	013B0h				; MOV [DI+5040],AH
-	db	88h,85h
-	dw	0EC50h				; MOV [DI-5040],AL
-	db	88h,0A5h
-	dw	01360h				; MOV [DI+4960],AH
-	db	88h,85h
-	dw	0ECA0h				; MOV [DI-4960],AL
-	db	88h,0A5h
-	dw	01310h				; MOV [DI+4880],AH
-	db	88h,85h
-	dw	0ECF0h				; MOV [DI-4880],AL
-	db	88h,0A5h
-	dw	012C0h				; MOV [DI+4800],AH
-	db	88h,85h
-	dw	0ED40h				; MOV [DI-4800],AL
-	db	88h,0A5h
-	dw	01270h				; MOV [DI+4720],AH
-	db	88h,85h
-	dw	0ED90h				; MOV [DI-4720],AL
-	db	88h,0A5h
-	dw	01220h				; MOV [DI+4640],AH
-	db	88h,85h
-	dw	0EDE0h				; MOV [DI-4640],AL
-	db	88h,0A5h
-	dw	011D0h				; MOV [DI+4560],AH
-	db	88h,85h
-	dw	0EE30h				; MOV [DI-4560],AL
-	db	88h,0A5h
-	dw	01180h				; MOV [DI+4480],AH
-	db	88h,85h
-	dw	0EE80h				; MOV [DI-4480],AL
-	db	88h,0A5h
-	dw	01130h				; MOV [DI+4400],AH
-	db	88h,85h
-	dw	0EED0h				; MOV [DI-4400],AL
-	db	88h,0A5h
-	dw	010E0h				; MOV [DI+4320],AH
-	db	88h,85h
-	dw	0EF20h				; MOV [DI-4320],AL
-	db	88h,0A5h
-	dw	01090h				; MOV [DI+4240],AH
-	db	88h,85h
-	dw	0EF70h				; MOV [DI-4240],AL
-	db	88h,0A5h
-	dw	01040h				; MOV [DI+4160],AH
-	db	88h,85h
-	dw	0EFC0h				; MOV [DI-4160],AL
-	db	88h,0A5h
-	dw	00FF0h				; MOV [DI+4080],AH
-	db	88h,85h
-	dw	0F010h				; MOV [DI-4080],AL
-	db	88h,0A5h
-	dw	00FA0h				; MOV [DI+4000],AH
-	db	88h,85h
-	dw	0F060h				; MOV [DI-4000],AL
-	db	88h,0A5h
-	dw	00F50h				; MOV [DI+3920],AH
-	db	88h,85h
-	dw	0F0B0h				; MOV [DI-3920],AL
-	db	88h,0A5h
-	dw	00F00h				; MOV [DI+3840],AH
-	db	88h,85h
-	dw	0F100h				; MOV [DI-3840],AL
-	db	88h,0A5h
-	dw	00EB0h				; MOV [DI+3760],AH
-	db	88h,85h
-	dw	0F150h				; MOV [DI-3760],AL
-	db	88h,0A5h
-	dw	00E60h				; MOV [DI+3680],AH
-	db	88h,85h
-	dw	0F1A0h				; MOV [DI-3680],AL
-	db	88h,0A5h
-	dw	00E10h				; MOV [DI+3600],AH
-	db	88h,85h
-	dw	0F1F0h				; MOV [DI-3600],AL
-	db	88h,0A5h
-	dw	00DC0h				; MOV [DI+3520],AH
-	db	88h,85h
-	dw	0F240h				; MOV [DI-3520],AL
-	db	88h,0A5h
-	dw	00D70h				; MOV [DI+3440],AH
-	db	88h,85h
-	dw	0F290h				; MOV [DI-3440],AL
-	db	88h,0A5h
-	dw	00D20h				; MOV [DI+3360],AH
-	db	88h,85h
-	dw	0F2E0h				; MOV [DI-3360],AL
-	db	88h,0A5h
-	dw	00CD0h				; MOV [DI+3280],AH
-	db	88h,85h
-	dw	0F330h				; MOV [DI-3280],AL
-	db	88h,0A5h
-	dw	00C80h				; MOV [DI+3200],AH
-	db	88h,85h
-	dw	0F380h				; MOV [DI-3200],AL
-	db	88h,0A5h
-	dw	00C30h				; MOV [DI+3120],AH
-	db	88h,85h
-	dw	0F3D0h				; MOV [DI-3120],AL
-	db	88h,0A5h
-	dw	00BE0h				; MOV [DI+3040],AH
-	db	88h,85h
-	dw	0F420h				; MOV [DI-3040],AL
-	db	88h,0A5h
-	dw	00B90h				; MOV [DI+2960],AH
-	db	88h,85h
-	dw	0F470h				; MOV [DI-2960],AL
-	db	88h,0A5h
-	dw	00B40h				; MOV [DI+2880],AH
-	db	88h,85h
-	dw	0F4C0h				; MOV [DI-2880],AL
-	db	88h,0A5h
-	dw	00AF0h				; MOV [DI+2800],AH
-	db	88h,85h
-	dw	0F510h				; MOV [DI-2800],AL
-	db	88h,0A5h
-	dw	00AA0h				; MOV [DI+2720],AH
-	db	88h,85h
-	dw	0F560h				; MOV [DI-2720],AL
-	db	88h,0A5h
-	dw	00A50h				; MOV [DI+2640],AH
-	db	88h,85h
-	dw	0F5B0h				; MOV [DI-2640],AL
-	db	88h,0A5h
-	dw	00A00h				; MOV [DI+2560],AH
-	db	88h,85h
-	dw	0F600h				; MOV [DI-2560],AL
-	db	88h,0A5h
-	dw	009B0h				; MOV [DI+2480],AH
-	db	88h,85h
-	dw	0F650h				; MOV [DI-2480],AL
-	db	88h,0A5h
-	dw	00960h				; MOV [DI+2400],AH
-	db	88h,85h
-	dw	0F6A0h				; MOV [DI-2400],AL
-	db	88h,0A5h
-	dw	00910h				; MOV [DI+2320],AH
-	db	88h,85h
-	dw	0F6F0h				; MOV [DI-2320],AL
-	db	88h,0A5h
-	dw	008C0h				; MOV [DI+2240],AH
-	db	88h,85h
-	dw	0F740h				; MOV [DI-2240],AL
-	db	88h,0A5h
-	dw	00870h				; MOV [DI+2160],AH
-	db	88h,85h
-	dw	0F790h				; MOV [DI-2160],AL
-	db	88h,0A5h
-	dw	00820h				; MOV [DI+2080],AH
-	db	88h,85h
-	dw	0F7E0h				; MOV [DI-2080],AL
-	db	88h,0A5h
-	dw	007D0h				; MOV [DI+2000],AH
-	db	88h,85h
-	dw	0F830h				; MOV [DI-2000],AL
-	db	88h,0A5h
-	dw	00780h				; MOV [DI+1920],AH
-	db	88h,85h
-	dw	0F880h				; MOV [DI-1920],AL
-	db	88h,0A5h
-	dw	00730h				; MOV [DI+1840],AH
-	db	88h,85h
-	dw	0F8D0h				; MOV [DI-1840],AL
-	db	88h,0A5h
-	dw	006E0h				; MOV [DI+1760],AH
-	db	88h,85h
-	dw	0F920h				; MOV [DI-1760],AL
-	db	88h,0A5h
-	dw	00690h				; MOV [DI+1680],AH
-	db	88h,85h
-	dw	0F970h				; MOV [DI-1680],AL
-	db	88h,0A5h
-	dw	00640h				; MOV [DI+1600],AH
-	db	88h,85h
-	dw	0F9C0h				; MOV [DI-1600],AL
-	db	88h,0A5h
-	dw	005F0h				; MOV [DI+1520],AH
-	db	88h,85h
-	dw	0FA10h				; MOV [DI-1520],AL
-	db	88h,0A5h
-	dw	005A0h				; MOV [DI+1440],AH
-	db	88h,85h
-	dw	0FA60h				; MOV [DI-1440],AL
-	db	88h,0A5h
-	dw	00550h				; MOV [DI+1360],AH
-	db	88h,85h
-	dw	0FAB0h				; MOV [DI-1360],AL
-	db	88h,0A5h
-	dw	00500h				; MOV [DI+1280],AH
-	db	88h,85h
-	dw	0FB00h				; MOV [DI-1280],AL
-	db	88h,0A5h
-	dw	004B0h				; MOV [DI+1200],AH
-	db	88h,85h
-	dw	0FB50h				; MOV [DI-1200],AL
-	db	88h,0A5h
-	dw	00460h				; MOV [DI+1120],AH
-	db	88h,85h
-	dw	0FBA0h				; MOV [DI-1120],AL
-	db	88h,0A5h
-	dw	00410h				; MOV [DI+1040],AH
-	db	88h,85h
-	dw	0FBF0h				; MOV [DI-1040],AL
-	db	88h,0A5h
-	dw	003C0h				; MOV [DI+960],AH
-	db	88h,85h
-	dw	0FC40h				; MOV [DI-960],AL
-	db	88h,0A5h
-	dw	00370h				; MOV [DI+880],AH
-	db	88h,85h
-	dw	0FC90h				; MOV [DI-880],AL
-	db	88h,0A5h
-	dw	00320h				; MOV [DI+800],AH
-	db	88h,85h
-	dw	0FCE0h				; MOV [DI-800],AL
-	db	88h,0A5h
-	dw	002D0h				; MOV [DI+720],AH
-	db	88h,85h
-	dw	0FD30h				; MOV [DI-720],AL
-	db	88h,0A5h
-	dw	00280h				; MOV [DI+640],AH
-	db	88h,85h
-	dw	0FD80h				; MOV [DI-640],AL
-	db	88h,0A5h
-	dw	00230h				; MOV [DI+560],AH
-	db	88h,85h
-	dw	0FDD0h				; MOV [DI-560],AL
-	db	88h,0A5h
-	dw	001E0h				; MOV [DI+480],AH
-	db	88h,85h
-	dw	0FE20h				; MOV [DI-480],AL
-	db	88h,0A5h
-	dw	00190h				; MOV [DI+400],AH
-	db	88h,85h
-	dw	0FE70h				; MOV [DI-400],AL
-	db	88h,0A5h
-	dw	00140h				; MOV [DI+320],AH
-	db	88h,85h
-	dw	0FEC0h				; MOV [DI-320],AL
-	db	88h,0A5h
-	dw	000F0h				; MOV [DI+240],AH
-	db	88h,85h
-	dw	0FF10h				; MOV [DI-240],AL
-	db	88h,0A5h
-	dw	000A0h				; MOV [DI+160],AH
-	db	88h,85h
-	dw	0FF60h				; MOV [DI-160],AL
-	db	88h,0A5h
-	dw	00050h				; MOV [DI+80],AH
-	db	88h,85h
-	dw	0FFB0h				; MOV [DI-80],AL
-	db	88h,0A5h
-	dw	00000h				; MOV [DI+0],AH
-	ret
+fr_far		dw	0,0			; step 84: FlatFill's far call into the body
 
 FLATPAGES	=	128				; wall pages a colour is kept for (WL6 has 106)
 flatcol		db	FLATPAGES DUP (0)
-LABEL	flatart	BYTE			; step 83: 1 for a texture with artwork on it
-	db	0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0
-	db	0,0,1,1,1,1,0,0,0,0,1,1,0,0,1,1
-	db	0,0,1,1,0,0,1,1,1,1,1,1,1,1,0,0
-	db	0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0
-	db	1,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0
-	db	1,1,0,0,1,1,0,0,0,0,0,0,1,1,0,0
-	db	1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+LABEL	flatart	BYTE			; steps 83, 84: 0 flat, 1 artwork as it is, 2+k artwork
+								; on a flat wall, its twin artbase[k]
+	db	0,0,0,0,2,3,4,5,6,7,1,1,8,9,0,0
+	db	0,0,10,11,12,13,0,0,0,0,14,15,0,0,1,1
+	db	0,0,16,17,0,0,1,1,1,1,1,1,18,19,0,0
+	db	0,0,0,0,0,0,20,21,0,0,0,0,0,0,0,0
+	db	1,1,0,0,0,0,22,23,0,0,0,0,0,0,0,0
+	db	24,25,0,0,26,27,0,0,0,0,0,0,28,29,0,0
+	db	30,31,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 	db	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-	EVEN
-wc			dw	320 DUP (0)		; each column's colour, and its wall's half height
+LABEL	artbase	BYTE			; step 84: each painted artwork's plain twin
+	db	0,1,2,3,16,15,16,15,22,23,22,23,28,29,32,33
+	db	22,23,52,53,78,79,14,15,68,69,82,83,68,69
+LABEL	arts0	WORD			; ... two of its background pixels, whose plain
+	dw	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+	dw	0,0,0,0,0,0,0,0,0,0,0,0,0,0
+LABEL	arts1	WORD			; colours differ
+	dw	1,2,1,10,1,1,1,1,1,1,1,1,1,1,1,2
+	dw	1,1,1,1,15,16,1,1,16,16,1,1,16,16
+artold		dw	30 DUP (0FFFFh)	; the colour it was painted with, FFFFh none
+wcseg		dw	0				; step 84: wc -- each column's colour and its wall's
+								; half height, 320 words -- is at wcseg:0 now
 fr_mm		dw	0				; the group's least (low) and most half height
 fr_col		dw	0
 fr_up		dw	0
@@ -4748,6 +4545,7 @@ fr_cf		dw	0
 fr_lim		dw	0
 fr_groups	dw	0
 FMAX		=	80
+FBODY		=	640+128*3		; step 84: the body's place in the buffer
 
 END
 

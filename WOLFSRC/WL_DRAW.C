@@ -43,6 +43,8 @@ unsigned	wallheight[MAXVIEWWIDTH];
 int			pixstep = 1;				// NEC V30 build (step 79): 2 with LOWWALLS
 int			lowsprites;					// NEC V30 build (step 80): 1 with LOWSPRITES
 int			flatwalls;					// NEC V30 build (step 81): 1 with FLATWALLS, 2 once set up
+int			solidart;					// NEC V30 build (step 84): 1 with FLATART
+memptr		flatbuf;					// NEC V30 build (step 84): FLATWALLS' buffer, locked
 int			lowvert;					// NEC V30 build (step 82): 1 with LOWVERT, 2 while displayed
 #define	WALLPAGE(p)	(flatwalls ? FlatPage (p) : (unsigned)PM_GetPage (p))	// step 81
 
@@ -1091,7 +1093,7 @@ void	FixOfs (void)
 #define FLATPAGES	128
 #define FLATMIND	80			// 9 steps of 6-bit RGB, squared
 
-static byte	far flatavg[FLATPAGES][3];
+#define FLATAVG(p,i)	(((byte far *)flatbuf)[640+(p)*3+(i)])	// step 84: in the buffer
 
 static unsigned FlatNear (byte far *pal, int r, int g, int b)
 {
@@ -1147,23 +1149,23 @@ void FlatColours (unsigned ceiling)
 				g += pal[d+1];
 				b += pal[d+2];
 			}
-			flatavg[page][0] = r/255;
-			flatavg[page][1] = g/255;
-			flatavg[page][2] = b/255;
+			FLATAVG(page,0) = r/255;
+			FLATAVG(page,1) = g/255;
+			FLATAVG(page,2) = b/255;
 		}
 		c = 0;
 		for (i = 0; i < sizeof(ks); i++)
 		{
-			r = flatavg[page][0]*ks[i]/20;
-			g = flatavg[page][1]*ks[i]/20;
-			b = flatavg[page][2]*ks[i]/20;
+			r = FLATAVG(page,0)*ks[i]/20;
+			g = FLATAVG(page,1)*ks[i]/20;
+			b = FLATAVG(page,2)*ks[i]/20;
 			c = FlatNear (pal, r > 63 ? 63 : r, g > 63 ? 63 : g, b > 63 ? 63 : b);
 			if (FlatDist (pal,c,0x19) >= FLATMIND && FlatDist (pal,c,ceiling) >= FLATMIND
 			&& (!(page&1) || FlatDist (pal,c,light) >= FLATMIND))
 				break;
 		}
 		if (i == sizeof(ks))				// nothing far enough: the nearest
-			c = FlatNear (pal, flatavg[page][0], flatavg[page][1], flatavg[page][2]);
+			c = FlatNear (pal, FLATAVG(page,0), FLATAVG(page,1), FLATAVG(page,2));
 		if (!(page&1))
 			light = c;
 		FlatColour (page,c);

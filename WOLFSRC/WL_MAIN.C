@@ -1161,6 +1161,13 @@ void InitGame (void)
 		flatwalls = 1;					// NEC V30 build (step 81): solid-colour walls
 	if (MS_CheckParm ("lowvert"))
 		lowvert = 1;					// NEC V30 build (step 82): even rows only
+	if (MS_CheckParm ("flatart"))
+		solidart = flatwalls = 1;		// NEC V30 build (step 84): artwork solid too
+	if (flatwalls)						// NEC V30 build (step 84): the columns and the
+	{									// colours' averages, before the page cache
+		MM_GetPtr (&flatbuf,640+128*3+80*8+1);	// and the fill body: so only this mode pays
+		MM_SetLock (&flatbuf,true);
+	}
 
 	SignonScreen ();
 
@@ -1532,8 +1539,8 @@ void TimeDemo (void)
 		XMSPresent ? "yes" : "no",XMSPagesAvail,MainPagesAvail);
 	printf ("sound mode %d, music mode %d; OPL waits %u and %u reads, %lu ns each (id: 6 and 35)\n",
 		SoundMode,MusicMode,alDelayAddr,alDelayData,alReadNs);
-	printf ("view %d x %d%s%s%s%s%s%s\n",viewwidth,viewheight,pixstep == 2 ? ", LOWWALLS" : "",
-		lowsprites ? ", LOWSPRITES" : "",flatwalls ? ", FLATWALLS" : "",lowvert ? ", LOWVERT" : "",
+	printf ("view %d x %d%s%s%s%s%s%s%s\n",viewwidth,viewheight,pixstep == 2 ? ", LOWWALLS" : "",
+		lowsprites ? ", LOWSPRITES" : "",flatwalls ? ", FLATWALLS" : "",lowvert ? ", LOWVERT" : "",solidart ? ", FLATART" : "",
 		tdmaxframes ? ", QUICK (demo 0, 200 frames)" : "",
 		tdpreload ? ", PRELOAD" : "");
 	tf = tt = tl = 0;
