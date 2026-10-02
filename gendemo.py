@@ -116,15 +116,22 @@ def inputs(rnd, frames):
 
 def main():
     frames = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 500
+    dset = int(sys.argv[sys.argv.index("--set") + 1]) if "--set" in sys.argv else 0
     os.makedirs(OUT, exist_ok=True)
     index = []
+    idx = os.path.join(OUT, "INDEX.TXT")
+    old = [l for l in open(idx).read().splitlines()] if os.path.exists(idx) else []
+    base = 120 * dset
+    old = [l for l in old if not base <= int(l[1:l.index(".")]) < base + 120]
     for m in range(60):
         name, (walls, objs) = load_map(m)
         open_tiles = [(x, y) for y in range(64) for x in range(64)
                       if walls[y * 64 + x] >= AREATILE and objs[y * 64 + x] == 0]
         for k in range(2):
-            rnd = random.Random(1000 * m + k)
-            if k == 0:
+            # set 0: the map's own start and a random one; later sets (--set N,
+            # demos 120N on): two more random starts, other seeds
+            rnd = random.Random(1000 * m + k + 100000 * dset)
+            if k == 0 and dset == 0:
                 start = (0, 0, 0, 0)
             else:
                 x, y = rnd.choice(open_tiles)
@@ -132,18 +139,18 @@ def main():
             body = inputs(rnd, frames)
             demo = bytes([m]) + struct.pack("<H", 4 + 3 * frames) + b"\0"
             demo += b"".join(bytes(f) for f in body)
-            n = 2 * m + k
+            n = base + 2 * m + k
             open(os.path.join(OUT, "G%d.DEM" % n), "wb").write(bytes(start) + demo)
             index.append("G%d.DEM map %2d (%s) %s" % (n, m, name,
-                         "own start" if k == 0 else "start %d,%d dir %d" % start[:3]))
-    open(os.path.join(OUT, "INDEX.TXT"), "w").write("\n".join(index) + "\n")
-    print("%d demos of %d frames in %s" % (len(index), frames, OUT))
+                         "own start" if start[0] == 0 else "start %d,%d dir %d" % start[:3]))
+    open(idx, "w").write("\n".join(sorted(old + index, key=lambda l: int(l[1:l.index(".")]))) + "\n")
+    print("%d demos of %d frames in %s (set %d: G%d-G%d)" % (len(index), frames, OUT, dset, base, base + 119))
     if "--ship" in sys.argv:
         import w3dbuild
         import zipfile
         z = os.path.join(HERE, "stage", "GEN.ZIP")
         with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
-            for i in range(len(index)):
+            for i in range(base, base + 120):
                 zf.write(os.path.join(OUT, "G%d.DEM" % i), "G%d.DEM" % i)
         w3dbuild.ship_zip(z, r"C:\WOLF3D")
 

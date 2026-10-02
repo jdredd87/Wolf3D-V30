@@ -946,6 +946,61 @@ ENDP
 
 
 ;
+; DropFill (step 92, StevenC & Claude): the post id drops -- postx, postwidth
+; pixels -- gets, column by column, the ceiling and floor rows of the band
+; VGAClearScreen skipped (BandFix with a wall of height 0), which is what
+; id's picture shows there.  Nothing when no band was skipped.  Keeps SI and
+; DS; DropFillF is the same for C.
+;
+PROC	DropFill NEAR
+PUBLIC	DropFill
+	mov	cx,[bandhalf]
+	jcxz	@@none
+	push	si
+	mov	[fixn],cx				; B rows each side, from row half-B
+	mov	ax,cx
+	shl	ax,4
+	shl	cx,6
+	add	ax,cx					; B*80
+	add	ax,[bandtop]
+	mov	[fixofs2],ax			; the floor from row half
+	mov	si,[postx]
+	mov	bp,[postwidth]
+	mov	dx,SC_INDEX+1
+	mov	ax,SCREENSEG
+	mov	ds,ax
+@@col:
+	mov	cx,si
+	and	cl,3
+	mov	al,1
+	shl	al,cl
+	out	dx,al					; this pixel's plane
+	mov	di,si
+	shr	di,2
+	add	di,[ss:bufferofs]
+	call	BandFix
+	inc	si
+	dec	bp
+	jnz	@@col
+	mov	ax,ss
+	mov	ds,ax
+	pop	si
+@@none:
+	ret
+ENDP
+
+PROC	DropFillF FAR
+PUBLIC	DropFillF
+	push	di
+	push	bp
+	call	DropFill
+	pop	bp
+	pop	di
+	retf
+ENDP
+
+
+;
 ; ScalePostF: ScalePostA for WL_DRAW.C's door and pushwall routines and the
 ; frame's last post, keeping the registers a C caller relies on
 ;
@@ -1056,6 +1111,11 @@ cvvxhic:
 	mov	[chvgxlo],ax
 	mov	[chvgxhi],dx
 	jmp	cvi_have
+hvw_drop:						; step 92: past the first column, id drops
+	cmp	[pixx],0				; the pending post -- give its columns the
+	je	hvw_first				; band the clear skipped
+	call	DropFill
+	jmp	hvw_first
 hvw_newcol:
 	mov	[WORD xintercept],0		; step 75: the hit, stored as a post starts
 	mov	[WORD xintercept+2],bp
@@ -1179,7 +1239,7 @@ hvw_newwall:
 	shl	bx,1
 	mov	[wallheight+bx],ax
 	cmp	[lastside],-1
-	je	hvw_first
+	je	hvw_drop				; step 92: rare, out of line
 	call	ScalePostA
 hvw_first:
 	mov	[lastside],1
@@ -2696,6 +2756,11 @@ czp_newmin:
 czp_short:
 	call	ScalePostA				; (it recomputes; postmin is a least value)
 	jmp	czp_done
+hhw_drop:						; step 92: as hvw_drop
+	cmp	[pixx],0
+	je	hhw_first
+	call	DropFill
+	jmp	hhw_first
 hhw_newwall:
 	mov	[WORD xintercept],bp	; step 75: the hit, stored as a post starts
 	mov	[WORD xintercept+2],dx
@@ -2709,7 +2774,7 @@ hhw_newwall:
 	shl	bx,1
 	mov	[wallheight+bx],ax
 	cmp	[lastside],-1
-	je	hhw_first
+	je	hhw_drop				; step 92: rare, out of line
 	call	ScalePostA
 hhw_first:
 	mov	[lastside],0

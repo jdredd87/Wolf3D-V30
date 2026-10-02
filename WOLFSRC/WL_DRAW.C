@@ -353,6 +353,7 @@ void  FarScalePost (void)				// just so other files can call
 // a wall when the wall turns out shorter.
 //
 void	ScalePostF (void);
+void	DropFillF (void);		// step 92: the band for a post id drops
 
 void	near ScalePost (void)
 {
@@ -434,6 +435,8 @@ void HitHorizDoor (void)
 		wallheight[pixx] = CalcHeight();
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();			// draw last post
+		else if (pixx)					// step 92: id drops the pending post here
+			DropFillF ();			// (a pushwall's): its band, not an old frame
 	// first pixel in this door
 		lastside = 2;
 		lastkey = 0xFFFF;
@@ -507,6 +510,8 @@ void HitVertDoor (void)
 		wallheight[pixx] = CalcHeight();
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();			// draw last post
+		else if (pixx)					// step 92: id drops the pending post here
+			DropFillF ();			// (a pushwall's): its band, not an old frame
 	// first pixel in this door
 		lastside = 2;
 		lastkey = 0xFFFF;
@@ -592,6 +597,8 @@ void HitHorizPWall (void)
 	// new wall
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();
+		else if (pixx)					// step 92: id drops the pending post here
+			DropFillF ();			// (a pushwall's): its band, not an old frame
 
 		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
@@ -661,6 +668,8 @@ void HitVertPWall (void)
 	// new wall
 		if (lastside != -1)				// if not the first scaled post
 			ScalePost ();
+		else if (pixx)					// step 92: id drops the pending post here
+			DropFillF ();			// (a pushwall's): its band, not an old frame
 
 		lastkey = 0xFFFF;
 		lasttilehit = tilehit;
