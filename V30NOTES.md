@@ -207,6 +207,8 @@ whatever the game does with it.
 
 ## Findings worth keeping
 
+**Every map, checked (2026-10-02).** The attract loop's four demos visit four of the sixty maps, so every step so far had been proven on those alone. `gendemo.py` now writes demos for all sixty from the game's own map data -- two a map from the map's own start and from random open tiles, structured random input (runs, turns, strafes, "use" every ninth frame, bursts of fire) -- and `TIMEDEMO GEN n` plays one with god mode on, so a demo is not cut short by dying; `allmaps.py` runs each on our build and on `refsrc.py`'s reference (id's renderer, which takes GEN from HEAD too) and compares the CRC checksums. `refsrc.py` had rotted since steps 63 and 79-84 and was repaired (id's `WL_ACT2.C`; the switches' variables defined, all off); the repaired reference still gives the attract loop's view `0707C966` and screen `F2A10CEB`. The first 120 demos found **one difference**, G54 (map 27 from its own start): two columns of one frame. Frame dumps from both builds, a post log of id's `ScalePost` and a hit log of both showed id's own bug -- its pushwall routines never set `lastside`, so when a frame begins with a moving pushwall in view, the first wall after it skips the pushwall's last post -- and ours showing an old frame where id shows the floor and ceiling, because step 62 no longer clears the band. Step 92 fixed it; all 120 now match, and a second set of 120 (600 frames, other random starts) runs against the same reference. The 486 runs a set in about 80 minutes.
+
 **The window size, measured (step 88, 2026-10-02).** id's game already sells picture for speed without changing any of it: Change View, sizes 4 to 19, 16n x 8n pixels. `VIEW n` sets it at start-up -- W3MENU's `+` and `-` -- and TIMEDEMO keeps it instead of forcing 15, so each size can be measured; the word is compared in code, not as a string, because DGROUP has 14 bytes left (a literal took it 2 bytes past what a 4 KB stack allows). On the V30, demo 0's 200 frames, two rounds each within a tick:
 
 | size | view | play ticks | fps |
@@ -441,19 +443,40 @@ Measured rather than read off the profile: the whole ceiling and floor fill
 is 31.6 ticks of the 200-frame benchmark (4.1%), and an XMS page-in costs
 about 2 ms.
 
-## Next
+## Next -- the exhaustion checklist (set with StevenC, 2026-10-02)
 
-What is left is spread thin; every candidate measured or estimated is worth
-0.1-1%:
+This exact build is done when every item below has been measured and kept
+or dropped, and no profile item over about 2% is left unworked.  Then it is
+tagged (`exact-final`), and a separate BSP version starts from it on its
+own branch, allowed to change game play slightly -- never merged back.
 
-1. The game logic's C (`T_Path`, `SelectPathDir`, `TryWalk`, `T_Chase`,
-   `SightPlayer`, `MoveObj`: 1.7% together) in assembly.
-2. `ScaleSpan`'s per-call overhead for the weapon and close sprites (about
-   3%): every register is in use, so only the call itself can go.
-3. `PlaceActors`' nine spotvis tests per actor: a bounding box of the rays'
-   hit tiles would reject most actors, but keeping it costs the ray loop
-   about as much as it saves.
-4. Long divides (`ny*scale/nx`, 0.4%): already normalised by steps 4 and 42.
+1. **Verification on every map** -- done for 240 generated demos (two sets
+   of 120 over all 60 maps, TIMEDEMO GEN; see "Every map, checked"), and
+   the playable release.
+2. **The AdLib on a PicoMEM**: music costs about 3.4% of a frame; if the
+   card's AdLib is emulated, the waits between register writes may be
+   needless.  The same writes in the same order, so the same music.
+3. **Small sprites plane by plane**: one map-mask OUT per plane, not per
+   column, in step 55's pixel walk (0.5-1%).
+4. **Reciprocal division** (Granlund and Montgomery, 1994 -- after Wolf3D)
+   for `CalcHeight`'s divide: the V30's own divide is fast for its
+   multiply, so likely a loss; one measurement to close it.
+5. **The game logic's remaining C** (`T_Chase` and the rest, about 1.7%),
+   in assembly.
+6. **A whole-loop profile of all four demos**, not only demo 0's 200
+   frames, for anything that only the others show.
+
+And one more option, not part of the exact build (StevenC's idea):
+**FARBLOBS** -- a sprite below a height threshold drawn as its silhouette
+in one colour (each column from its first post's start to its last post's
+end, the sprite's average colour as FLATWALLS picks one), no scaler calls:
+a few percent where distant guards and treasure crowd the view.
+
+Older candidates, each 0.1-1%: `ScaleSpan`'s per-call overhead for the
+weapon and close sprites (every register is in use); `PlaceActors`' nine
+spotvis tests per actor (a bounding box of the rays' hit tiles costs the
+ray loop about what it saves); the long divides (`ny*scale/nx`, 0.4%,
+normalised by steps 4 and 42).
 
 Measured and set aside: coherent rays (step 85, 27% slower) and a BSP (step 86 -- in the default mode it cannot replace the walk, because the walk's spotvis is game logic).
 

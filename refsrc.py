@@ -17,7 +17,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "stage", "refsrc")
 # the renderer, the sprite scaler, the fizzle, the long divide, line of sight
 FROM_ID = ["WL_DRAW.C", "WL_DR_A.ASM", "WL_SCALE.C", "WL_STATE.C", "ID_VH.C",
-           "ID_VH_A.ASM", "H_LDIV.ASM"]
+           "ID_VH_A.ASM", "H_LDIV.ASM",
+           "WL_ACT2.C"]                # T_Path and SelectPathDir: ours are in WL_DR_A.ASM (step 63)
 
 
 def git_show(rev, path):
@@ -56,6 +57,12 @@ edit("WL_PLAY.C", """		DoActors ();			// NEC V30 build: the same loop in WL_DR_A
 """, """		for (obj = player;obj;obj = obj->next)
 			DoActor (obj);
 """)
+# the detail switches' variables live in our WL_DRAW.C, and HEAD's WL_MAIN.C
+# parses them; id's never sets them, so they are defined here, all off
+p = os.path.join(OUT, "WL_MAIN.C")
+open(p, "ab").write(b"\r\n// refsrc.py: the switches' variables, which our WL_DRAW.C defines -- all off\r\n"
+                    b"int\t\tpixstep = 1, lowsprites, flatwalls, solidart, lowvert;\r\n"
+                    b"memptr\tflatbuf;\r\n")
 # no WL_SC_A: id's ScaleShape is C
 edit("BUILD86.BAT", " ID_VH_A WL_SC_A ID_PM_A)", " ID_VH_A ID_PM_A)")
 edit("LINK86.RSP", " WL_SCALE.OBJ WL_SC_A.OBJ+", " WL_SCALE.OBJ+")
