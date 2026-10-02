@@ -220,16 +220,18 @@ unsigned BuildCompScale (int height, memptr *finalspot)
 	// NEC V30 build (step 87): when texels 2k and 2k+1 both draw, one
 	// mov ax,es:[si+2k] loads the two, and 2k+1's stores take AH with no
 	// load of their own -- the same length, and one bus cycle on the V30.
-	// Step 90: only from 64 up, so that the small sprites' pixel walk,
-	// which calls only scalers under 64, needs no texel in AH.
+	// Step 91: at every height (step 90 paired only from 64 up); a scaler
+	// of 32 or under never pairs, which is what lets the small sprites'
+	// pixel walk skip the texel in AH below 34 -- see WL_SC_A.ASM.  With
+	// FLATWALLS no wall comes here, so only from 64 up, as step 90 did.
 	//
-		if (src&1 && draws[src-1] && height >= 64)
+		if (src&1 && draws[src-1] && (height >= 64 || !flatwalls))
 			modrm = 0xa5;					// mov [di+heightofs],ah
 		else
 		{
 			modrm = 0x85;					// mov [di+heightofs],al
 			*code++ = 0x26;
-			*code++ = (src&1) || !draws[src+1] || height < 64 ? 0x8a : 0x8b;
+			*code++ = (src&1) || !draws[src+1] || (height < 64 && flatwalls) ? 0x8a : 0x8b;
 			*code++ = 0x44;
 			*code++ = src;
 		}

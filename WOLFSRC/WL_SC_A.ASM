@@ -38,6 +38,7 @@ EXTRN	stepbytwo:WORD				; scalers from here up are shared by threes
 EXTRN	viewwidth:WORD
 EXTRN	lowsprites:WORD				; step 80: 1 with LOWSPRITES
 EXTRN	pixstep:WORD				; step 79: 2 with LOWWALLS
+EXTRN	flatwalls:WORD				; step 91: nonzero with FLATWALLS
 EXTRN	wallheight:WORD
 EXTRN	slinex:WORD
 EXTRN	slinewidth:WORD
@@ -266,6 +267,7 @@ PROC	ScaleSpan NEAR
 ENDP
 
 texel		db	0					; step 87: a post's start texel, for 2 and 3 bytes
+pmode		db	0					; step 91: the pixel walk's post loops, 1 = preload
 
 
 ;============================
@@ -675,6 +677,17 @@ PUBLIC	ScaleShape
 ; SI is the source column, DI the pixel's x, CX the DDA's remainder.
 ;
 @@bypixel:
+	xor	cl,cl					; step 91: a scaler built over 32 may pair --
+	cmp	ax,17					; but none under 64 does with FLATWALLS
+	jb	@@bplean
+	cmp	[flatwalls],0
+	jne	@@bplean
+	inc	cl
+@@bplean:
+	cmp	cl,[cs:pmode]
+	je	@@bpok
+	call	@@setpmode
+@@bpok:
 	shl	ax,1
 	mov	[hh],ax					; h = 2*scale
 	mov	cx,ax
@@ -782,9 +795,11 @@ PUBLIC	ScaleShape
 	mov	bx,[es:bp]				; table location of the rtl to patch
 	or	bx,bx
 	jz	@@pl1done				; 0 ends the post list
+@@plsel:						; step 91: LEA BX,[BX+0] below 34, else JMP @@pl1postp
+	db	8Dh,5Fh,00h
 	EVEN
-@@pl1post:							; step 90: a scaler under 64, never paired --
-	mov	bx,[bx]					; so AH keeps the byte, and no texel is loaded
+@@pl1post:						; step 91: a scaler built 32 or under, never
+	mov	bx,[bx]					; paired: AH keeps the byte, no texel is loaded
 	mov	ah,[bx]					; save old value
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
 	mov	si,[es:bp+4]			; table location of entry spot
@@ -833,9 +848,11 @@ PUBLIC	ScaleShape
 	mov	bx,[es:bp]				; table location of the rtl to patch
 	or	bx,bx
 	jz	@@pr1done				; 0 ends the post list
+@@prsel:						; step 91: LEA BX,[BX+0] below 34, else JMP @@pr1postp
+	db	8Dh,5Fh,00h
 	EVEN
-@@pr1post:							; step 90: a scaler under 64, never paired --
-	mov	bx,[bx]					; so AH keeps the byte, and no texel is loaded
+@@pr1post:						; step 91: a scaler built 32 or under, never
+	mov	bx,[bx]					; paired: AH keeps the byte, no texel is loaded
 	mov	ah,[bx]					; save old value
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
 	mov	si,[es:bp+4]			; table location of entry spot
@@ -859,6 +876,84 @@ PUBLIC	ScaleShape
 	pop	di
 	pop	si
 	jmp	@@pr_next
+
+;
+; NEC V30 build (step 91), StevenC & Claude: the post loops for a sprite of
+; 34 to 62 pixels, whose scaler may pair texels (step 87): AH must hold the
+; start texel, in case it is a pair's second, so the byte under the RETF
+; goes on the stack.  @@plsel and @@prsel jump here; @@setpmode sets them.
+;
+	EVEN
+@@pl1postp:
+	mov	bx,[bx]
+	mov	ah,[bx]					; save old value
+	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	push	ax
+	mov	si,[es:bp+4]			; table location of entry spot: start*2
+	mov	ax,[si]
+	mov	[WORD ss:linescale],ax	; call here to start scaling
+	shr	si,1
+	add	si,[es:bp+2]
+	mov	ah,[es:si]				; the start texel, for a pair's second
+	mov	si,[es:bp+2]			; corrected top of shape for this post
+	add	bp,6					; next post
+	mov	ds,dx					; DS = the screen
+	call	[DWORD ss:linescale]	; scale the post
+	mov	ds,cx					; DS = the scaler
+	pop	ax
+	mov	[bx],ah					; unpatch the RETF
+	mov	bx,[es:bp]
+	or	bx,bx
+	jnz	@@pl1postp
+	jmp	@@pl1done
+	EVEN
+@@pr1postp:
+	mov	bx,[bx]
+	mov	ah,[bx]					; save old value
+	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	push	ax
+	mov	si,[es:bp+4]			; table location of entry spot: start*2
+	mov	ax,[si]
+	mov	[WORD ss:linescale],ax	; call here to start scaling
+	shr	si,1
+	add	si,[es:bp+2]
+	mov	ah,[es:si]				; the start texel, for a pair's second
+	mov	si,[es:bp+2]			; corrected top of shape for this post
+	add	bp,6					; next post
+	mov	ds,dx					; DS = the screen
+	call	[DWORD ss:linescale]	; scale the post
+	mov	ds,cx					; DS = the scaler
+	pop	ax
+	mov	[bx],ah					; unpatch the RETF
+	mov	bx,[es:bp]
+	or	bx,bx
+	jnz	@@pr1postp
+	jmp	@@pr1done
+
+;
+; @@setpmode: CL = 1 for the preload loops, 0 for the lean ones; writes the
+; two patch points.  Called, so that the RET reaches them on a 486 only
+; after its prefetch queue is refilled.  Keeps AX.
+;
+@@setpmode:
+	mov	[cs:pmode],cl
+	or	cl,cl
+	jz	@@spl
+	mov	[BYTE cs:@@plsel],0E9h	; JMP near -- offsets taken at run time
+	mov	dx,OFFSET @@pl1postp
+	sub	dx,OFFSET @@plsel+3
+	mov	[WORD cs:@@plsel+1],dx
+	mov	[BYTE cs:@@prsel],0E9h
+	mov	dx,OFFSET @@pr1postp
+	sub	dx,OFFSET @@prsel+3
+	mov	[WORD cs:@@prsel+1],dx
+	retn					; RETN: in a FAR proc TASM makes RET a RETF
+@@spl:
+	mov	[WORD cs:@@plsel],5F8Dh	; LEA BX,[BX+0]
+	mov	[BYTE cs:@@plsel+2],0
+	mov	[WORD cs:@@prsel],5F8Dh
+	mov	[BYTE cs:@@prsel+2],0
+	retn
 
 ;
 ; NEC V30 build (step 80), StevenC & Claude: the first call.  The entry jump
