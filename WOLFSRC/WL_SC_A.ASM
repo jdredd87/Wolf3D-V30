@@ -783,23 +783,18 @@ PUBLIC	ScaleShape
 	or	bx,bx
 	jz	@@pl1done				; 0 ends the post list
 	EVEN
-@@pl1post:
-	mov	bx,[bx]
+@@pl1post:							; step 90: a scaler under 64, never paired --
+	mov	bx,[bx]					; so AH keeps the byte, and no texel is loaded
 	mov	ah,[bx]					; save old value
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
-	push	ax						; step 89: on the stack, AH being taken
-	mov	si,[es:bp+4]			; table location of entry spot: start*2
-	mov	ax,[si]
-	mov	[WORD ss:linescale],ax	; call here to start scaling
-	shr	si,1
-	add	si,[es:bp+2]
-	mov	ah,[es:si]				; step 87: the start texel, for a pair's second
+	mov	si,[es:bp+4]			; table location of entry spot
+	mov	si,[si]
+	mov	[WORD ss:linescale],si	; call here to start scaling
 	mov	si,[es:bp+2]			; corrected top of shape for this post
 	add	bp,6					; next post
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	pop	ax
 	mov	[bx],ah					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
@@ -839,23 +834,18 @@ PUBLIC	ScaleShape
 	or	bx,bx
 	jz	@@pr1done				; 0 ends the post list
 	EVEN
-@@pr1post:
-	mov	bx,[bx]
+@@pr1post:							; step 90: a scaler under 64, never paired --
+	mov	bx,[bx]					; so AH keeps the byte, and no texel is loaded
 	mov	ah,[bx]					; save old value
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
-	push	ax						; step 89: on the stack, AH being taken
-	mov	si,[es:bp+4]			; table location of entry spot: start*2
-	mov	ax,[si]
-	mov	[WORD ss:linescale],ax	; call here to start scaling
-	shr	si,1
-	add	si,[es:bp+2]
-	mov	ah,[es:si]				; step 87: the start texel, for a pair's second
+	mov	si,[es:bp+4]			; table location of entry spot
+	mov	si,[si]
+	mov	[WORD ss:linescale],si	; call here to start scaling
 	mov	si,[es:bp+2]			; corrected top of shape for this post
 	add	bp,6					; next post
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	pop	ax
 	mov	[bx],ah					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx

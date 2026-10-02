@@ -220,14 +220,16 @@ unsigned BuildCompScale (int height, memptr *finalspot)
 	// NEC V30 build (step 87): when texels 2k and 2k+1 both draw, one
 	// mov ax,es:[si+2k] loads the two, and 2k+1's stores take AH with no
 	// load of their own -- the same length, and one bus cycle on the V30.
+	// Step 90: only from 64 up, so that the small sprites' pixel walk,
+	// which calls only scalers under 64, needs no texel in AH.
 	//
-		if (src&1 && draws[src-1])
+		if (src&1 && draws[src-1] && height >= 64)
 			modrm = 0xa5;					// mov [di+heightofs],ah
 		else
 		{
 			modrm = 0x85;					// mov [di+heightofs],al
 			*code++ = 0x26;
-			*code++ = (src&1) || !draws[src+1] ? 0x8a : 0x8b;
+			*code++ = (src&1) || !draws[src+1] || height < 64 ? 0x8a : 0x8b;
 			*code++ = 0x44;
 			*code++ = src;
 		}
