@@ -1059,6 +1059,8 @@ static boolean TDPreloadUpdate (unsigned current, unsigned total)
 }
 #pragma warn .par
 
+int		tdgen;					// TIMEDEMO GEN n: n+1, else 0 (StevenC & Claude)
+
 void PlayDemo (int demonumber)
 {
 	int length;
@@ -1071,9 +1073,32 @@ void PlayDemo (int demonumber)
 	int dems[1]={T_DEMO0};
 #endif
 
+	if (tdgen)						// TIMEDEMO GEN n: Gn.DEM -- a 4-byte start
+	{								// (tile x, y, direction, 0) and a demo
+		char	name[10];
+		int		n = tdgen-1, k = 0;
+
+		name[k++] = 'G';
+		if (n >= 100)
+			name[k++] = '0'+n/100;
+		if (n >= 10)
+			name[k++] = '0'+n/10%10;
+		name[k++] = '0'+n%10;
+		name[k++] = '.';
+		name[k++] = 'D';
+		name[k++] = 'E';
+		name[k++] = 'M';
+		name[k] = 0;
+		CA_LoadFile (name,&demobuffer);
+		MM_SetLock (&demobuffer,true);
+		demoptr = (char far *)demobuffer + 4;
+	}
+	else
+	{
 	CA_CacheGrChunk(dems[demonumber]);
 	demoptr = grsegs[dems[demonumber]];
 	MM_SetLock (&grsegs[dems[demonumber]],true);
+	}
 #else
 	demoname[4] = '0'+demonumber;
 	CA_LoadFile (demoname,&demobuffer);
@@ -1098,6 +1123,9 @@ void PlayDemo (int demonumber)
 	demoplayback = true;
 
 	SetupGameLevel ();
+	if (tdgen && ((byte far *)demobuffer)[0])	// GEN: the generated start
+		SpawnPlayer (((byte far *)demobuffer)[0],((byte far *)demobuffer)[1],
+			((byte far *)demobuffer)[2]);
 	StartMusic ();
 	PM_CheckMainMem ();
 	if (tdpreload)
@@ -1112,7 +1140,10 @@ void PlayDemo (int demonumber)
 	PlayLoop ();
 
 #ifdef DEMOSEXTERN
-	UNCACHEGRCHUNK(dems[demonumber]);
+	if (tdgen)
+		MM_FreePtr (&demobuffer);
+	else
+		UNCACHEGRCHUNK(dems[demonumber]);
 #else
 	MM_FreePtr (&demobuffer);
 #endif

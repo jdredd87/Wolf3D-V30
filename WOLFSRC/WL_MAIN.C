@@ -1518,6 +1518,21 @@ void TimeDemo (void)
 		ndemos = 1;					// QUICK: demo 0, first 200 frames only --
 		tdmaxframes = 200;			// the same frames every run, for A/B timing
 	}
+	for (i = 1;i < _argc-1;i++)		// GEN n: generated demo Gn.DEM alone, god mode on
+	{								// (StevenC & Claude; see WL_GAME.C's PlayDemo)
+		extern int tdgen;
+		char	far *a = _argv[i];
+		if ((a[0]|32) == 'g' && (a[1]|32) == 'e' && (a[2]|32) == 'n' && !a[3])
+		{
+			char	far *p = _argv[i+1];
+			tdgen = 0;
+			while (*p >= '0' && *p <= '9')
+				tdgen = tdgen*10 + *p++ - '0';
+			tdgen++;
+			ndemos = 1;
+			godmode = true;
+		}
+	}
 	for (i = 1;i < _argc-1;i++)		// SECS n: the demos for n seconds of play, the
 		if (!_fstricmp (_argv[i],"secs"))	// same time every run (SHOWCASE.BAT)
 		{
