@@ -1195,6 +1195,41 @@ void InitGame (void)
 		lowvert = 1;					// NEC V30 build (step 82): even rows only
 	if (MS_CheckParm ("flatart"))
 		solidart = flatwalls = 1;		// NEC V30 build (step 84): artwork solid too
+	for (i = 1;i < _argc;i++)			// NEC V30 build (step 93): FARBLOBS [n], sprites
+	{									// under n pixels (16) as silhouettes
+		extern int farblobs;
+		char far *a = _argv[i];
+		if ((a[0]|32)=='f' && (a[1]|32)=='a' && (a[2]|32)=='r' && (a[3]|32)=='b'
+			&& (a[4]|32)=='l' && (a[5]|32)=='o' && (a[6]|32)=='b' && (a[7]|32)=='s' && !a[8])
+		{
+			int n = 0;
+			if (i+1 < _argc)
+			{
+				char far *p = _argv[i+1];
+				while (*p >= '0' && *p <= '9')
+					n = n*10 + *p++ - '0';
+			}
+			if (n < 4 || n > 64)
+				n = 16;
+			farblobs = n/2;
+			{							// the fill: MOV [DI+k*80],AL, k = 159..0,
+				extern memptr blobfill;	// then RETF (see WL_SC_A.ASM's @@blobcol)
+				byte far *f;
+				int k;
+				MM_GetPtr (&blobfill,160*4+1);
+				MM_SetLock (&blobfill,true);
+				f = (byte far *)blobfill;
+				for (k = 159; k >= 0; k--)
+				{
+					*f++ = 0x88;
+					*f++ = 0x85;
+					*f++ = (k*80)&0xff;
+					*f++ = (k*80)>>8;
+				}
+				*f = 0xcb;
+			}
+		}
+	}
 	if (flatwalls)						// NEC V30 build (step 84): the columns and the
 	{									// colours' averages, before the page cache
 		MM_GetPtr (&flatbuf,640+128*3+80*8+1);	// and the fill body: so only this mode pays

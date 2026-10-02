@@ -46,6 +46,9 @@ PLAYING
                  artwork kept
     FLATART      artwork walls solid too
     LOWVERT      half the vertical resolution
+    FARBLOBS [n] distant enemies and items (under n pixels high, 16)
+                 as flat shapes -- 11% faster on a 486, but not on
+                 a V30, where far sprites are already cheap
     VIEW n       the window size, 4 to 19 (id's Change View; 15 is
                  240 x 120).  Full detail, just smaller
 
@@ -58,11 +61,11 @@ PLAYING
                                     LOWVERT           8.1
     VIEW 13 (208 x 104)   5.7     VIEW 11 (176 x 88)  6.5
 
-PLAY's menu: a letter turns a switch on or off, + and - pick the window
-size (0 leaves it to the game), P plays, B runs the benchmark, Q quits.
-Quitting the game comes back to the menu.  It remembers your choice in
-W3MENU.CFG, and quits by itself after 30 seconds with no key (PLAY /T:60
-changes that, /T:0 waits for ever).
+PLAY's menu: a letter turns a switch on or off (D is FARBLOBS), + and -
+pick the window size (0 leaves it to the game), P plays, B runs the
+benchmark, Q quits. Quitting the game comes back to the menu. It remembers
+your choice in W3MENU.CFG, and quits by itself after 30 seconds with no
+key (PLAY /T:60 changes that, /T:0 waits for ever).
 
 SHOWCASE runs a demo reel of every mode, a minute each, with the speed
 of each -- made for recording a video.  S skips a wait, Q quits.

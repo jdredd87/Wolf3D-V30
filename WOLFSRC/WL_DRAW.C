@@ -45,6 +45,8 @@ int			lowsprites;					// NEC V30 build (step 80): 1 with LOWSPRITES
 int			flatwalls;					// NEC V30 build (step 81): 1 with FLATWALLS, 2 once set up
 int			solidart;					// NEC V30 build (step 84): 1 with FLATART
 memptr		flatbuf;					// NEC V30 build (step 84): FLATWALLS' buffer, locked
+int			farblobs;					// NEC V30 build (step 93): FARBLOBS' scale, 0 off
+memptr		blobfill;					// ... and its compiled fill (WL_MAIN.C makes it)
 int			lowvert;					// NEC V30 build (step 82): 1 with LOWVERT, 2 while displayed
 #define	WALLPAGE(p)	(flatwalls ? FlatPage (p) : (unsigned)PM_GetPage (p))	// step 81
 

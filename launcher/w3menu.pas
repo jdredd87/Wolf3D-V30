@@ -28,16 +28,17 @@ program W3Menu;
 uses Dos, Cpu, VidFix;
 
 const
-  NSW = 5;
-  SwKey: array[1..NSW] of Char = ('W', 'S', 'F', 'V', 'R');
+  NSW = 6;
+  SwKey: array[1..NSW] of Char = ('W', 'S', 'F', 'V', 'R', 'D');
   SwName: array[1..NSW] of string[10] =
-    ('LOWWALLS', 'LOWSPRITES', 'FLATWALLS', 'LOWVERT', 'FLATART');
+    ('LOWWALLS', 'LOWSPRITES', 'FLATWALLS', 'LOWVERT', 'FLATART', 'FARBLOBS');
   SwText: array[1..NSW] of string[48] =
     ('walls in two-pixel columns',
      'enemies and items in two-pixel columns',
      'every wall one solid colour, artwork kept',
      'half the vertical resolution',
-     'artwork walls solid too (no textures)');
+     'artwork walls solid too (no textures)',
+     'far enemies and items as solid shapes');
   CfgName = 'W3MENU.CFG';
   RunName = 'W3RUN.BAT';
   TicksPerDay = 1573040;

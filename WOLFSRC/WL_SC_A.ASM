@@ -39,6 +39,9 @@ EXTRN	viewwidth:WORD
 EXTRN	lowsprites:WORD				; step 80: 1 with LOWSPRITES
 EXTRN	pixstep:WORD				; step 79: 2 with LOWWALLS
 EXTRN	flatwalls:WORD				; step 91: nonzero with FLATWALLS
+EXTRN	farblobs:WORD				; step 93: FARBLOBS' scale threshold, 0 off
+EXTRN	viewheight:WORD
+EXTRN	blobfill:WORD				; step 93: FARBLOBS' generated fill's segment (a memptr)
 EXTRN	wallheight:WORD
 EXTRN	slinex:WORD
 EXTRN	slinewidth:WORD
@@ -268,6 +271,12 @@ ENDP
 
 texel		db	0					; step 87: a post's start texel, for 2 and 3 bytes
 pmode		db	0					; step 91: the pixel walk's post loops, 1 = preload
+bmode		db	0					; step 93: 1 while @@plj/@@prj go to the blob column
+bsaved		db	0					; step 93: their own three bytes are saved
+pljsave		db	0,0,0
+prjsave		db	0,0,0
+btop		dw	0					; step 93: its row 0 (viewheight/2 - scale)
+bfcall		dd	0					; step 93: the entry into blobfill for a span
 
 
 ;============================
@@ -677,6 +686,30 @@ PUBLIC	ScaleShape
 ; SI is the source column, DI the pixel's x, CX the DDA's remainder.
 ;
 @@bypixel:
+	cmp	ax,[farblobs]			; step 93: FARBLOBS, under its threshold (0: off)
+	jae	@@bpwhole
+	push	ax
+	mov	cl,1
+	cmp	cl,[cs:bmode]
+	je	@@bpb
+	call	@@setbmode
+@@bpb:
+	pop	ax
+	mov	dx,[viewheight]			; row 0 of a 2*scale sprite, as BuildCompScale's
+	sar	dx,1					; toppix
+	sub	dx,ax
+	mov	[cs:btop],dx
+	mov	dx,[blobfill]			; the fill's segment, once a sprite
+	mov	[WORD cs:bfcall+2],dx
+	jmp	SHORT @@bpgo
+@@bpwhole:
+	cmp	[BYTE cs:bmode],0
+	je	@@bpgo
+	push	ax
+	xor	cl,cl
+	call	@@setbmode
+	pop	ax
+@@bpgo:
 	xor	cl,cl					; step 91: a scaler built over 32 may pair --
 	cmp	ax,17					; but none under 64 does with FLATWALLS
 	jb	@@bplean
@@ -953,6 +986,137 @@ PUBLIC	ScaleShape
 	mov	[BYTE cs:@@plsel+2],0
 	mov	[WORD cs:@@prsel],5F8Dh
 	mov	[BYTE cs:@@prsel+2],0
+	retn
+
+;
+; NEC V30 build (step 93), StevenC & Claude: FARBLOBS.  @@setbmode: CL = 1
+; sends @@plj and @@prj to the blob column, 0 puts their own bytes back
+; (saved the first time: by then the first call has set them up).  Keeps AX.
+;
+@@setbmode:
+	mov	[cs:bmode],cl
+	cmp	[BYTE cs:bsaved],0
+	jne	@@bsv
+	mov	dx,[WORD cs:@@plj]
+	mov	[WORD cs:pljsave],dx
+	mov	dl,[BYTE cs:@@plj+2]
+	mov	[BYTE cs:pljsave+2],dl
+	mov	dx,[WORD cs:@@prj]
+	mov	[WORD cs:prjsave],dx
+	mov	dl,[BYTE cs:@@prj+2]
+	mov	[BYTE cs:prjsave+2],dl
+	mov	[BYTE cs:bsaved],1
+@@bsv:
+	or	cl,cl
+	jz	@@bnorm
+	mov	[BYTE cs:@@plj],0E9h
+	mov	dx,OFFSET @@blobl
+	sub	dx,OFFSET @@plj+3
+	mov	[WORD cs:@@plj+1],dx
+	mov	[BYTE cs:@@prj],0E9h
+	mov	dx,OFFSET @@blobr
+	sub	dx,OFFSET @@prj+3
+	mov	[WORD cs:@@prj+1],dx
+	retn
+@@bnorm:
+	mov	dx,[WORD cs:pljsave]
+	mov	[WORD cs:@@plj],dx
+	mov	dl,[BYTE cs:pljsave+2]
+	mov	[BYTE cs:@@plj+2],dl
+	mov	dx,[WORD cs:prjsave]
+	mov	[WORD cs:@@prj],dx
+	mov	dl,[BYTE cs:prjsave+2]
+	mov	[BYTE cs:@@prj+2],dl
+	retn
+
+@@blobl:
+	call	@@blobcol
+	jmp	@@pl_next
+@@blobr:
+	call	@@blobcol
+	jmp	@@pr_next
+
+;
+; @@blobcol (step 93): column DI (x) of source column SI, in front of the
+; walls -- each post a span, rows as the compiled scaler of height [hh]
+; would place them (texel s at row s*h/64 + btop) and clipped to the view,
+; in the colour of the post's middle texel.  Keeps every register.
+;
+@@blobcol:
+	push	si
+	push	di
+	push	cx
+	push	bp
+	mov	bx,di
+	and	bx,3
+	mov	al,[onemask+bx]
+	mov	dx,SC_INDEX+1
+	out	dx,al					; this pixel's plane
+	shr	di,2
+	add	di,[bufferofs]			; DI = the column's byte, row 0
+	mov	es,[shapeseg]
+	mov	bx,si
+	sub	bx,[leftpix]
+	shl	bx,1
+	mov	bp,[es:bx+DATAOFS]		; its post list
+	mov	ax,SCREENSEG
+	mov	ds,ax					; DS = the screen for the column; DGROUP by SS
+@@bcpost:
+	mov	cx,[es:bp]				; the post's end*2 (0: no more)
+	jcxz	@@bcdone
+	shr	cx,1					; end
+	mov	ax,[es:bp+4]
+	shr	ax,1					; start
+	mov	si,ax
+	add	si,cx
+	dec	si
+	shr	si,1					; its middle texel
+	add	si,[es:bp+2]			; (the post's corrected top)
+	mov	dl,[es:si]				; the span's colour
+	mov	bl,[BYTE ss:hh]
+	mul	bl						; start*h
+	shr	ax,6
+	add	ax,[cs:btop]
+	xchg	ax,cx				; CX = the first row, AX = end
+	mul	bl						; end*h
+	shr	ax,6
+	add	ax,[cs:btop]			; AX = the row after the last
+	or	cx,cx
+	jns	@@bct
+	xor	cx,cx
+@@bct:
+	cmp	ax,[ss:viewheight]
+	jle	@@bcb
+	mov	ax,[ss:viewheight]
+@@bcb:
+	sub	ax,cx
+	jle	@@bcnext
+	mov	bx,cx					; the first row
+	mov	cx,ax					; rows
+	mov	ax,bx
+	shl	ax,4
+	shl	bx,6
+	add	bx,ax					; row*80
+	add	bx,di
+	push	di
+	mov	di,bx
+	mov	bx,160					; blobfill: MOV [DI+k*80],AL for k = 159
+	sub	bx,cx					; down to 0, 4 bytes each, then RETF --
+	shl	bx,2					; so n rows start n stores before the end
+	mov	[WORD cs:bfcall],bx
+	mov	al,dl
+	call	[DWORD cs:bfcall]
+	pop	di
+@@bcnext:
+	add	bp,6
+	jmp	@@bcpost
+@@bcdone:
+	mov	ax,ss
+	mov	ds,ax
+	pop	bp
+	pop	cx
+	pop	di
+	pop	si
 	retn
 
 ;
