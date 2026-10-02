@@ -97,8 +97,8 @@ EXTRN	PM_GetPage:FAR
 ;
 ;	CX	the scaler's segment	BP	the column's post list
 ;	DX	SCREENSEG (one byte), the map mask port (two and three)
-;	AH	the post's start texel (step 87); the byte the RETF replaced is in
-;		retfold
+;	AH	the post's start texel (step 87); the byte the RETF replaced is on
+;		the stack (step 89)
 ;
 ;============================
 
@@ -138,9 +138,9 @@ PROC	ScaleSpan NEAR
 	EVEN
 @@spost:
 	mov	bx,[bx]
-	mov	al,[bx]					; save old value
-	mov	[cs:retfold],al
+	mov	ah,[bx]					; save old value
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	push	ax						; step 89: on the stack, AH being taken
 	mov	si,[es:bp+4]			; table location of entry spot: start*2
 	mov	ax,[si]
 	mov	[WORD ss:linescale],ax	; call here to start scaling
@@ -152,8 +152,8 @@ PROC	ScaleSpan NEAR
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	al,[cs:retfold]
-	mov	[bx],al					; unpatch the RETF
+	pop	ax
+	mov	[bx],ah					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@spost
@@ -188,9 +188,9 @@ PROC	ScaleSpan NEAR
 	jz	@@done
 @@dpost:
 	mov	bx,[bx]
-	mov	al,[bx]
-	mov	[cs:retfold],al
+	mov	ah,[bx]
 	mov	[BYTE bx],OP_RETF
+	push	ax						; step 89: on the stack
 	mov	si,[es:bp+4]
 	mov	ax,[si]
 	mov	[WORD ss:linescale],ax
@@ -213,8 +213,8 @@ PROC	ScaleSpan NEAR
 	call	[DWORD ss:linescale]
 	dec	di
 	mov	ds,cx
-	mov	al,[cs:retfold]
-	mov	[bx],al
+	pop	ax
+	mov	[bx],ah
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@dpost
@@ -226,9 +226,9 @@ PROC	ScaleSpan NEAR
 	jz	@@done
 @@tpost:
 	mov	bx,[bx]
-	mov	al,[bx]
-	mov	[cs:retfold],al
+	mov	ah,[bx]
 	mov	[BYTE bx],OP_RETF
+	push	ax						; step 89: on the stack
 	mov	si,[es:bp+4]
 	mov	ax,[si]
 	mov	[WORD ss:linescale],ax
@@ -257,15 +257,14 @@ PROC	ScaleSpan NEAR
 	dec	di
 	dec	di
 	mov	ds,cx
-	mov	al,[cs:retfold]
-	mov	[bx],al
+	pop	ax
+	mov	[bx],ah
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@tpost
 	jmp	@@done
 ENDP
 
-retfold		db	0					; step 87: the byte a RETF replaced (AH is taken)
 texel		db	0					; step 87: a post's start texel, for 2 and 3 bytes
 
 
@@ -575,9 +574,9 @@ PUBLIC	ScaleShape
 	EVEN
 @@l1post:
 	mov	bx,[bx]
-	mov	al,[bx]					; save old value
-	mov	[cs:retfold],al
+	mov	ah,[bx]					; save old value
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	push	ax						; step 89: on the stack, AH being taken
 	mov	si,[es:bp+4]			; table location of entry spot: start*2
 	mov	ax,[si]
 	mov	[WORD ss:linescale],ax	; call here to start scaling
@@ -589,8 +588,8 @@ PUBLIC	ScaleShape
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	al,[cs:retfold]
-	mov	[bx],al					; unpatch the RETF
+	pop	ax
+	mov	[bx],ah					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@l1post
@@ -631,9 +630,9 @@ PUBLIC	ScaleShape
 	EVEN
 @@r1post:
 	mov	bx,[bx]
-	mov	al,[bx]					; save old value
-	mov	[cs:retfold],al
+	mov	ah,[bx]					; save old value
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	push	ax						; step 89: on the stack, AH being taken
 	mov	si,[es:bp+4]			; table location of entry spot: start*2
 	mov	ax,[si]
 	mov	[WORD ss:linescale],ax	; call here to start scaling
@@ -645,8 +644,8 @@ PUBLIC	ScaleShape
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	al,[cs:retfold]
-	mov	[bx],al					; unpatch the RETF
+	pop	ax
+	mov	[bx],ah					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@r1post
@@ -786,9 +785,9 @@ PUBLIC	ScaleShape
 	EVEN
 @@pl1post:
 	mov	bx,[bx]
-	mov	al,[bx]					; save old value
-	mov	[cs:retfold],al
+	mov	ah,[bx]					; save old value
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	push	ax						; step 89: on the stack, AH being taken
 	mov	si,[es:bp+4]			; table location of entry spot: start*2
 	mov	ax,[si]
 	mov	[WORD ss:linescale],ax	; call here to start scaling
@@ -800,8 +799,8 @@ PUBLIC	ScaleShape
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	al,[cs:retfold]
-	mov	[bx],al					; unpatch the RETF
+	pop	ax
+	mov	[bx],ah					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@pl1post
@@ -842,9 +841,9 @@ PUBLIC	ScaleShape
 	EVEN
 @@pr1post:
 	mov	bx,[bx]
-	mov	al,[bx]					; save old value
-	mov	[cs:retfold],al
+	mov	ah,[bx]					; save old value
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	push	ax						; step 89: on the stack, AH being taken
 	mov	si,[es:bp+4]			; table location of entry spot: start*2
 	mov	ax,[si]
 	mov	[WORD ss:linescale],ax	; call here to start scaling
@@ -856,8 +855,8 @@ PUBLIC	ScaleShape
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	al,[cs:retfold]
-	mov	[bx],al					; unpatch the RETF
+	pop	ax
+	mov	[bx],ah					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@pr1post
@@ -1215,9 +1214,9 @@ PUBLIC	SimpleScaleShape
 	EVEN
 @@lpost:
 	mov	bx,[bx]
-	mov	al,[bx]					; save old value
-	mov	[cs:retfold],al
+	mov	ah,[bx]					; save old value
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	push	ax						; step 89: on the stack, AH being taken
 	mov	si,[es:bp+4]			; table location of entry spot: start*2
 	mov	ax,[si]
 	mov	[WORD ss:linescale],ax	; call here to start scaling
@@ -1229,8 +1228,8 @@ PUBLIC	SimpleScaleShape
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	al,[cs:retfold]
-	mov	[bx],al					; unpatch the RETF
+	pop	ax
+	mov	[bx],ah					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@lpost
@@ -1275,9 +1274,9 @@ PUBLIC	SimpleScaleShape
 	EVEN
 @@rpost:
 	mov	bx,[bx]
-	mov	al,[bx]					; save old value
-	mov	[cs:retfold],al
+	mov	ah,[bx]					; save old value
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
+	push	ax						; step 89: on the stack, AH being taken
 	mov	si,[es:bp+4]			; table location of entry spot: start*2
 	mov	ax,[si]
 	mov	[WORD ss:linescale],ax	; call here to start scaling
@@ -1289,8 +1288,8 @@ PUBLIC	SimpleScaleShape
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	al,[cs:retfold]
-	mov	[bx],al					; unpatch the RETF
+	pop	ax
+	mov	[bx],ah					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@rpost
