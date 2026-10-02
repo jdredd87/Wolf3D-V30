@@ -145,7 +145,8 @@ void SetupScaling (int maxscaleheight)
 = DS:SI		Source for scale
 = ES:DI		Dest for scale
 =
-= Calling the compiled scaler only destroys AL
+= Calling the compiled scaler only destroys AX (NEC V30 build, step 87:
+= AH holds a pair's second texel; entering on one, AH must hold it already)
 =
 ========================
 */
@@ -158,11 +159,29 @@ unsigned BuildCompScale (int height, memptr *finalspot)
 	long		fix,step;
 	unsigned	src,totalscaled,totalsize;
 	int			startpix,endpix,toppix;
+	byte		draws[65],modrm;				// NEC V30 build (step 87): texel src has code
 
 
 	step = ((long)height<<16) / 64;
 	code = &work->code[0];
 	toppix = (viewheight-height)/2;
+
+	fix = 0;							// step 87: which texels draw, first
+	for (src=0;src<=64;src++)
+	{
+		startpix = (fix>>16)+toppix;
+		fix += step;
+		endpix = (fix>>16)+toppix;
+		draws[src] = !(startpix == endpix || endpix < 0 || startpix >= viewheight || src == 64);
+		if (draws[src] && lowvert)		// step 82: even rows only -- no code at all
+		{								// for a texel with none
+			int	s = startpix < 0 ? 0 : startpix;
+			int	e = endpix > viewheight ? viewheight : endpix;
+			if (((s+1)&~1) >= e)
+				draws[src] = 0;
+		}
+	}
+
 	fix = 0;
 
 	for (src=0;src<=64;src++)
@@ -187,15 +206,8 @@ unsigned BuildCompScale (int height, memptr *finalspot)
 		startpix+=toppix;
 		endpix+=toppix;
 
-		if (startpix == endpix || endpix < 0 || startpix >= viewheight || src == 64)
+		if (!draws[src])
 			continue;
-		if (lowvert)					// NEC V30 build (step 82): even rows only --
-		{								// no code at all for a texel with none
-			int	s = startpix < 0 ? 0 : startpix;
-			int	e = endpix > viewheight ? viewheight : endpix;
-			if (((s+1)&~1) >= e)
-				continue;
-		}
 
 	//
 	// mov al,es:[si+src]
@@ -205,10 +217,20 @@ unsigned BuildCompScale (int height, memptr *finalspot)
 	// pixel of a texel -- needs no segment prefix, and this load, once per
 	// texel, takes it instead.  ScalePost and ScaleLine set the segments.
 	//
-		*code++ = 0x26;
-		*code++ = 0x8a;
-		*code++ = 0x44;
-		*code++ = src;
+	// NEC V30 build (step 87): when texels 2k and 2k+1 both draw, one
+	// mov ax,es:[si+2k] loads the two, and 2k+1's stores take AH with no
+	// load of their own -- the same length, and one bus cycle on the V30.
+	//
+		if (src&1 && draws[src-1])
+			modrm = 0xa5;					// mov [di+heightofs],ah
+		else
+		{
+			modrm = 0x85;					// mov [di+heightofs],al
+			*code++ = 0x26;
+			*code++ = (src&1) || !draws[src+1] ? 0x8a : 0x8b;
+			*code++ = 0x44;
+			*code++ = src;
+		}
 
 		for (;startpix<endpix;startpix++)
 		{
@@ -223,7 +245,7 @@ unsigned BuildCompScale (int height, memptr *finalspot)
 		// mov [di+heightofs],al		(DS = the screen)
 		//
 			*code++ = 0x88;
-			*code++ = 0x85;
+			*code++ = modrm;
 			*((unsigned far *)code)++ = startpix*SCREENBWIDE;
 		}
 

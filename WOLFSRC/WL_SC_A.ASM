@@ -93,11 +93,12 @@ EXTRN	PM_GetPage:FAR
 ; same masks from the same tables, the same RETF patch and the same calls.
 ;
 ; While a scaler runs, the shape is in ES and the screen in DS (see
-; BuildCompScale); the scalers change only AL.
+; BuildCompScale); the scalers change only AX.
 ;
 ;	CX	the scaler's segment	BP	the column's post list
 ;	DX	SCREENSEG (one byte), the map mask port (two and three)
-;	AH	the byte the RETF replaced
+;	AH	the post's start texel (step 87); the byte the RETF replaced is in
+;		retfold
 ;
 ;============================
 
@@ -137,17 +138,22 @@ PROC	ScaleSpan NEAR
 	EVEN
 @@spost:
 	mov	bx,[bx]
-	mov	ah,[bx]					; save old value
+	mov	al,[bx]					; save old value
+	mov	[cs:retfold],al
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
-	mov	si,[es:bp+4]			; table location of entry spot
-	mov	si,[si]
-	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+4]			; table location of entry spot: start*2
+	mov	ax,[si]
+	mov	[WORD ss:linescale],ax	; call here to start scaling
+	shr	si,1
+	add	si,[es:bp+2]
+	mov	ah,[es:si]				; step 87: the start texel, for a pair's second
 	mov	si,[es:bp+2]			; corrected top of shape for this post
 	add	bp,6					; next post
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	[bx],ah					; unpatch the RETF
+	mov	al,[cs:retfold]
+	mov	[bx],al					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@spost
@@ -182,25 +188,33 @@ PROC	ScaleSpan NEAR
 	jz	@@done
 @@dpost:
 	mov	bx,[bx]
-	mov	ah,[bx]
+	mov	al,[bx]
+	mov	[cs:retfold],al
 	mov	[BYTE bx],OP_RETF
 	mov	si,[es:bp+4]
-	mov	si,[si]
-	mov	[WORD ss:linescale],si
+	mov	ax,[si]
+	mov	[WORD ss:linescale],ax
+	shr	si,1
+	add	si,[es:bp+2]
+	mov	al,[es:si]
+	mov	[cs:texel],al			; step 87: the start texel, for a pair's second
 	mov	si,[es:bp+2]
 	add	bp,6
 	push	SCREENSEG
 	pop	ds						; DS = the screen
 	mov	al,[ss:mask1]
 	out	dx,al
+	mov	ah,[cs:texel]
 	call	[DWORD ss:linescale]
 	inc	di
 	mov	al,[ss:mask2]
 	out	dx,al
+	mov	ah,[cs:texel]
 	call	[DWORD ss:linescale]
 	dec	di
 	mov	ds,cx
-	mov	[bx],ah
+	mov	al,[cs:retfold]
+	mov	[bx],al
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@dpost
@@ -212,35 +226,47 @@ PROC	ScaleSpan NEAR
 	jz	@@done
 @@tpost:
 	mov	bx,[bx]
-	mov	ah,[bx]
+	mov	al,[bx]
+	mov	[cs:retfold],al
 	mov	[BYTE bx],OP_RETF
 	mov	si,[es:bp+4]
-	mov	si,[si]
-	mov	[WORD ss:linescale],si
+	mov	ax,[si]
+	mov	[WORD ss:linescale],ax
+	shr	si,1
+	add	si,[es:bp+2]
+	mov	al,[es:si]
+	mov	[cs:texel],al			; step 87: the start texel, for a pair's second
 	mov	si,[es:bp+2]
 	add	bp,6
 	push	SCREENSEG
 	pop	ds
 	mov	al,[ss:mask1]
 	out	dx,al
+	mov	ah,[cs:texel]
 	call	[DWORD ss:linescale]
 	inc	di
 	mov	al,[ss:mask2]
 	out	dx,al
+	mov	ah,[cs:texel]
 	call	[DWORD ss:linescale]
 	inc	di
 	mov	al,[ss:mask3]
 	out	dx,al
+	mov	ah,[cs:texel]
 	call	[DWORD ss:linescale]
 	dec	di
 	dec	di
 	mov	ds,cx
-	mov	[bx],ah
+	mov	al,[cs:retfold]
+	mov	[bx],al
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@tpost
 	jmp	@@done
 ENDP
+
+retfold		db	0					; step 87: the byte a RETF replaced (AH is taken)
+texel		db	0					; step 87: a post's start texel, for 2 and 3 bytes
 
 
 ;============================
@@ -549,17 +575,22 @@ PUBLIC	ScaleShape
 	EVEN
 @@l1post:
 	mov	bx,[bx]
-	mov	ah,[bx]					; save old value
+	mov	al,[bx]					; save old value
+	mov	[cs:retfold],al
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
-	mov	si,[es:bp+4]			; table location of entry spot
-	mov	si,[si]
-	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+4]			; table location of entry spot: start*2
+	mov	ax,[si]
+	mov	[WORD ss:linescale],ax	; call here to start scaling
+	shr	si,1
+	add	si,[es:bp+2]
+	mov	ah,[es:si]				; step 87: the start texel, for a pair's second
 	mov	si,[es:bp+2]			; corrected top of shape for this post
 	add	bp,6					; next post
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	[bx],ah					; unpatch the RETF
+	mov	al,[cs:retfold]
+	mov	[bx],al					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@l1post
@@ -600,17 +631,22 @@ PUBLIC	ScaleShape
 	EVEN
 @@r1post:
 	mov	bx,[bx]
-	mov	ah,[bx]					; save old value
+	mov	al,[bx]					; save old value
+	mov	[cs:retfold],al
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
-	mov	si,[es:bp+4]			; table location of entry spot
-	mov	si,[si]
-	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+4]			; table location of entry spot: start*2
+	mov	ax,[si]
+	mov	[WORD ss:linescale],ax	; call here to start scaling
+	shr	si,1
+	add	si,[es:bp+2]
+	mov	ah,[es:si]				; step 87: the start texel, for a pair's second
 	mov	si,[es:bp+2]			; corrected top of shape for this post
 	add	bp,6					; next post
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	[bx],ah					; unpatch the RETF
+	mov	al,[cs:retfold]
+	mov	[bx],al					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@r1post
@@ -750,17 +786,22 @@ PUBLIC	ScaleShape
 	EVEN
 @@pl1post:
 	mov	bx,[bx]
-	mov	ah,[bx]					; save old value
+	mov	al,[bx]					; save old value
+	mov	[cs:retfold],al
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
-	mov	si,[es:bp+4]			; table location of entry spot
-	mov	si,[si]
-	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+4]			; table location of entry spot: start*2
+	mov	ax,[si]
+	mov	[WORD ss:linescale],ax	; call here to start scaling
+	shr	si,1
+	add	si,[es:bp+2]
+	mov	ah,[es:si]				; step 87: the start texel, for a pair's second
 	mov	si,[es:bp+2]			; corrected top of shape for this post
 	add	bp,6					; next post
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	[bx],ah					; unpatch the RETF
+	mov	al,[cs:retfold]
+	mov	[bx],al					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@pl1post
@@ -801,17 +842,22 @@ PUBLIC	ScaleShape
 	EVEN
 @@pr1post:
 	mov	bx,[bx]
-	mov	ah,[bx]					; save old value
+	mov	al,[bx]					; save old value
+	mov	[cs:retfold],al
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
-	mov	si,[es:bp+4]			; table location of entry spot
-	mov	si,[si]
-	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+4]			; table location of entry spot: start*2
+	mov	ax,[si]
+	mov	[WORD ss:linescale],ax	; call here to start scaling
+	shr	si,1
+	add	si,[es:bp+2]
+	mov	ah,[es:si]				; step 87: the start texel, for a pair's second
 	mov	si,[es:bp+2]			; corrected top of shape for this post
 	add	bp,6					; next post
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	[bx],ah					; unpatch the RETF
+	mov	al,[cs:retfold]
+	mov	[bx],al					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@pr1post
@@ -1169,17 +1215,22 @@ PUBLIC	SimpleScaleShape
 	EVEN
 @@lpost:
 	mov	bx,[bx]
-	mov	ah,[bx]					; save old value
+	mov	al,[bx]					; save old value
+	mov	[cs:retfold],al
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
-	mov	si,[es:bp+4]			; table location of entry spot
-	mov	si,[si]
-	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+4]			; table location of entry spot: start*2
+	mov	ax,[si]
+	mov	[WORD ss:linescale],ax	; call here to start scaling
+	shr	si,1
+	add	si,[es:bp+2]
+	mov	ah,[es:si]				; step 87: the start texel, for a pair's second
 	mov	si,[es:bp+2]			; corrected top of shape for this post
 	add	bp,6					; next post
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	[bx],ah					; unpatch the RETF
+	mov	al,[cs:retfold]
+	mov	[bx],al					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@lpost
@@ -1224,17 +1275,22 @@ PUBLIC	SimpleScaleShape
 	EVEN
 @@rpost:
 	mov	bx,[bx]
-	mov	ah,[bx]					; save old value
+	mov	al,[bx]					; save old value
+	mov	[cs:retfold],al
 	mov	[BYTE bx],OP_RETF		; patch a RETF in
-	mov	si,[es:bp+4]			; table location of entry spot
-	mov	si,[si]
-	mov	[WORD ss:linescale],si	; call here to start scaling
+	mov	si,[es:bp+4]			; table location of entry spot: start*2
+	mov	ax,[si]
+	mov	[WORD ss:linescale],ax	; call here to start scaling
+	shr	si,1
+	add	si,[es:bp+2]
+	mov	ah,[es:si]				; step 87: the start texel, for a pair's second
 	mov	si,[es:bp+2]			; corrected top of shape for this post
 	add	bp,6					; next post
 	mov	ds,dx					; DS = the screen
 	call	[DWORD ss:linescale]	; scale the post
 	mov	ds,cx					; DS = the scaler
-	mov	[bx],ah					; unpatch the RETF
+	mov	al,[cs:retfold]
+	mov	[bx],al					; unpatch the RETF
 	mov	bx,[es:bp]
 	or	bx,bx
 	jnz	@@rpost
