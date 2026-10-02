@@ -3,6 +3,8 @@
 
   PLAY.BAT runs it in a loop.  It shows the game's optional switches, each
   with a key that turns it on or off, and remembers them in W3MENU.CFG.
+  + and - pick the game's window size, id's own Change View sizes 4-19
+  (VIEW n; "the game's own" passes nothing, so CONFIG.WL6 decides).
   P (or Enter) writes W3RUN.BAT -- "WOLF3DV" and the switches -- and exits
   0, and PLAY.BAT runs that and comes back here; B does the same for the
   200-frame benchmark; Q or Esc exits 1, which ends PLAY.BAT.  So nothing
@@ -30,7 +32,7 @@ const
   SwKey: array[1..NSW] of Char = ('W', 'S', 'F', 'V', 'R');
   SwName: array[1..NSW] of string[10] =
     ('LOWWALLS', 'LOWSPRITES', 'FLATWALLS', 'LOWVERT', 'FLATART');
-  SwText: array[1..NSW] of string[40] =
+  SwText: array[1..NSW] of string[48] =
     ('walls in two-pixel columns',
      'enemies and items in two-pixel columns',
      'every wall one solid colour, artwork kept',
@@ -42,6 +44,7 @@ const
 
 var
   SwOn: array[1..NSW] of Boolean;
+  ViewSz: Integer;            { 4..19, or 0: the game's own setting }
   Timeout: Integer;           { seconds; 0 = never }
   TimeoutPlays: Boolean;
 
@@ -82,26 +85,36 @@ begin
 end;
 
 function Args: string;
-var i: Integer; s: string;
+var i: Integer; s, t: string;
 begin
   s := '';
   for i := 1 to NSW do
     if SwOn[i] then s := s + ' ' + SwName[i];
+  if ViewSz > 0 then
+  begin
+    Str(ViewSz, t);
+    s := s + ' VIEW ' + t;
+  end;
   Args := s;
 end;
 
 procedure LoadCfg;
-var f: Text; s: string; i: Integer;
+var f: Text; s: string; i, code: Integer;
 begin
   for i := 1 to NSW do SwOn[i] := False;
+  ViewSz := 0;
   Assign(f, CfgName);
   {$I-} Reset(f); {$I+}
   if IOResult <> 0 then Exit;
   s := '';
   if not Eof(f) then ReadLn(f, s);
-  Close(f);
   for i := 1 to NSW do
     SwOn[i] := (i <= Length(s)) and (s[i] = '1');
+  s := '';
+  if not Eof(f) then ReadLn(f, s);    { the window size, if one was picked }
+  Close(f);
+  Val(s, i, code);
+  if (code = 0) and (i >= 4) and (i <= 19) then ViewSz := i;
 end;
 
 procedure SaveCfg;
@@ -113,6 +126,7 @@ begin
   for i := 1 to NSW do
     if SwOn[i] then Write(f, '1') else Write(f, '0');
   WriteLn(f);
+  WriteLn(f, ViewSz);
   Close(f);
 end;
 
@@ -146,7 +160,7 @@ var i: Integer;
 begin
   ClearScreen;
   WriteLn;
-  WriteLn('  Wolfenstein 3-D for the NEC V30  --  StevenC and Claude');
+  WriteLn('  Wolfenstein 3-D  --  optimized by StevenC and Claude');
   WriteLn;
   WriteLn('  Press a switch''s key to turn it on or off:');
   WriteLn;
@@ -156,6 +170,11 @@ begin
     if SwOn[i] then Write('X') else Write(' ');
     WriteLn('] ', Pad(SwName[i], 10), '  ', SwText[i]);
   end;
+  Write('   +/-  window size:  ');
+  if ViewSz = 0 then
+    WriteLn('the game''s own (its Change View)')
+  else
+    WriteLn(ViewSz, '  (', ViewSz * 16, ' x ', ViewSz * 8, '; 0 for the game''s own)');
   WriteLn;
   WriteLn('    A  all on (the fastest)     N  all off (id''s own picture)');
   WriteLn;
@@ -287,6 +306,13 @@ begin
       case c of
         'A': for i := 1 to NSW do SwOn[i] := True;
         'N': for i := 1 to NSW do SwOn[i] := False;
+        '+', '=':
+          if ViewSz = 0 then ViewSz := 15
+          else if ViewSz < 19 then Inc(ViewSz);
+        '-', '_':
+          if ViewSz = 0 then ViewSz := 15
+          else if ViewSz > 4 then Dec(ViewSz);
+        '0': ViewSz := 0;               { back to the game's own setting }
         'P', #13:
           begin
             SaveCfg;

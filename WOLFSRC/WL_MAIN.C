@@ -836,6 +836,38 @@ boolean MS_CheckParm (char far *check)
 	return false;
 }
 
+
+/*
+=================
+=
+= ViewParm
+=
+= NEC V30 build (StevenC & Claude, step 88): VIEW n, id's window size 4-19
+= as its Change View menu sets it, or 0 when not given
+=
+=================
+*/
+
+int ViewParm (void)
+{
+	int		i,n;
+
+	for (i = 1;i < _argc-1;i++)
+	{
+		char	far *a = _argv[i];		// "view", compared in code: DGROUP is full
+		if ((a[0]|32) == 'v' && (a[1]|32) == 'i' && (a[2]|32) == 'e' && (a[3]|32) == 'w' && !a[4])
+		{
+			char	far *p = _argv[i+1];
+			n = 0;
+			while (*p >= '0' && *p <= '9')
+				n = n*10 + *p++ - '0';
+			if (n >= 4 && n <= 19)
+				return n;
+		}
+	}
+	return 0;
+}
+
 //===========================================================================
 
 /*
@@ -1260,6 +1292,8 @@ close(profilehandle);
 }
 #endif
 
+	if (ViewParm ())
+		viewsize = ViewParm ();			// NEC V30 build (step 88): VIEW n
 	NewViewSize (viewsize);
 
 
@@ -1513,8 +1547,9 @@ void TimeDemo (void)
 	}
 	// the benchmark's view is 240x120 (size 15) whatever CONFIG.WL6 says, so a
 	// window resized in play cannot change what a run measures; MYVIEW keeps
-	// the player's.  TimeDemo exits without WriteConfig, so nothing is saved.
-	if (!MS_CheckParm ("myview") && viewsize != 15)
+	// the player's, and VIEW n (step 88) the one it gave.  TimeDemo exits
+	// without WriteConfig, so nothing is saved.
+	if (!MS_CheckParm ("myview") && !ViewParm () && viewsize != 15)
 		NewViewSize (15);
 	if (MS_CheckParm ("oplid"))
 	{
