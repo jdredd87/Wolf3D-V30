@@ -21,14 +21,18 @@
 #include <string.h>
 #pragma hdrstop
 
-#define MAXRUNS		3000
+#define MAXRUNS		2000		// the most of 60 maps: 1,198 and 145 cut (the
+							// level's memory is tight: these are borrowed
+							// from it at load; too many and the walk draws)
 #define MAXLIST		7000
-#define MAXNODES	2000
+#define MAXNODES	1400		// the most: 987
 
 typedef struct
 {
 	byte	of;				// bit 0: 0 a line x = line (runs along y), 1 y = line;
-							// bit 1: the open side is the higher coordinate
+							// bit 1: the open side is the higher coordinate;
+							// bit 2: a block's face, drawn only while one
+							// stands in its tile (pushwalls)
 	byte	line, a1, a2;	// the run covers a1 .. a2-1 along its line
 } bsprun;
 
@@ -66,11 +70,11 @@ bsplogent	far bsplog[8];
 int			far bsplogn;
 
 char far bspfmt[] = "bsp: floor %2u  %4u runs (%u cut)  %4u nodes  depth %2u  %5u bytes  %u ticks (alloc %u, runs %u, tree %u)\n";
-long	far st_frames, far st_nodes, far st_culled, far st_runs, far st_hidden, far st_boxhid,
+long	far st_frames, far st_nodes, far st_culled, far st_runs, far st_hidden, far st_boxhid, far st_pwframes,
 		far st_left;					// renderer counts, for BSPReport
 int		far st_lframe = -1, far st_lmax, far st_lfirst, far st_llast, far st_lnone;
 char far bspstat[] = "bsp: %ld frames from the tree, a frame: %ld nodes (%ld culled, %ld hidden), %ld runs (%ld hidden), %ld columns left to the fill\n";
-char far bspstat2[] = "bsp: most left %d at frame %d (claimed %d..%d); %d frames with none claimed\n";
+char far bspstat2[] = "bsp: most left %d at frame %d (claimed %d..%d); %d frames none; %ld frames a wall moved\n";
 char far bspfail[] = "bsp: floor %2u  NOT BUILT -- more runs or nodes than it has room for\n";
 
 static void AddRun (int of, int line, int a1, int a2)
@@ -393,10 +397,107 @@ static int Build (unsigned base, unsigned count, int depth)
 =====================
 */
 
+//
+// Pushwalls (milestone 4).  A pushable block moves, and the tiles it
+// leaves open up for good: a tree built at load cannot follow it.  So the
+// tree is built with every pushable tile open -- the walls around it are in
+// the tree -- and every tile a block can be in (the pushable tile, and the
+// open ones within two tiles of it, the farthest a push goes) gets its four
+// faces in the tree as well, each drawn only while a block stands there
+// (DrawRun).  The block on the move is drawn by itself, over the walls
+// wherever it is nearer.  (The first version drew every standing block
+// that way too, so the tree drew the secret behind each one first: the
+// walls twice, and no occlusion -- two thirds of the walk's speed beside
+// pushwalls on the V30.)
+//
+#define MAXPCAND	256
+
+byte	far pcand[MAXPCAND][2];
+byte	far psave[MAXPCAND];		// a pushable tile's wall, during the build
+int		far npcand;
+
+static void AddCand (int x, int y)
+{
+	int		i;
+
+	for (i = 0; i < npcand; i++)
+		if (pcand[i][0] == x && pcand[i][1] == y)
+			return;
+	if (npcand < MAXPCAND)
+	{
+		pcand[npcand][0] = x;
+		pcand[npcand][1] = y;
+		npcand++;
+	}
+}
+
+static void FindPushwalls (void)
+{
+	int		x, y, d, k, tx, ty, i;
+
+	npcand = 0;
+	for (y = 0; y < MAPSIZE; y++)
+		for (x = 0; x < MAPSIZE; x++)
+			if (*(mapsegs[1]+farmapylookup[y]+x) == PUSHABLETILE
+				&& SOLID(tilemap[x][y]))
+				AddCand (x,y);
+	for (i = npcand-1; i >= 0; i--)			// (the pushable ones come first)
+	{
+		x = pcand[i][0];
+		y = pcand[i][1];
+		for (d = 0; d < 4; d++)
+			for (k = 1; k <= 2; k++)
+			{
+				tx = x + (d == 1 ? k : (d == 3 ? -k : 0));
+				ty = y + (d == 2 ? k : (d == 0 ? -k : 0));
+				if (tx < 1 || ty < 1 || tx >= MAPSIZE-1 || ty >= MAPSIZE-1
+					|| SOLID(tilemap[tx][ty]) || (tilemap[tx][ty] & 0x80))
+					break;
+				AddCand (tx,ty);
+			}
+	}
+}
+
+//
+// the candidates' faces, as runs of one tile marked as a block's: on every
+// side where the next tile is open at load, or a candidate itself
+//
+static int OpenAtLoad (int x, int y)
+{
+	int		i;
+
+	if (!SOLID(tilemap[x][y]))
+		return 1;
+	for (i = 0; i < npcand; i++)
+		if (pcand[i][0] == x && pcand[i][1] == y)
+			return 1;
+	return 0;
+}
+
+static void AddBlockFaces (void)
+{
+	int		i, x, y;
+
+	for (i = 0; i < npcand; i++)
+	{
+		x = pcand[i][0];
+		y = pcand[i][1];
+		if (OpenAtLoad (x-1,y))
+			AddRun (4|0,x,y,y+1);			// west: looks to lower x
+		if (OpenAtLoad (x+1,y))
+			AddRun (4|2,x+1,y,y+1);			// east
+		if (OpenAtLoad (x,y-1))
+			AddRun (4|1,y,x,x+1);			// north
+		if (OpenAtLoad (x,y+1))
+			AddRun (4|1|2,y+1,x,x+1);		// south
+	}
+}
+
 void BuildBSP (void)
 {
 	long		t0, t1, t2, t3;
 	unsigned	i, bytes;
+	int			np;
 	bsplogent	far *l;
 
 	t0 = BiosTicks ();
@@ -415,7 +516,16 @@ void BuildBSP (void)
 	bb.n = (bspnode far *)(bb.list + MAXLIST);
 	bb.nr = bb.top = bb.nf = bb.nn = bb.cuts = bb.maxdepth = bb.fail = 0;
 
+	FindPushwalls ();
+	for (np = 0; np < npcand && SOLID(tilemap[pcand[np][0]][pcand[np][1]]); np++)
+	{										// the pushable tiles: open, for the
+		psave[np] = tilemap[pcand[np][0]][pcand[np][1]];	// tree
+		tilemap[pcand[np][0]][pcand[np][1]] = 0;
+	}
 	FindRuns ();
+	for (i = 0; i < np; i++)
+		tilemap[pcand[i][0]][pcand[i][1]] = psave[i];
+	AddBlockFaces ();
 	t2 = BiosTicks ();
 	for (i = 0; i < bb.nr; i++)
 		bb.list[i] = i;
@@ -483,7 +593,7 @@ void BSPReport (void)
 				st_boxhid/st_frames,st_runs/st_frames,st_hidden/st_frames,
 				st_left/st_frames);
 			_fstrcpy ((char far *)sfmt,bspstat2);
-			printf (sfmt,st_lmax,st_lframe,st_lfirst,st_llast,st_lnone);
+			printf (sfmt,st_lmax,st_lframe,st_lfirst,st_llast,st_lnone,st_pwframes);
 		}
 	}
 	for (i = 0; i < bsplogn; i++)
@@ -533,7 +643,7 @@ extern unsigned	postx, postwidth, postmin;
 void	ScalePostF (void);
 void	DropFillF (void);
 
-int		far bspmode;				// BSP: the tree draws the walls
+int		far bspmode = 1;			// the tree draws the walls (WALK: the rays)
 byte	far bspclaim[MAXVIEWWIDTH];	// columns drawn this frame
 int		far bspleft;				// and how many are not
 
@@ -1090,6 +1200,12 @@ static void DrawRun (bsprun far *r)
 	a1 = r->a1;
 	a2 = r->a2;
 	rl = r->line;
+	if (r->of & 4)
+	{									// a block's face: is one standing there?
+		k = vertical ? tilemap[up ? rl-1 : rl][a1] : tilemap[a1][up ? rl-1 : rl];
+		if (!k || (k & 0x80))
+			return;						// open, or the one on the move
+	}
 	if ((vertical ? BSPColRange (rl,a1,rl,a2,&c1,&c2)
 		: BSPColRange (a1,rl,a2,rl,&c1,&c2)) && Covered (c1,c2))
 	{									// roughly where it lands is behind
@@ -1419,17 +1535,114 @@ asm				mov	[u],ax
 }
 
 //
-// What the walk marked in spotvis, for the objects that read it: an object
-// is visible when it is in the view and nearer than the wall drawn in its
-// column.  In 8.8 tiles from the camera, so the three plane tests and the
-// view-space position are 16-bit IMULs (pn[0] is (cos,-sin) of the view);
-// only an object that passes them is projected, with one 32-bit multiply
-// and divide.  (The first version projected every static in the level
-// with six FixedByFracs and did the depth twice: 14% of the frame.)  The
-// side planes get half a tile of slack, so an object straddling the edge
-// of the view is drawn, as the walk's rays would have found its tile.
+// one face of a block, from (gx1,gy1) to (gx2,gy2) (view-relative, the
+// lower end first), drawn wherever it is nearer than what is there
 //
-#define VISSLACK	(-128L*256)			// half a tile, in 8.8 x 8.8
+static void BlockFace (long gx1, long gy1, long gx2, long gy2, unsigned page,
+	int flip)
+{
+	bspend		e1, e2, t;
+	int			col, cs, ce, c1, c2;
+	bspstep		H, UH;
+	bspword		hw1, hw2;
+	unsigned	h, u, texture;
+
+	if (!Ends (gx1,gy1,gx2,gy2,0,64,&e1,&e2))
+		return;
+	if (e1.col > e2.col)
+	{
+		t = e1;
+		e1 = e2;
+		e2 = t;
+	}
+	c1 = (int)e1.col;
+	c2 = (int)e2.col;
+	cs = c1 < 0 ? 0 : (c1 + 63) >> 6;
+	ce = c2 > viewwidth << 6 ? viewwidth : (c2 + 63) >> 6;
+	if (cs >= ce)
+		return;
+	hw1.w[0] = hw2.w[0] = 0;
+	hw1.w[1] = (unsigned)e1.h;
+	hw2.w[1] = (unsigned)e2.h;
+	StepInit (&H,(long)hw1.l,(long)hw2.l,(cs << 6) - c1,c2 - c1);
+	StepInit (&UH,e1.uh,e2.uh,(cs << 6) - c1,c2 - c1);
+	for (col = cs; col < ce; col++, STEP(H), STEP(UH))
+	{
+		h = H.v.w[1];
+		if (!h)
+			h = 1;
+		if ((!bspleft || bspclaim[col]) && h <= wallheight[col])
+			continue;						// a wall in front of it
+		if ((int)UH.v.w[1] < 0)
+			u = 0;
+		else if (UH.v.w[1] >= h)
+			u = 63;
+		else
+		{
+			unsigned	uhlo = UH.v.w[0], uhhi = UH.v.w[1];
+asm			mov	ax,[uhlo]
+asm			mov	dx,[uhhi]
+asm			div	[h]
+asm			mov	[u],ax
+		}
+		if (u > 63)
+			u = 63;
+		texture = u << 6;
+		if (flip)
+			texture = 0xfc0 - texture;
+		wallheight[col] = h;
+		if (bspleft && !bspclaim[col])
+		{
+			bspclaim[col] = 1;
+			bspleft--;
+		}
+		((unsigned *)&postsource)[0] = texture;
+		((unsigned *)&postsource)[1] = page;
+		postx = col;
+		postwidth = 1;
+		ScalePostF ();
+	}
+}
+
+//
+// the block on the move, at pwallpos along its way: its faces that look at
+// the camera, each over the walls wherever it is nearer
+//
+static void DrawPushwalls (void)
+{
+	int			x, y, pic;
+	long		x0, y0, off;
+	unsigned	vpage, hpage;
+
+	if (!pwallstate)
+		return;
+	x = pwallx;
+	y = pwally;
+	if ((tilemap[x][y] & 0xc0) != 0xc0
+		|| BSPOutside (x-1,y-1,x+2,y+2))
+		return;
+	pic = tilemap[x][y] & 63;
+	x0 = ((long)x << TILESHIFT) - viewx;
+	y0 = ((long)y << TILESHIFT) - viewy;
+	off = (long)pwallpos << 10;
+	switch (pwalldir)
+	{
+	case di_north:	y0 -= off;	break;
+	case di_east:	x0 += off;	break;
+	case di_south:	y0 += off;	break;
+	case di_west:	x0 -= off;	break;
+	}
+	vpage = (unsigned)PM_GetPage (vertwall[pic]);
+	hpage = (unsigned)PM_GetPage (horizwall[pic]);
+	if (x0 > 0)
+		BlockFace (x0,y0,x0,y0+TILEGLOBAL,vpage,0);			// west
+	if (x0+TILEGLOBAL < 0)
+		BlockFace (x0+TILEGLOBAL,y0,x0+TILEGLOBAL,y0+TILEGLOBAL,vpage,1);	// east
+	if (y0 > 0)
+		BlockFace (x0,y0,x0+TILEGLOBAL,y0,hpage,1);			// north
+	if (y0+TILEGLOBAL < 0)
+		BlockFace (x0,y0+TILEGLOBAL,x0+TILEGLOBAL,y0+TILEGLOBAL,hpage,0);	// south
+}
 
 //
 // Everything visible is inside the triangle of the view cut off at the
@@ -1513,6 +1726,9 @@ void BSPRefresh (void)
 			_fmemset (&bspclaim[solid[k].b < 0 ? 0 : solid[k].b],0,
 				solid[k+1].a - (solid[k].b < 0 ? 0 : solid[k].b));
 	}
+	if (pwallstate)
+		st_pwframes++;
+	DrawPushwalls ();
 	DrawDoors ();
 	st_left += bspleft;
 	if (bspleft == viewwidth)

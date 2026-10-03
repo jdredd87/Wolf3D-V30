@@ -184,11 +184,89 @@ So far it is half the walk's speed on the V30.  How each step was found:
   8086's MUL and DIV, `MulDivFloor` the stepping set-up as 48-bit products
   over three DIVs, and doors are culled by the view and skipped when open.
 
-**Not handled yet**: pushwalls (a moving block is still in the tree where it
-started), and `spotvis` is marked only for objects (the tile under each
-static and actor whose projection is nearer than the wall in its column).
+**Not handled yet** (then): pushwalls -- done below, milestone 4.  `spotvis`
+is marked only for objects (the tile under each static and actor whose
+projection is nearer than the wall in its column).
 
 **Where the V30's time goes now** is the next job: the per-column loop in C
 (`DrawRun`, 15% before the last step), the visibility pass, and the tree
 walk with its culling tests.  The walk is assembly throughout; to be worth
 anything here the column loop has to be as well.
+
+## Speed, round two (2026-10-03): from half the walk to four fifths
+
+The V30 profile after milestone 2 put the BSP's own code at 65% of the
+frame.  Six changes, each measured on both machines, each leaving frame 50
+of demo 0 exactly as it was:
+
+| | 486 | V30 |
+|---|---|---|
+| milestone 2 | 39.0 | 2.58 |
+| claimed columns as ranges, the column loop in assembly | 42.1 | 2.97 |
+| culling and object visibility in assembly | 47.1 | 3.59 |
+| objects in areas shut off by closed doors skipped | 49.0 | 3.75 |
+| runs wholly behind what is drawn found before projecting | 50.3 | 3.97 |
+| subtrees wholly behind what is drawn skipped | 51.8 | 4.10 |
+| (the walk) | 58-60 | 4.98 |
+
+* **The claimed columns are sorted ranges**, Doom's solidsegs.  A run is
+  stepped only through the gaps between them; the first loop stepped every
+  column a run covered and skipped the claimed ones, and a far wall behind
+  a near one cost all its columns -- 37% of `DrawRun` (`stage/proflines.py`
+  charges a profile to the C lines of a function from BCC's own assembly).
+  The loop itself is `BSPCols` in `WL_DR_A.ASM`, back to C only when the
+  texture's tile changes.
+* **`BSPOutside` and `BSPMarkVis` in assembly**, the frame's camera and
+  planes kept in `WL_DR_A`'s code segment, because DGROUP is full.  In C a
+  dot product was a helper call over values in memory.
+* **`areabyplayer`**: the view box reaches as far as the farthest wall
+  drawn, so with a corridor in view it let most of a level's statics
+  through to the full test.  A static in an area the player's does not
+  reach through open doors cannot be seen.
+* **Occlusion before projection.**  Of 28 runs a frame, 19 turned out to
+  lie wholly behind walls already drawn, found only after the full
+  projection.  `BSPColRange` estimates a segment's columns from 8.8
+  operands with a few IMULs -- within some two and a half columns, four
+  allowed, and only for ends at least a tile in front -- and a run inside
+  one claimed range is skipped.  The same test on a node's box (its two
+  silhouette corners, which two depending on where the camera is: Doom's
+  `checkcoord`) skips whole subtrees: 59 nodes and 28 runs a frame became
+  34 and 13.
+
+Two bugs found on the way, both latent before: the stepping remainder was
+compared signed (`e + r` can pass 32767), and a post still pending when a
+new tile's page was fetched pointed into a page `PM_GetPage` may evict.
+
+## Milestone 4, working (2026-10-03): pushwalls
+
+A pushable block moves, and the tiles it leaves open up for good, so a tree
+built at load cannot follow it.  The tree is built with every pushable tile
+open -- the walls around it are in the tree -- and every tile a block can
+be in (the pushable tile and the open ones within two tiles of it, the
+farthest a push goes; 5 to 24 of them on the maps tried) gets its faces in
+the tree too, as one-tile runs marked as a block's (bit 2 of `of`):
+`DrawRun` draws one only while a block stands in its tile.  So a standing
+block is drawn front to back like any wall, and hides what is behind it.
+The block on the move -- `tilemap` 0C0h, `pwallpos` along `pwalldir` -- is
+the only one drawn apart, after the walls, each face wherever it is nearer
+(as the doors are).
+
+The first version drew every standing block that way, after the walls; the
+tree then drew the secret behind each pushable wall first, every wall
+there twice, and its occlusion tests found nothing hidden.  Beside
+pushwalls the V30 ran at two thirds of the walk's speed.
+
+`stage/pwdemo.py` writes a demo for each map with a pushable wall that can
+move (G240-G288, 49 of the 60 maps): the player faces it, presses use,
+watches it slide two tiles, walks in and looks both ways.  Played on the
+V30 and watched on the capture card, the block slides back down its
+corridor with the side walls appearing as it goes.
+
+Two side effects.  The renderer's code put the 486 (549 KB free, the
+V30 557) just under id's 235,000-byte check at start-up ("You do not have
+enough memory"), so this branch asks for 225,000; and `BuildBSP`'s
+borrowed buffers are sized for 2,000 runs and 1,400 nodes (the most any of
+the 60 maps had was 1,198 runs, 145 more cut, and 987 nodes) -- a map that
+needed more would simply be drawn by the walk.
+
+**BSP is now the default on this branch**; `WALK` gives id's rays.
