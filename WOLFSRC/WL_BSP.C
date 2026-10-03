@@ -66,10 +66,10 @@ bsplogent	far bsplog[8];
 int			far bsplogn;
 
 char far bspfmt[] = "bsp: floor %2u  %4u runs (%u cut)  %4u nodes  depth %2u  %5u bytes  %u ticks (alloc %u, runs %u, tree %u)\n";
-long	far st_frames, far st_nodes, far st_culled, far st_runs, far st_hidden,
+long	far st_frames, far st_nodes, far st_culled, far st_runs, far st_hidden, far st_boxhid,
 		far st_left;					// renderer counts, for BSPReport
 int		far st_lframe = -1, far st_lmax, far st_lfirst, far st_llast, far st_lnone;
-char far bspstat[] = "bsp: %ld frames from the tree, a frame: %ld nodes (%ld culled), %ld runs projected (%ld wholly hidden), %ld columns left to the fill\n";
+char far bspstat[] = "bsp: %ld frames from the tree, a frame: %ld nodes (%ld culled, %ld hidden), %ld runs (%ld hidden), %ld columns left to the fill\n";
 char far bspstat2[] = "bsp: most left %d at frame %d (claimed %d..%d); %d frames with none claimed\n";
 char far bspfail[] = "bsp: floor %2u  NOT BUILT -- more runs or nodes than it has room for\n";
 
@@ -480,7 +480,8 @@ void BSPReport (void)
 		{
 			_fstrcpy ((char far *)sfmt,bspstat);
 			printf (sfmt,st_frames,st_nodes/st_frames,st_culled/st_frames,
-				st_runs/st_frames,st_hidden/st_frames,st_left/st_frames);
+				st_boxhid/st_frames,st_runs/st_frames,st_hidden/st_frames,
+				st_left/st_frames);
 			_fstrcpy ((char far *)sfmt,bspstat2);
 			printf (sfmt,st_lmax,st_lframe,st_lfirst,st_llast,st_lnone);
 		}
@@ -553,6 +554,10 @@ typedef struct
 bsprange	far solid[MAXSOLID];
 int			far nsolid;
 
+int BSPColRange (int x1, int y1, int x2, int y2, int *c1, int *c2);
+
+#define HIDESLACK	4					// columns: BSPColRange's error, and more
+
 static void ClaimInit (void)
 {
 	solid[0].a = -0x7fff;
@@ -560,6 +565,33 @@ static void ClaimInit (void)
 	solid[1].a = viewwidth;
 	solid[1].b = 0x7fff;
 	nsolid = 2;
+}
+
+//
+// Are the columns from c1 to c2 (either way round, BSPColRange's rough
+// ones) all claimed already, or off the screen?
+//
+static int Covered (int c1, int c2)
+{
+	int		k;
+
+	if (c1 > c2)
+	{
+		k = c1;
+		c1 = c2;
+		c2 = k;
+	}
+	c1 -= HIDESLACK;
+	c2 += HIDESLACK+1;
+	if (c1 < 0)
+		c1 = 0;
+	if (c2 > viewwidth)
+		c2 = viewwidth;
+	if (c1 >= c2)
+		return 1;
+	for (k = 0; solid[k].b <= c1; k++)
+		;
+	return solid[k].a <= c1 && solid[k].b >= c2;
 }
 
 //
@@ -887,9 +919,7 @@ void BSPSetPlanes (int cam8x, int cam8y, int p0x, int p0y, int p1x, int p1y,
 void BSPSetBox (int x1, int y1, int x2, int y2);
 int BSPOutside (int x1, int y1, int x2, int y2);
 void BSPMarkVis (void);
-int BSPColRange (int x1, int y1, int x2, int y2, int *c1, int *c2);
 
-#define HIDESLACK	4					// columns: BSPColRange's error, and more
 
 //
 // A view-space point's column (in 64ths, and whole) and height, and u*h,
@@ -1060,30 +1090,11 @@ static void DrawRun (bsprun far *r)
 	a1 = r->a1;
 	a2 = r->a2;
 	rl = r->line;
-	if (vertical ? BSPColRange (rl,a1,rl,a2,&c1,&c2)
-		: BSPColRange (a1,rl,a2,rl,&c1,&c2))
-	{									// roughly where it lands: behind
-		if (c1 > c2)					// what is drawn there already?
-		{
-			k = c1;
-			c1 = c2;
-			c2 = k;
-		}
-		c1 -= HIDESLACK;
-		c2 += HIDESLACK+1;
-		if (c1 < 0)
-			c1 = 0;
-		if (c2 > viewwidth)
-			c2 = viewwidth;
-		if (c1 >= c2)
-			return;						// wholly off the screen
-		for (k = 0; solid[k].b <= c1; k++)
-			;
-		if (solid[k].a <= c1 && solid[k].b >= c2)
-		{
-			st_hidden++;
-			return;
-		}
+	if ((vertical ? BSPColRange (rl,a1,rl,a2,&c1,&c2)
+		: BSPColRange (a1,rl,a2,rl,&c1,&c2)) && Covered (c1,c2))
+	{									// roughly where it lands is behind
+		st_hidden++;					// what is drawn there already
+		return;
 	}
 	line = (long)rl << TILESHIFT;
 	if (vertical)
@@ -1225,6 +1236,34 @@ static void SetPlanes (void)
 }
 
 //
+// Is a box (in tiles) wholly behind what is drawn?  Its silhouette from the
+// camera is two corners -- which two depends on where the camera is
+// (Doom's checkcoord) -- and the columns between theirs are all it can
+// cover.  Doom culls whole subtrees so, and so does this.
+//
+static int BoxHidden (int x1, int y1, int x2, int y2)
+{
+	int		ax, ay, bx, by, c1, c2;
+
+	ax = cam8x < x1 << 8 ? 0 : (cam8x <= x2 << 8 ? 1 : 2);
+	ay = cam8y < y1 << 8 ? 0 : (cam8y <= y2 << 8 ? 1 : 2);
+	switch (ay*3 + ax)
+	{
+	case 0:	ax = x2; ay = y1; bx = x1; by = y2; break;
+	case 1:	ax = x1; ay = y1; bx = x2; by = y1; break;
+	case 2:	ax = x1; ay = y1; bx = x2; by = y2; break;
+	case 3:	ax = x1; ay = y1; bx = x1; by = y2; break;
+	case 5:	ax = x2; ay = y1; bx = x2; by = y2; break;
+	case 6:	ax = x1; ay = y1; bx = x2; by = y2; break;
+	case 7:	ax = x1; ay = y2; bx = x2; by = y2; break;
+	case 8:	ax = x2; ay = y1; bx = x1; by = y2; break;
+	default:
+		return 0;							// the camera is in it
+	}
+	return BSPColRange (ax,ay,bx,by,&c1,&c2) && Covered (c1,c2);
+}
+
+//
 // front to back from node n
 //
 static void Walk (int n)
@@ -1242,6 +1281,11 @@ static void Walk (int n)
 		{
 			st_culled++;
 			return;							// nothing below it is in view
+		}
+		if (BoxHidden (node->x1,node->y1,node->x2,node->y2))
+		{
+			st_boxhid++;
+			return;							// nor anything that can be seen
 		}
 		cam = node->axis ? viewy : viewx;
 		if (cam < ((long)node->coord << TILESHIFT))
