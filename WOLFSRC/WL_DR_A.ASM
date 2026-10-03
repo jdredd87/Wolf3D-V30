@@ -1650,6 +1650,283 @@ PUBLIC	PlaceActors
 	retf
 ENDP
 
+;============================
+;
+; The BSP branch's culling and object visibility (StevenC & Claude), from
+; WL_BSP.C, where they were a third of the V30's frame with the column
+; loop gone: Borland's code called a helper for each dot product and kept
+; everything in memory.  The frame's view is kept here, in the code segment
+; (DGROUP is full): the camera in 8.8 tiles, the three planes' 8.8 inward
+; normals (behind the camera, left edge, right edge), which corner of a box
+; each plane tests, and the box that bounds what can be seen.
+;
+; void BSPSetPlanes (int cam8x, int cam8y, int p0x, int p0y, int p1x,
+;	int p1y, int p2x, int p2y)
+; void BSPSetBox (int x1, int y1, int x2, int y2)
+; int BSPOutside (int x1, int y1, int x2, int y2) -- in tiles: 1 when the box
+;	is wholly behind one of the planes
+; void BSPMarkVis (void) -- spotvis for every static and actor in view and
+;	nearer than the wall drawn in its column
+;
+PROC	BSPSetPlanes FAR
+PUBLIC	BSPSetPlanes
+	push	bp
+	mov	bp,sp
+	mov	ax,[bp+6]
+	mov	[cs:bv_cx],ax
+	mov	ax,[bp+8]
+	mov	[cs:bv_cy],ax
+	push	si
+	xor	si,si
+@@plane:
+	mov	ax,[bp+10+si]			; the normal's x: the box's x2 when it
+	mov	[cs:bv_p+si],ax			; points along +x, else x1
+	mov	dx,10
+	or	ax,ax
+	jns	@@xs
+	mov	dx,6
+@@xs:
+	mov	[cs:bv_sel+si],dx
+	mov	ax,[bp+12+si]			; and y: y2 or y1
+	mov	[cs:bv_p+2+si],ax
+	mov	dx,12
+	or	ax,ax
+	jns	@@ys
+	mov	dx,8
+@@ys:
+	mov	[cs:bv_sel+2+si],dx
+	add	si,4
+	cmp	si,12
+	jb	@@plane
+	pop	si
+	pop	bp
+	retf
+ENDP
+
+PROC	BSPSetBox FAR
+PUBLIC	BSPSetBox
+	push	bp
+	mov	bp,sp
+	mov	ax,[bp+6]
+	mov	[cs:bv_box],ax
+	mov	ax,[bp+8]
+	mov	[cs:bv_box+2],ax
+	mov	ax,[bp+10]
+	mov	[cs:bv_box+4],ax
+	mov	ax,[bp+12]
+	mov	[cs:bv_box+6],ax
+	pop	bp
+	retf
+ENDP
+
+PROC	BSPOutside FAR
+PUBLIC	BSPOutside
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	xor	di,di					; plane offset
+@@plane:
+	mov	si,[cs:bv_sel+di]
+	mov	ax,[bp+si]				; the corner furthest along the normal
+	shl	ax,8
+	sub	ax,[cs:bv_cx]
+	imul	[WORD cs:bv_p+di]
+	mov	cx,ax
+	mov	bx,dx
+	mov	si,[cs:bv_sel+2+di]
+	mov	ax,[bp+si]
+	shl	ax,8
+	sub	ax,[cs:bv_cy]
+	imul	[WORD cs:bv_p+2+di]
+	add	ax,cx
+	adc	dx,bx
+	js	@@out					; still behind the plane
+	add	di,4
+	cmp	di,12
+	jb	@@plane
+	xor	ax,ax
+	jmp	@@ret
+@@out:
+	mov	ax,1
+@@ret:
+	pop	di
+	pop	si
+	pop	bp
+	retf
+ENDP
+
+PROC	BSPMarkVis FAR
+PUBLIC	BSPMarkVis
+	push	bp
+	push	si
+	push	di
+	mov	si,OFFSET statobjlist
+@@stat:
+	cmp	si,[laststatobj]
+	jae	@@actors
+	cmp	[WORD si+ST_SHAPENUM],-1
+	je	@@snext
+	mov	ah,[si+ST_TILEX]		; the tile's middle, 8.8
+	mov	al,128
+	cmp	ax,[cs:bv_box]
+	jl	@@snext
+	cmp	ax,[cs:bv_box+4]
+	jg	@@snext
+	mov	dh,[si+ST_TILEY]
+	mov	dl,128
+	cmp	dx,[cs:bv_box+2]
+	jl	@@snext
+	cmp	dx,[cs:bv_box+6]
+	jg	@@snext
+	mov	di,[si+ST_VISSPOT]
+	call	VisTest
+@@snext:
+	add	si,ST_SIZE
+	jmp	@@stat
+
+@@actors:
+	mov	bx,[player]
+	mov	si,[bx+OB_NEXT]
+@@act:
+	or	si,si
+	jz	@@done
+	mov	ax,[WORD si+OB_X+1]		; x >> 8
+	mov	dx,[WORD si+OB_Y+1]
+	mov	di,[si+OB_TILEX]
+	shl	di,6
+	add	di,[si+OB_TILEY]
+	add	di,OFFSET spotvis
+	call	VisTest
+	mov	si,[si+OB_NEXT]
+	jmp	@@act
+@@done:
+	pop	di
+	pop	si
+	pop	bp
+	retf
+ENDP
+
+;
+; VisTest: AX, DX the object (8.8 tiles); DI the spotvis byte to set.
+; Keeps SI and DI.  The depth must be at least 1/64 tile, the side planes
+; get half a tile of slack (an object straddling the view's edge is drawn,
+; as the walk's rays would have found its tile), and the column and height
+; are the C's, from 8.8 operands -- close enough to decide what is seen.
+;
+PROC	VisTest NEAR
+	sub	ax,[cs:bv_cx]
+	sub	dx,[cs:bv_cy]
+	mov	[cs:vt_dx],ax
+	mov	[cs:vt_dy],dx
+	imul	[WORD cs:bv_p]			; nx = dx*p0x + dy*p0y
+	mov	cx,ax
+	mov	bx,dx
+	mov	ax,[cs:vt_dy]
+	imul	[WORD cs:bv_p+2]
+	add	cx,ax
+	adc	bx,dx
+	js	@@out
+	jnz	@@front
+	cmp	cx,400h
+	jb	@@out
+@@front:
+	mov	[WORD cs:vt_nx],cx
+	mov	[WORD cs:vt_nx+2],bx
+	mov	ax,[cs:vt_dx]			; the left plane
+	imul	[WORD cs:bv_p+4]
+	mov	cx,ax
+	mov	bx,dx
+	mov	ax,[cs:vt_dy]
+	imul	[WORD cs:bv_p+6]
+	add	ax,cx
+	adc	dx,bx
+	cmp	dx,-1					; less than -128*256: out
+	jl	@@out
+	jg	@@right
+	cmp	ax,8000h
+	jb	@@out
+@@right:
+	mov	ax,[cs:vt_dx]			; the right plane
+	imul	[WORD cs:bv_p+8]
+	mov	cx,ax
+	mov	bx,dx
+	mov	ax,[cs:vt_dy]
+	imul	[WORD cs:bv_p+10]
+	add	ax,cx
+	adc	dx,bx
+	cmp	dx,-1
+	jl	@@out
+	jg	@@ny
+	cmp	ax,8000h
+	jb	@@out
+@@ny:
+	mov	ax,[cs:vt_dy]			; ny = dy*p0x - dx*p0y
+	imul	[WORD cs:bv_p]
+	mov	cx,ax
+	mov	bx,dx
+	mov	ax,[cs:vt_dx]
+	imul	[WORD cs:bv_p+2]
+	sub	cx,ax
+	sbb	bx,dx
+	mov	al,ch					; ny >> 8
+	mov	ah,bl
+	imul	[WORD scale]			; DX:AX = ny8 * scale
+	mov	cx,[WORD cs:vt_nx+1]	; nx >> 8, at least 4
+	xor	bx,bx
+	or	dx,dx
+	jns	@@pos
+	neg	dx
+	neg	ax
+	sbb	dx,0
+	inc	bx						; left of the centre
+@@pos:
+	cmp	dx,cx
+	jae	@@out					; thousands of columns off
+	div	cx
+	or	bx,bx
+	jz	@@rt
+	neg	ax
+@@rt:
+	add	ax,[centerx]
+	jns	@@c0
+	xor	ax,ax
+@@c0:
+	cmp	ax,[viewwidth]
+	jl	@@c1
+	mov	ax,[viewwidth]
+	dec	ax
+@@c1:
+	mov	bx,ax
+	shl	bx,1
+	mov	ax,[WORD heightnumerator]	; its height, as ColHeight's
+	mov	dx,[WORD heightnumerator+2]
+	cmp	dx,cx
+	jae	@@tall
+	div	cx
+	cmp	ax,7fffh
+	jbe	@@h
+@@tall:
+	mov	ax,7fffh
+@@h:
+	cmp	ax,[wallheight+bx]
+	jle	@@out					; the wall is nearer
+	mov	al,[BYTE vismark]
+	mov	[di],al
+@@out:
+	ret
+ENDP
+
+bv_cx		dw	0				; the camera, 8.8 tiles
+bv_cy		dw	0
+bv_p		dw	6 DUP (0)		; three planes' normals, 8.8
+bv_sel		dw	6 DUP (0)		; the frame offsets of each plane's corner
+bv_box		dw	4 DUP (0)		; x1, y1, x2, y2: what can be seen
+vt_dx		dw	0
+vt_dy		dw	0
+vt_nx		dd	0
+
+
 
 ;============================
 ;

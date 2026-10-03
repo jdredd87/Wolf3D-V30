@@ -880,6 +880,15 @@ typedef struct
 int BSPCols (bspcols *c);
 
 //
+// the view's planes, culling and object visibility, in WL_DR_A.ASM
+//
+void BSPSetPlanes (int cam8x, int cam8y, int p0x, int p0y, int p1x, int p1y,
+	int p2x, int p2y);
+void BSPSetBox (int x1, int y1, int x2, int y2);
+int BSPOutside (int x1, int y1, int x2, int y2);
+void BSPMarkVis (void);
+
+//
 // A view-space point's column (in 64ths, and whole) and height, and u*h,
 // in one routine on the 8086's MUL and DIV: the first version called a
 // helper for every multiply and divide, sixty calls a run, and on the V30
@@ -1160,26 +1169,6 @@ asm	mov	[m],ax
 	return (((byte *)&v)[3] & 0x80) ? -m : m;
 }
 
-//
-// p*u + q*v, two 16-bit IMULs (Borland calls LXMUL@ for (long)int*int)
-//
-static long Dot (int p, int q, int u, int v)
-{
-	long	r;
-
-asm	mov	ax,[p]
-asm	imul	word ptr [u]
-asm	mov	bx,ax
-asm	mov	cx,dx
-asm	mov	ax,[q]
-asm	imul	word ptr [v]
-asm	add	ax,bx
-asm	adc	dx,cx
-asm	mov	word ptr [r],ax
-asm	mov	word ptr [r+2],dx
-	return r;
-}
-
 static void SetPlanes (void)
 {
 	int		k, a, h;
@@ -1201,20 +1190,7 @@ static void SetPlanes (void)
 		pn[k][0] = SignMag (sintable[a+ANGLES/4]);	// cos
 		pn[k][1] = -SignMag (sintable[a]);			// -sin: y grows south
 	}
-}
-
-static int Outside (int x1, int y1, int x2, int y2)
-{
-	int		k, px, py;
-
-	for (k = 0; k < 3; k++)
-	{
-		px = ((pn[k][0] >= 0 ? x2 : x1) << 8) - cam8x;
-		py = ((pn[k][1] >= 0 ? y2 : y1) << 8) - cam8y;
-		if (Dot (px,py,pn[k][0],pn[k][1]) < 0)
-			return 1;
-	}
-	return 0;
+	BSPSetPlanes (cam8x,cam8y,pn[0][0],pn[0][1],pn[1][0],pn[1][1],pn[2][0],pn[2][1]);
 }
 
 //
@@ -1231,7 +1207,7 @@ static void Walk (int n)
 	{
 		node = &bb.nodes[n];
 		st_nodes++;
-		if (Outside (node->x1,node->y1,node->x2,node->y2))
+		if (BSPOutside (node->x1,node->y1,node->x2,node->y2))
 		{
 			st_culled++;
 			return;							// nothing below it is in view
@@ -1256,10 +1232,10 @@ static void Walk (int n)
 			{
 				if (r->of & 1)
 				{
-					if (Outside (r->a1,r->line,r->a2,r->line))
+					if (BSPOutside (r->a1,r->line,r->a2,r->line))
 						continue;
 				}
-				else if (Outside (r->line,r->a1,r->line,r->a2))
+				else if (BSPOutside (r->line,r->a1,r->line,r->a2))
 					continue;
 				st_runs++;
 				DrawRun (r);
@@ -1285,7 +1261,7 @@ static void DrawDoors (void)
 	for (d = doorobjlist; d < lastdoorobj; d++)
 	{
 		if (doorposition[d-doorobjlist] > 0xfc00
-			|| Outside (d->tilex,d->tiley,d->tilex+1,d->tiley+1))
+			|| BSPOutside (d->tilex,d->tiley,d->tilex+1,d->tiley+1))
 			continue;					// open, or out of the view
 		if (d->vertical)
 		{
@@ -1380,24 +1356,6 @@ asm				mov	[u],ax
 //
 #define VISSLACK	(-128L*256)			// half a tile, in 8.8 x 8.8
 
-static void MarkVisible (int x8, int y8, byte *spot)
-{
-	int		dx = x8 - cam8x, dy = y8 - cam8y, col;
-	long	nx;
-	bspend	e;
-
-	nx = Dot (dx,dy,pn[0][0],pn[0][1]);	// the depth, in global units
-	if (nx < NEARD)
-		return;
-	if (Dot (dx,dy,pn[1][0],pn[1][1]) < VISSLACK
-		|| Dot (dx,dy,pn[2][0],pn[2][1]) < VISSLACK)
-		return;
-	ColHeight (nx,Dot (dy,dx,pn[0][0],-pn[0][1]),0,&e);
-	col = e.ci < 0 ? 0 : (e.ci >= viewwidth ? viewwidth-1 : e.ci);
-	if (e.h > wallheight[col])
-		*spot = vismark;
-}
-
 //
 // Everything visible is inside the triangle of the view cut off at the
 // farthest wall drawn (the least post, postmin, is its height), so its
@@ -1445,22 +1403,11 @@ static void ViewBox (int *bx1, int *by1, int *bx2, int *by2)
 
 static void BSPVisibility (void)
 {
-	statobj_t	*s;
-	objtype		*ob;
-	int			bx1, by1, bx2, by2, x8, y8;
+	int		bx1, by1, bx2, by2;
 
 	ViewBox (&bx1,&by1,&bx2,&by2);
-	for (s = statobjlist; s < laststatobj; s++)
-		if (s->shapenum != -1)
-		{
-			x8 = (s->tilex << 8) + 128;
-			y8 = (s->tiley << 8) + 128;
-			if (x8 >= bx1 && x8 <= bx2 && y8 >= by1 && y8 <= by2)
-				MarkVisible (x8,y8,s->visspot);
-		}
-	for (ob = player->next; ob; ob = ob->next)
-		MarkVisible ((int)(ob->x >> 8),(int)(ob->y >> 8),
-			&spotvis[ob->tilex][ob->tiley]);
+	BSPSetBox (bx1,by1,bx2,by2);
+	BSPMarkVis ();
 }
 
 /*
