@@ -1551,6 +1551,7 @@ void TimeDemo (void)
 	long	frames[4],ticks[4],later[4],tf,tt,tl;
 	unsigned long	miss[4][5];
 	unsigned long	samples;
+	int				soundwas, musicwas;
 
 	ndemos = 4;
 	tdcrc = MS_CheckParm ("crc");	// checksum the view every 50 frames
@@ -1643,6 +1644,8 @@ void TimeDemo (void)
 	}
 
 	samples = ProfWrite ();			// before ShutdownId frees its memory
+	soundwas = SoundMode;			// before ShutdownId turns them off (the
+	musicwas = MusicMode;			// report said "sound mode 0" every time)
 	ShutdownId ();
 	{
 	extern long tdpreticks;
@@ -1652,7 +1655,14 @@ void TimeDemo (void)
 		EMSPresent ? "yes" : "no",EMSPagesAvail,
 		XMSPresent ? "yes" : "no",XMSPagesAvail,MainPagesAvail);
 	printf ("sound mode %d, music mode %d; OPL waits %u and %u reads, %lu ns each (id: 6 and 35)\n",
-		SoundMode,MusicMode,alDelayAddr,alDelayData,alReadNs);
+		soundwas,musicwas,alDelayAddr,alDelayData,alReadNs);
+	{
+	extern long ALStat (int which);
+	static char far f[] = "OPL writes to 20h and up: %ld, skipped as unchanged: %ld\n";
+	char	s[64];
+	_fstrcpy ((char far *)s,f);
+	printf (s,ALStat (0),ALStat (1));
+	}
 	printf ("view %d x %d%s%s%s%s%s%s%s\n",viewwidth,viewheight,pixstep == 2 ? ", LOWWALLS" : "",
 		lowsprites ? ", LOWSPRITES" : "",flatwalls ? ", FLATWALLS" : "",lowvert ? ", LOWVERT" : "",solidart ? ", FLATART" : "",
 		tdmaxframes ? ", QUICK (demo 0, 200 frames)" : "",
