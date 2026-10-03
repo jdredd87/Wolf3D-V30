@@ -1665,8 +1665,10 @@ ENDP
 ; void BSPSetBox (int x1, int y1, int x2, int y2)
 ; int BSPOutside (int x1, int y1, int x2, int y2) -- in tiles: 1 when the box
 ;	is wholly behind one of the planes
-; void BSPMarkVis (void) -- spotvis for every static and actor in view and
-;	nearer than the wall drawn in its column
+; void BSPMarkVis (void) -- spotvis for every static and actor in view,
+;	nearer than the wall drawn in its column, and in an area the player's
+;	reaches through open doors (areabyplayer: the box alone let through
+;	most of a level's statics whenever a far wall was in view)
 ;
 PROC	BSPSetPlanes FAR
 PUBLIC	BSPSetPlanes
@@ -1779,6 +1781,25 @@ PUBLIC	BSPMarkVis
 	jl	@@snext
 	cmp	dx,[cs:bv_box+6]
 	jg	@@snext
+	mov	bl,dh					; its area: shut off from the player's by
+	xor	bh,bh					; closed doors, it cannot be seen
+	shl	bx,1
+	mov	bx,[farmapylookup+bx]
+	mov	cl,ah
+	xor	ch,ch
+	add	bx,cx
+	shl	bx,1
+	mov	es,[mapsegs]			; plane 0
+	mov	cl,[es:bx]
+	sub	cl,107					; AREATILE (defined further down)
+	cmp	cl,37					; NUMAREAS: not an area tile, so test it
+	jae	@@stest
+	mov	bl,cl
+	xor	bh,bh
+	shl	bx,1
+	cmp	[areabyplayer+bx],0
+	je	@@snext
+@@stest:
 	mov	di,[si+ST_VISSPOT]
 	call	VisTest
 @@snext:
@@ -1791,6 +1812,11 @@ PUBLIC	BSPMarkVis
 @@act:
 	or	si,si
 	jz	@@done
+	mov	bl,[si+OB_AREANUMBER]	; shut off by closed doors: not seen
+	xor	bh,bh
+	shl	bx,1
+	cmp	[areabyplayer+bx],0
+	je	@@anext
 	mov	ax,[WORD si+OB_X+1]		; x >> 8
 	mov	dx,[WORD si+OB_Y+1]
 	mov	di,[si+OB_TILEX]
@@ -1798,6 +1824,7 @@ PUBLIC	BSPMarkVis
 	add	di,[si+OB_TILEY]
 	add	di,OFFSET spotvis
 	call	VisTest
+@@anext:
 	mov	si,[si+OB_NEXT]
 	jmp	@@act
 @@done:
