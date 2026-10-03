@@ -667,6 +667,19 @@ extreme		dw	?
 PROC	alOut
 PUBLIC	alOut
 ARG		n:WORD, b:WORD
+	mov	bl,[BYTE n]				; the register shadow: a write of the value
+	cmp	bl,20h					; a register already holds changes nothing on
+	jb	@@write					; an OPL2 (a note starts on key-on going 0 to
+	xor	bh,bh					; 1, not on a rewrite), so it is skipped --
+	shl	bx,1					; with its 13 port accesses.  Below 20h (test,
+	mov	al,[BYTE b]				; timers, IRQ reset) every write counts and
+	xor	ah,ah					; is made.  0FFFFh: never written
+	add	[WORD cs:alWrites],1
+	adc	[WORD cs:alWrites+2],0
+	cmp	[cs:alShadow+bx],ax
+	je	@@same
+	mov	[cs:alShadow+bx],ax
+@@write:
 	pushf
 	cli
 	mov	dx,388h
@@ -690,6 +703,32 @@ ARG		n:WORD, b:WORD
 	loop	@@wdata
 @@ndata:
 	ret
+@@same:
+	add	[WORD cs:alSkipped],1
+	adc	[WORD cs:alSkipped+2],0
+	ret
 ENDP
+
+;
+; long ALStat (int which) -- TIMEDEMO's count of register writes at 20h and
+; up: 0 all of them, 1 those the shadow skipped
+;
+PROC	ALStat
+PUBLIC	ALStat
+ARG		which:WORD
+	mov	ax,[WORD cs:alWrites]
+	mov	dx,[WORD cs:alWrites+2]
+	cmp	[which],0
+	je	@@r
+	mov	ax,[WORD cs:alSkipped]
+	mov	dx,[WORD cs:alSkipped+2]
+@@r:
+	ret
+ENDP
+
+alWrites	dd	0
+alSkipped	dd	0
+alShadow	dw	256 DUP (0FFFFh)	; each register's last value, in the code
+								; segment: DGROUP has no room
 
 END
