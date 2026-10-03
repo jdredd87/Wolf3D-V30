@@ -66,10 +66,10 @@ bsplogent	far bsplog[8];
 int			far bsplogn;
 
 char far bspfmt[] = "bsp: floor %2u  %4u runs (%u cut)  %4u nodes  depth %2u  %5u bytes  %u ticks (alloc %u, runs %u, tree %u)\n";
-long	far st_frames, far st_nodes, far st_culled, far st_runs,
+long	far st_frames, far st_nodes, far st_culled, far st_runs, far st_hidden,
 		far st_left;					// renderer counts, for BSPReport
 int		far st_lframe = -1, far st_lmax, far st_lfirst, far st_llast, far st_lnone;
-char far bspstat[] = "bsp: %ld frames drawn from the tree -- a frame: %ld nodes (%ld culled), %ld runs projected, %ld columns left to the fill\n";
+char far bspstat[] = "bsp: %ld frames from the tree, a frame: %ld nodes (%ld culled), %ld runs projected (%ld wholly hidden), %ld columns left to the fill\n";
 char far bspstat2[] = "bsp: most left %d at frame %d (claimed %d..%d); %d frames with none claimed\n";
 char far bspfail[] = "bsp: floor %2u  NOT BUILT -- more runs or nodes than it has room for\n";
 
@@ -480,7 +480,7 @@ void BSPReport (void)
 		{
 			_fstrcpy ((char far *)sfmt,bspstat);
 			printf (sfmt,st_frames,st_nodes/st_frames,st_culled/st_frames,
-				st_runs/st_frames,st_left/st_frames);
+				st_runs/st_frames,st_hidden/st_frames,st_left/st_frames);
 			_fstrcpy ((char far *)sfmt,bspstat2);
 			printf (sfmt,st_lmax,st_lframe,st_lfirst,st_llast,st_lnone);
 		}
@@ -887,6 +887,9 @@ void BSPSetPlanes (int cam8x, int cam8y, int p0x, int p0y, int p1x, int p1y,
 void BSPSetBox (int x1, int y1, int x2, int y2);
 int BSPOutside (int x1, int y1, int x2, int y2);
 void BSPMarkVis (void);
+int BSPColRange (int x1, int y1, int x2, int y2, int *c1, int *c2);
+
+#define HIDESLACK	4					// columns: BSPColRange's error, and more
 
 //
 // A view-space point's column (in 64ths, and whole) and height, and u*h,
@@ -1057,6 +1060,31 @@ static void DrawRun (bsprun far *r)
 	a1 = r->a1;
 	a2 = r->a2;
 	rl = r->line;
+	if (vertical ? BSPColRange (rl,a1,rl,a2,&c1,&c2)
+		: BSPColRange (a1,rl,a2,rl,&c1,&c2))
+	{									// roughly where it lands: behind
+		if (c1 > c2)					// what is drawn there already?
+		{
+			k = c1;
+			c1 = c2;
+			c2 = k;
+		}
+		c1 -= HIDESLACK;
+		c2 += HIDESLACK+1;
+		if (c1 < 0)
+			c1 = 0;
+		if (c2 > viewwidth)
+			c2 = viewwidth;
+		if (c1 >= c2)
+			return;						// wholly off the screen
+		for (k = 0; solid[k].b <= c1; k++)
+			;
+		if (solid[k].a <= c1 && solid[k].b >= c2)
+		{
+			st_hidden++;
+			return;
+		}
+	}
 	line = (long)rl << TILESHIFT;
 	if (vertical)
 	{
@@ -1082,7 +1110,10 @@ static void DrawRun (bsprun far *r)
 	for (k = 0; solid[k].b <= cs; k++)
 		;
 	if (solid[k].a <= cs && solid[k].b >= ce)
+	{
+		st_hidden++;
 		return;							// wholly behind what is drawn
+	}
 	hw1.w[0] = hw2.w[0] = 0;
 	hw1.w[1] = (unsigned)e1.h;
 	hw2.w[1] = (unsigned)e2.h;

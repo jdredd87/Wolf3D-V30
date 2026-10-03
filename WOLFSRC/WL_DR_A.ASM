@@ -1944,6 +1944,106 @@ PROC	VisTest NEAR
 	ret
 ENDP
 
+;
+; int BSPColRange (int x1, int y1, int x2, int y2, int *c1, int *c2) -- the
+; columns a segment's ends (in tiles) land on, roughly: from 8.8 operands,
+; so within some two and a half columns, and only for ends at least a tile
+; in front of the camera (else 0: the C projects it properly).  Two thirds
+; of the runs a frame projects turn out to lie wholly behind walls already
+; drawn; this finds most of them for a few IMULs instead of a projection.
+;
+PROC	BSPColRange FAR
+PUBLIC	BSPColRange
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	ax,[bp+6]
+	mov	dx,[bp+8]
+	call	ApproxCol
+	jc	@@unk
+	mov	si,ax
+	mov	ax,[bp+10]
+	mov	dx,[bp+12]
+	call	ApproxCol
+	jc	@@unk
+	mov	bx,[bp+14]
+	mov	[bx],si
+	mov	bx,[bp+16]
+	mov	[bx],ax
+	mov	ax,1
+	jmp	@@ret
+@@unk:
+	xor	ax,ax
+@@ret:
+	pop	di
+	pop	si
+	pop	bp
+	retf
+ENDP
+
+;
+; ApproxCol: AX, DX a point in tiles -> AX its column; CF when it is less
+; than a tile in front, or too far to the side to say
+;
+PROC	ApproxCol NEAR
+	mov	ah,al					; 8.8
+	xor	al,al
+	mov	dh,dl
+	xor	dl,dl
+	sub	ax,[cs:bv_cx]
+	sub	dx,[cs:bv_cy]
+	mov	[cs:vt_dx],ax
+	mov	[cs:vt_dy],dx
+	imul	[WORD cs:bv_p]			; nx
+	mov	cx,ax
+	mov	bx,dx
+	mov	ax,[cs:vt_dy]
+	imul	[WORD cs:bv_p+2]
+	add	cx,ax
+	adc	bx,dx
+	or	bx,bx
+	jle	@@unk					; less than a tile (BX:CX < 10000h)
+	mov	[WORD cs:vt_nx],cx
+	mov	[WORD cs:vt_nx+2],bx
+	mov	ax,[cs:vt_dy]			; ny
+	imul	[WORD cs:bv_p]
+	mov	cx,ax
+	mov	bx,dx
+	mov	ax,[cs:vt_dx]
+	imul	[WORD cs:bv_p+2]
+	sub	cx,ax
+	sbb	bx,dx
+	mov	al,ch
+	mov	ah,bl
+	imul	[WORD scale]
+	mov	cx,[WORD cs:vt_nx+1]
+	xor	bx,bx
+	or	dx,dx
+	jns	@@pos
+	neg	dx
+	neg	ax
+	sbb	dx,0
+	inc	bx
+@@pos:
+	cmp	dx,cx
+	jae	@@unk
+	div	cx
+	cmp	ax,7fffh
+	ja	@@unk
+	or	bx,bx
+	jz	@@rt
+	neg	ax
+@@rt:
+	add	ax,[centerx]
+	clc
+	ret
+@@unk:
+	stc
+	ret
+ENDP
+
+
 bv_cx		dw	0				; the camera, 8.8 tiles
 bv_cy		dw	0
 bv_p		dw	6 DUP (0)		; three planes' normals, 8.8
