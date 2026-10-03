@@ -318,3 +318,20 @@ replaces it with.
 missing on the 486) played to the end with the BSP on the 486, none hung or
 failed.  Walls were pushed in all 49 pushwall demos and in 15 of the random
 ones as well.
+
+## The tree cache (2026-10-03)
+
+Building a map's tree took the V30 up to some four seconds at "Get Psyched"
+(floor 38: 80 ticks with the pushwalls' faces).  A tree depends on nothing
+but its map, so each is built once and kept in `BSPCACHE.WL6` beside the
+game: an 8-byte header ("BSPC" and `BSPCACHEVER`), 64 index slots, then the
+trees.  A slot's key is a hash of the level's `tilemap` at load and its
+floor; a file of another version is started again, and one that cannot be
+read or written costs only the build.  Delete it at any time.  **Change
+the builder, change `BSPCACHEVER`**, or a new EXE reads the old trees.
+
+Floor 38 on the V30: 80 ticks built, 6 read (0.3 s).  On the 486, three
+maps built and then read from one 43 KB cache give the same view checksums
+at every point.  Floor 18 -- 179 pushable walls -- needs 1,912 runs of the
+2,000 the builder borrows room for: it fits, and a map that did not would be
+drawn by the walk.

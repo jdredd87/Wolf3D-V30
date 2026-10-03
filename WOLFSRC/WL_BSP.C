@@ -19,6 +19,9 @@
 
 #include "WL_DEF.H"
 #include <string.h>
+#include <dos.h>
+#include <io.h>
+#include <fcntl.h>
 #pragma hdrstop
 
 #define MAXRUNS		2000		// the most of 60 maps: 1,198 and 145 cut (the
@@ -75,6 +78,7 @@ long	far st_frames, far st_nodes, far st_culled, far st_runs, far st_hidden, far
 int		far st_lframe = -1, far st_lmax, far st_lfirst, far st_llast, far st_lnone;
 char far bspstat[] = "bsp: %ld frames from the tree, a frame: %ld nodes (%ld culled, %ld hidden), %ld runs (%ld hidden), %ld columns left to the fill\n";
 char far bspstat2[] = "bsp: most left %d at frame %d (claimed %d..%d); %d frames none; %ld frames a wall moved\n";
+char far bspfmtc[] = "bsp: floor %2u  %4u runs (%u cut)  %4u nodes  depth %2u  %5u bytes  %u ticks, read from BSPCACHE.WL6\n";
 char far bspfail[] = "bsp: floor %2u  NOT BUILT -- more runs or nodes than it has room for\n";
 
 static void AddRun (int of, int line, int a1, int a2)
@@ -504,9 +508,164 @@ static void AddBlockFaces (void)
 	}
 }
 
+//
+// The tree cache (StevenC & Claude).  A map's tree depends on nothing but
+// the map, and building it took the V30 up to four seconds at "Get Psyched"
+// (floor 38: 71 ticks), so each map's is built once and kept in
+// BSPCACHE.WL6, beside the game: a header, an index of 64 maps, then the
+// trees, 2-18 KB each.  An entry's key is a hash of the level's tilemap at
+// load -- doors, pushable walls and all -- and its floor, and the header
+// carries BSPCACHEVER: change the builder and the version, and every tree
+// is built again.  A file that cannot be read or written costs nothing but
+// the build; delete it at any time.
+//
+#define BSPCACHEVER	1
+#define CACHESLOTS	64
+
+typedef struct
+{
+	long		key;			// 0: a free slot
+	long		offset;			// the runs, then the nodes
+	unsigned	runs, nodes, cuts, depth;
+} bspslot;
+
+char far bspcachename[] = "BSPCACHE.WL6";
+
+static long TreeKey (void)
+{
+	unsigned long	h = BSPCACHEVER;
+	byte			far *t = &tilemap[0][0];
+	unsigned		i;
+
+	for (i = 0; i < MAPSIZE*MAPSIZE; i++)
+		h = h*33 + t[i];
+	h = h*33 + gamestate.mapon + 10*gamestate.episode;
+	return h ? (long)h : 1;
+}
+
+static int CacheOpen (int create)
+{
+	char		name[16];
+	int			h;
+	unsigned	n;
+	long		head[2];
+	bspslot		empty;
+	int			i;
+
+	_fstrcpy ((char far *)name,bspcachename);
+	if (!_dos_open (name,O_RDWR,&h))
+	{
+		if (!_dos_read (h,(void far *)head,sizeof(head),&n) && n == sizeof(head)
+			&& head[0] == 0x43505342L && head[1] == BSPCACHEVER)	// "BSPC"
+			return h;
+		_dos_close (h);
+		if (!create)
+			return -1;
+	}
+	else if (!create)
+		return -1;
+	if (_dos_creat (name,0,&h))			// new, or another version's: started
+		return -1;						// again
+	head[0] = 0x43505342L;
+	head[1] = BSPCACHEVER;
+	memset (&empty,0,sizeof(empty));
+	if (_dos_write (h,(void far *)head,sizeof(head),&n) || n != sizeof(head))
+	{
+		_dos_close (h);
+		return -1;
+	}
+	for (i = 0; i < CACHESLOTS; i++)
+		if (_dos_write (h,(void far *)&empty,sizeof(empty),&n) || n != sizeof(empty))
+		{
+			_dos_close (h);
+			return -1;
+		}
+	return h;
+}
+
+//
+// the slot holding key, or (want 0) the first free one; -1 for none.  The
+// slot is left in *e and the file positioned after it
+//
+static int CacheFind (int h, long key, bspslot *e)
+{
+	int			i;
+	unsigned	n;
+
+	lseek (h,8L,SEEK_SET);
+	for (i = 0; i < CACHESLOTS; i++)
+	{
+		if (_dos_read (h,(void far *)e,sizeof(*e),&n) || n != sizeof(*e))
+			return -1;
+		if (e->key == key)
+			return i;
+	}
+	return -1;
+}
+
+static int CacheLoad (long key)
+{
+	int			h;
+	unsigned	bytes, n;
+	bspslot		e;
+
+	if ((h = CacheOpen (0)) < 0)
+		return 0;
+	if (CacheFind (h,key,&e) < 0 || !e.runs || !e.nodes)
+	{
+		_dos_close (h);
+		return 0;
+	}
+	bytes = e.runs*sizeof(bsprun) + e.nodes*sizeof(bspnode);
+	MM_GetPtr (&bsptree,bytes);
+	MM_SetLock (&bsptree,true);
+	lseek (h,e.offset,SEEK_SET);
+	if (_dos_read (h,(void far *)bsptree,bytes,&n) || n != bytes)
+	{
+		_dos_close (h);
+		MM_FreePtr (&bsptree);
+		bsptree = 0;
+		return 0;
+	}
+	_dos_close (h);
+	bb.runs = (bsprun far *)bsptree;
+	bb.nodes = (bspnode far *)(bb.runs + e.runs);
+	bb.numruns = e.runs;
+	bb.numnodes = e.nodes;
+	bb.cuts = e.cuts;
+	bb.maxdepth = e.depth;
+	return 1;
+}
+
+static void CacheSave (long key)
+{
+	int			h, slot;
+	unsigned	bytes, n;
+	bspslot		e;
+
+	if ((h = CacheOpen (1)) < 0)
+		return;
+	if ((slot = CacheFind (h,0,&e)) >= 0)
+	{
+		bytes = bb.numruns*sizeof(bsprun) + bb.numnodes*sizeof(bspnode);
+		e.key = key;
+		e.offset = lseek (h,0L,SEEK_END);
+		e.runs = bb.numruns;
+		e.nodes = bb.numnodes;
+		e.cuts = bb.cuts;
+		e.depth = bb.maxdepth;
+		if (!_dos_write (h,(void far *)bb.runs,bytes,&n) && n == bytes)
+		{
+			lseek (h,8L + (long)slot*sizeof(bspslot),SEEK_SET);
+			_dos_write (h,(void far *)&e,sizeof(e),&n);	// the slot last: a
+		}											// short write leaves it free
+	}
+	_dos_close (h);
+}
+
 void BuildBSP (void)
 {
-	long		t0, t1, t2, t3;
+	long		t0, t1, t2, t3, key;
 	unsigned	i, bytes;
 	int			np;
 	bsplogent	far *l;
@@ -516,6 +675,23 @@ void BuildBSP (void)
 	{
 		MM_FreePtr (&bsptree);
 		bsptree = 0;
+	}
+	key = TreeKey ();
+	if (CacheLoad (key))
+	{
+		if (bsplogn < 8)
+		{
+			l = &bsplog[bsplogn++];
+			l->map = gamestate.mapon + 10*gamestate.episode + 1;
+			l->runs = bb.numruns;
+			l->cuts = bb.cuts;
+			l->nodes = bb.numnodes;
+			l->depth = bb.maxdepth;
+			l->bytes = bb.numruns*sizeof(bsprun) + bb.numnodes*sizeof(bspnode);
+			l->ticks = (unsigned)(BiosTicks () - t0);
+			l->talloc = 0xffff;				// read from the cache
+		}
+		return;
 	}
 	MM_GetPtr (&bsptemp,(long)MAXRUNS*sizeof(bsprun)*2 + (long)MAXLIST*2
 		+ (long)MAXNODES*sizeof(bspnode));
@@ -559,6 +735,8 @@ void BuildBSP (void)
 		bb.numnodes = bb.nn;
 	}
 	MM_FreePtr (&bsptemp);
+	if (bb.numnodes)
+		CacheSave (key);
 
 	if (bsplogn < 8)
 	{
@@ -616,6 +794,13 @@ void BSPReport (void)
 				return;
 			_fstrcpy ((char far *)fmt,bspfail);
 			printf (fmt,l->map);
+		}
+		else if (l->talloc == 0xffff)
+		{
+			if (_fstrlen (bspfmtc) >= sizeof(fmt))
+				return;
+			_fstrcpy ((char far *)fmt,bspfmtc);
+			printf (fmt,l->map,l->runs,l->cuts,l->nodes,l->depth,l->bytes,l->ticks);
 		}
 		else
 		{
