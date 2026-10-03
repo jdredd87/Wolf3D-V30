@@ -313,3 +313,8 @@ estimate made before milestone 2 -- 4-5% better than the walk at best on
 this machine -- still looks right: the walk's tile stepping is cheap
 assembly, and the tree has to pay for the walk, culling and set-up it
 replaces it with.
+
+**The scan, after the fix**: all 288 generated demos (G1-G288; G0's file is
+missing on the 486) played to the end with the BSP on the 486, none hung or
+failed.  Walls were pushed in all 49 pushwall demos and in 15 of the random
+ones as well.
