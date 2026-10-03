@@ -416,7 +416,7 @@ void HitHorizDoor (void)
 	if (lasttilehit == tilehit)
 	{
 	// in the same door as last time, so check for optimized draw
-		if (texture == (unsigned)postsource)
+		if (texture == (unsigned)postsource && pixstep < 4)	// (step 97)
 		{
 		// wide scale
 			postwidth += pixstep;		// step 79: LOWDETAIL's two columns
@@ -491,7 +491,7 @@ void HitVertDoor (void)
 	if (lasttilehit == tilehit)
 	{
 	// in the same door as last time, so check for optimized draw
-		if (texture == (unsigned)postsource)
+		if (texture == (unsigned)postsource && pixstep < 4)	// (step 97)
 		{
 		// wide scale
 			postwidth += pixstep;		// step 79: LOWDETAIL's two columns
@@ -577,7 +577,7 @@ void HitHorizPWall (void)
 	if (lasttilehit == tilehit)
 	{
 		// in the same wall type as last time, so check for optimized draw
-		if (texture == (unsigned)postsource)
+		if (texture == (unsigned)postsource && pixstep < 4)	// (step 97)
 		{
 		// wide scale
 			postwidth += pixstep;		// step 79: LOWDETAIL's two columns
@@ -648,7 +648,7 @@ void HitVertPWall (void)
 	if (lasttilehit == tilehit)
 	{
 		// in the same wall type as last time, so check for optimized draw
-		if (texture == (unsigned)postsource)
+		if (texture == (unsigned)postsource && pixstep < 4)	// (step 97)
 		{
 		// wide scale
 			postwidth += pixstep;		// step 79: LOWDETAIL's two columns
@@ -1234,11 +1234,12 @@ void WallRefresh (void)
 	AsmRefresh ();
 	ScalePost ();			// no more optimization on last post
 	}
-	if (pixstep == 2)			// NEC V30 build (step 79): LOWDETAIL cast every
-	{							// other column; the sprites clip against both
-		int	i;
-		for (i = 0; i < viewwidth; i += 2)
-			wallheight[i+1] = wallheight[i];
+	if (pixstep > 1)			// NEC V30 build (step 79): LOWDETAIL cast every
+	{							// other column (LOWWALLS4, step 97: every fourth);
+		int	i, k;				// the sprites clip against them all
+		for (i = 0; i < viewwidth; i += pixstep)
+			for (k = 1; k < pixstep; k++)
+				wallheight[i+k] = wallheight[i];
 	}
 	if (flatwalls)
 		FlatRender ();			// NEC V30 build (step 81): the walls, at last
