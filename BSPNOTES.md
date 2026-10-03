@@ -67,3 +67,41 @@ different game.  Instead: the picture of frame 1 of each generated demo
 wall comparison of milestone 2, its own generated-demo checksums between its
 own builds (a change that should not alter play must leave them alone), and
 StevenC's eyes on the capture card.
+
+## Milestone 1, done (2026-10-02): the tree at level load
+
+`WL_BSP.C`, called at the end of `SetupGameLevel`; nothing draws from it
+yet, and the attract loop is still id's picture exactly (view `0707C966`,
+screen `F2A10CEB`), with no cost in play (V30 benchmark 722-726 against
+720-721).  TIMEDEMO prints a line per tree built.  Over all 60 maps (one
+generated demo each, on the 486):
+
+| | min | mean | max |
+|---|---|---|---|
+| runs | 131 | 485 | 1,198 |
+| runs cut | 10 | 50 | 145 |
+| nodes | 118 | 409 | 987 |
+| depth | 9 | 10.5 | 15 |
+| bytes kept | 2,086 | 7,256 | 17,587 |
+| build, 486 | 1-2 ticks after the fixes below | | ~5 |
+
+**Build time on the V30 is the problem left**: floor 38 (980 runs) 67
+ticks (3.7 s), floor 28 (537) 37, floor 1 (322) 24 -- added to the level's
+load.  Three versions got it from 269 ticks: choosing each node's line from
+per-coordinate counts over only the node's extent (269 -> 94), scanning
+`tilemap` directly instead of a bounds-checking `Solid()` four times a cell
+(runs 20 -> 6 ticks), and the counts as bytes in near memory with the
+bounding box in locals (94 -> 67).  What is left is Borland's code for far
+memory, which the V30 runs some 20 times slower than the 486 against the
+usual 5.  Next, if it matters: the two inner loops by hand in assembly, or
+a disk cache -- each map's tree written the first time and read (8-18 KB)
+after.
+
+Two lessons, both from hangs (each machine was power-cycled): **`Build` is
+recursive, 9-15 deep, under whatever the game already has on its 4 KB
+stack** -- counts kept in its frame overran it, and so did a 780-byte frame
+of ints in a helper once `Build`'s own frame grew by 20 bytes; and a report
+string longer than the stack buffer it is copied into overran that.  The
+format strings are far data copied to the stack for `printf`, because
+DGROUP has 4 bytes left (the two block handles took the other 4).
+

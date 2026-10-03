@@ -758,6 +758,7 @@ void SetupGameLevel (void)
 //
 	CA_LoadAllSounds ();
 
+	BuildBSP ();						// the BSP version (WL_BSP.C)
 }
 
 

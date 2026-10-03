@@ -932,6 +932,8 @@ void	FizzleCheck (unsigned source, unsigned dest);
 extern	unsigned	tdfzsrc[2],tdfzdst[2];
 extern	boolean		tdfzdone;
 long	BiosTicks (void);
+void	BuildBSP (void);				// WL_BSP.C: the BSP version
+void	BSPReport (void);
 
 //
 // WL_PROF -- the PROFILE sampler (StevenC & Claude)

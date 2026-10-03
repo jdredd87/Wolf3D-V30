@@ -1677,6 +1677,7 @@ void TimeDemo (void)
 		printf ("  | play %5ld ticks %s\n",tl,FpsString(tf-played,tl));
 	}
 	printf ("(play = after each demo's first frame, which carries the fizzle-in)\n");
+	BSPReport ();						// the BSP version: the trees built
 	if (profiling)
 		printf ("PROFILE: %lu samples in PROF.BIN\n",samples);
 	{
