@@ -445,34 +445,48 @@ Measured rather than read off the profile: the whole ceiling and floor fill
 is 31.6 ticks of the 200-frame benchmark (4.1%), and an XMS page-in costs
 about 2 ms.
 
-## Next -- the exhaustion checklist (set with StevenC, 2026-10-02)
+## Done -- the exhaustion checklist, closed 2026-10-02
 
-This exact build is done when every item below has been measured and kept
-or dropped, and no profile item over about 2% is left unworked.  Then it is
-tagged (`exact-final`), and a separate BSP version starts from it on its
-own branch, allowed to change game play slightly -- never merged back.
+Set with StevenC: this exact build is done when every item has been
+measured and kept or dropped, and no profile item over about 2% is left
+unworked.  All of it, as it came out:
 
-1. **Verification on every map** -- done for 240 generated demos (two sets
-   of 120 over all 60 maps, TIMEDEMO GEN; see "Every map, checked"), and
-   the playable release.
-2. **The AdLib on a PicoMEM**: music costs about 3.4% of a frame; if the
-   card's AdLib is emulated, the waits between register writes may be
-   needless.  The same writes in the same order, so the same music.
-3. **Small sprites plane by plane**: one map-mask OUT per plane, not per
-   column, in step 55's pixel walk (0.5-1%).
-4. **Reciprocal division** (Granlund and Montgomery, 1994 -- after Wolf3D)
-   for `CalcHeight`'s divide: the V30's own divide is fast for its
-   multiply, so likely a loss; one measurement to close it.
-5. **The game logic's remaining C** (`T_Chase` and the rest, about 1.7%),
-   in assembly.
-6. **A whole-loop profile of all four demos**, not only demo 0's 200
-   frames, for anything that only the others show.
+1. **Verification on every map** -- 240 generated demos, two sets of 120
+   over all 60 maps (TIMEDEMO GEN; "Every map, checked"), identical to id's
+   renderer after step 92 fixed the one difference they found; and the
+   playable release, v1.0.
+2. **The AdLib on a PicoMEM** -- step 94, `FASTOPL`: 0.75% (721 -> 715),
+   the same music by `MUSICLOG`; an option, since a real OPL2 needs its
+   waits.
+3. **Small sprites plane by plane** -- dropped by measuring its ceiling: a
+   build with the pixel walk's map-mask OUT removed altogether (a wrong
+   picture, for timing only) ran 720, 722, 725 against 720, 721, 722.  An
+   OUT a column costs nothing that shows, so drawing by plane could only
+   add the four passes' overhead.
+4. **Reciprocal division** for `CalcHeight` -- dropped by arithmetic: the
+   V30's 16-bit divide runs at 52,561 a second against 58,640 for its
+   multiply (BENCH), so exact division by reciprocal, two multiplies and a
+   correction at least, costs nearly twice the IDIV it would replace; a
+   486's divide and multiply are as close.
+5. **The game logic's remaining C** -- dropped: the whole-loop profile puts
+   all of it at about 1.4% (`T_Chase`, the largest, 0.27%), where step 64's
+   assembly of `SightPlayer` and `CheckSight` measured as nothing.
+6. **A whole-loop profile** (781,727 samples, all four demos, EMS): the
+   compiled scalers 33.2%, the ray loop and its hit routines 42.6%
+   (`AsmRefresh` 19.1%), the sprite code 12% (`ScaleShape` 6.6%, the
+   weapon 3.0%, `ScaleSpan` 2.4% -- charged by profmap to `BuildCompScale`,
+   the public below it, which first looked like scalers rebuilt in play),
+   `VGAClearScreen` 3.4%, `PlaceActors` 2.2%, `DoActors` 1.9%.  Nothing
+   that demo 0's profile had not shown, and every item over 2% has been
+   worked by several steps.
 
-And one more option, not part of the exact build (StevenC's idea):
-**FARBLOBS** -- a sprite below a height threshold drawn as its silhouette
-in one colour (each column from its first post's start to its last post's
-end, the sprite's average colour as FLATWALLS picks one), no scaler calls:
-a few percent where distant guards and treasure crowd the view.
+And StevenC's FARBLOBS, an option rather than part of the exact build:
+step 93, distant sprites as flat shapes -- 11% on a 486, nothing on the V30.
+
+So the exact build is complete at step 94: id's game and id's picture,
+1.88x id's speed on the V30's demo 0, checked on every map.  It is tagged
+`exact-final`; the BSP version, which may change game play slightly,
+starts from that tag on its own branch and never merges back.
 
 Older candidates, each 0.1-1%: `ScaleSpan`'s per-call overhead for the
 weapon and close sprites (every register is in use); `PlaceActors`' nine
