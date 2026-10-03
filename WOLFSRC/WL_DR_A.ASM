@@ -31,6 +31,7 @@ EXTRN	HitHorizPWall:FAR
 EXTRN	HitVertPWall:FAR
 EXTRN	ScaleShape:FAR
 EXTRN	PM_GetPage:FAR
+EXTRN	DrawRun:FAR				; WL_BSP.C: the BSP branch's run, for BSPWalk
 EXTRN	GetBonus:FAR
 EXTRN	CalcRotate:FAR
 EXTRN	RemoveObj:FAR
@@ -1678,6 +1679,8 @@ PUBLIC	BSPSetPlanes
 	mov	dx,6
 @@xs:
 	mov	[cs:bv_sel+si],dx
+	sub	dx,6					; (and as offsets into bx_box: 0 or 4)
+	mov	[cs:bv_sel2+si],dx
 	mov	ax,[bp+12+si]			; and y: y2 or y1
 	mov	[cs:bv_p+2+si],ax
 	mov	dx,12
@@ -1686,6 +1689,8 @@ PUBLIC	BSPSetPlanes
 	mov	dx,8
 @@ys:
 	mov	[cs:bv_sel+2+si],dx
+	sub	dx,6					; (2 or 6)
+	mov	[cs:bv_sel2+2+si],dx
 	add	si,4
 	cmp	si,12
 	jb	@@plane
@@ -2096,6 +2101,428 @@ PROC	ApproxCol NEAR
 	stc
 	ret
 ENDP
+
+;============================
+;
+; BSPWalk (the BSP branch, StevenC & Claude): WL_BSP.C's Walk, the tree
+; front to back, with its node and run tests -- in C it was a frame and a
+; far call per node to BSPClassify, BoxHidden, BSPColRange and Covered,
+; and one per run to BSPOutside: some 14% of the V30's frame.  Here the
+; tests are near routines on the frame's view (bv_ in the code segment),
+; and C is called only for a run that survives them all (DrawRun).
+;
+; void BSPWalk (bspnode far *nodes, bsprun far *runs, bsprange far *solid,
+;	int far *left)
+; unsigned BSPWalkStat (int which) -- the last frame's nodes, culled,
+;	hidden subtrees, runs drawn
+;
+; A node is 13 bytes (Borland packs bytes): axis, coord, lo, hi, first,
+; count, x1, y1, x2, y2.  A run 4: of, line, a1, a2.  A range 4: a, b.
+;
+WN_AXIS	=	0
+WN_COORD =	1
+WN_LO	=	2
+WN_HI	=	4
+WN_FIRST =	6
+WN_COUNT =	8
+WN_X1	=	9
+WN_SIZE	=	13
+
+PROC	BSPWalk FAR
+PUBLIC	BSPWalk
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	ax,[bp+6]
+	mov	[WORD cs:wk_nodes],ax
+	mov	ax,[bp+8]
+	mov	[WORD cs:wk_nodes+2],ax
+	mov	ax,[bp+10]
+	mov	[WORD cs:wk_runs],ax
+	mov	ax,[bp+12]
+	mov	[WORD cs:wk_runs+2],ax
+	mov	ax,[bp+14]
+	mov	[WORD cs:wk_solid],ax
+	mov	ax,[bp+16]
+	mov	[WORD cs:wk_solid+2],ax
+	mov	ax,[bp+18]
+	mov	[WORD cs:wk_left],ax
+	mov	ax,[bp+20]
+	mov	[WORD cs:wk_left+2],ax
+	xor	ax,ax
+	mov	[cs:wk_cnt],ax
+	mov	[cs:wk_cnt+2],ax
+	mov	[cs:wk_cnt+4],ax
+	mov	[cs:wk_cnt+6],ax
+	xor	bx,bx						; node 0, not known inside
+	call	WalkNode
+	pop	di
+	pop	si
+	pop	bp
+	retf
+ENDP
+
+PROC	BSPWalkStat FAR
+PUBLIC	BSPWalkStat
+	push	bp
+	mov	bp,sp
+	mov	bx,[bp+6]
+	shl	bx,1
+	mov	ax,[cs:wk_cnt+bx]
+	pop	bp
+	retf
+ENDP
+
+;
+; ES:DI = node AX (AX kept)
+;
+PROC	NodeAt NEAR
+	push	ax
+	push	dx
+	mov	dx,WN_SIZE
+	mul	dx
+	add	ax,[WORD cs:wk_nodes]
+	mov	di,ax
+	mov	es,[WORD cs:wk_nodes+2]
+	pop	dx
+	pop	ax
+	ret
+ENDP
+
+;
+; AX = bspleft (the columns no wall has claimed); flags from OR AX,AX
+;
+PROC	LeftNow NEAR
+	push	es
+	push	bx
+	les	bx,[DWORD cs:wk_left]
+	mov	ax,[es:bx]
+	pop	bx
+	pop	es
+	or	ax,ax
+	ret
+ENDP
+
+;
+; WalkNode: AX the node (-1 none), BX 1 if its box is known wholly in view.
+; Recursive on the near side; the far side is a loop.
+;
+WL_N	=	-2
+WL_IN	=	-4
+WL_FAR	=	-6
+WL_SIDE	=	-8							; bit 0: camera below the line, 1: above
+WL_K	=	-10
+WL_R	=	-12
+
+PROC	WalkNode NEAR
+	push	bp
+	mov	bp,sp
+	sub	sp,12
+	mov	[bp+WL_N],ax
+	mov	[bp+WL_IN],bx
+@@node:
+	mov	ax,[bp+WL_N]
+	or	ax,ax
+	js	@@ret
+	call	LeftNow
+	jle	@@ret
+	inc	[WORD cs:wk_cnt]
+	mov	ax,[bp+WL_N]
+	call	NodeAt
+	mov	al,[es:di+WN_X1]			; its box, for the tests
+	xor	ah,ah
+	mov	[cs:bx_box],ax
+	mov	al,[es:di+WN_X1+1]
+	mov	[cs:bx_box+2],ax
+	mov	al,[es:di+WN_X1+2]
+	mov	[cs:bx_box+4],ax
+	mov	al,[es:di+WN_X1+3]
+	mov	[cs:bx_box+6],ax
+	cmp	[WORD bp+WL_IN],0
+	jne	@@inview
+	call	BoxClass
+	cmp	ax,1
+	jne	@@notout
+	inc	[WORD cs:wk_cnt+2]
+	jmp	@@ret						; nothing below it is in view
+@@notout:
+	cmp	ax,2
+	jne	@@inview
+	mov	[WORD bp+WL_IN],1			; wholly in view: all below it too
+@@inview:
+	call	BoxHid
+	jnc	@@seen
+	inc	[WORD cs:wk_cnt+4]
+	jmp	@@ret						; wholly behind what is drawn
+@@seen:
+	mov	ax,[bp+WL_N]
+	call	NodeAt
+	mov	cl,[es:di+WN_COORD]			; the camera's side of the line, by the
+	xor	ch,ch						; whole tile of viewx or viewy
+	mov	dx,[WORD viewx+2]
+	mov	si,[WORD viewx]
+	cmp	[BYTE es:di+WN_AXIS],0
+	je	@@xaxis
+	mov	dx,[WORD viewy+2]
+	mov	si,[WORD viewy]
+@@xaxis:
+	xor	bx,bx
+	cmp	dx,cx
+	jge	@@notbelow
+	mov	bx,1						; below: cam < coord<<16
+	mov	ax,[es:di+WN_LO]			; near side lo, far side hi
+	mov	dx,[es:di+WN_HI]
+	jmp	@@sides
+@@notbelow:
+	jg	@@above
+	or	si,si
+	jz	@@onit
+@@above:
+	mov	bx,2						; above: cam > coord<<16
+@@onit:
+	mov	ax,[es:di+WN_HI]
+	mov	dx,[es:di+WN_LO]
+@@sides:
+	mov	[bp+WL_SIDE],bx
+	mov	[bp+WL_FAR],dx
+	mov	bx,[bp+WL_IN]
+	call	WalkNode					; the near side first
+	call	LeftNow
+	jle	@@ret
+
+	mov	ax,[bp+WL_N]				; the node's own runs, those that face
+	call	NodeAt						; the camera
+	mov	al,[es:di+WN_COUNT]
+	xor	ah,ah
+	mov	[bp+WL_K],ax
+	mov	ax,[es:di+WN_FIRST]
+	shl	ax,1
+	shl	ax,1
+	add	ax,[WORD cs:wk_runs]
+	mov	[bp+WL_R],ax
+@@run:
+	cmp	[WORD bp+WL_K],0
+	je	@@nextnode
+	les	di,[DWORD cs:wk_runs]
+	mov	di,[bp+WL_R]
+	mov	al,[es:di]					; of
+	test	al,2
+	jz	@@lowside
+	test	[BYTE bp+WL_SIDE],2			; looks up: drawn when the camera is above
+	jz	@@skiprun
+	jmp	@@faces
+@@lowside:
+	test	[BYTE bp+WL_SIDE],1			; looks down: when the camera is below
+	jz	@@skiprun
+@@faces:
+	cmp	[WORD bp+WL_IN],0
+	jne	@@draw
+	mov	bl,[es:di+1]				; line
+	xor	bh,bh
+	mov	cl,[es:di+2]				; a1
+	xor	ch,ch
+	mov	dl,[es:di+3]				; a2
+	xor	dh,dh
+	test	al,1
+	jnz	@@horiz
+	mov	[cs:bx_box],bx				; x = line, y from a1 to a2
+	mov	[cs:bx_box+2],cx
+	mov	[cs:bx_box+4],bx
+	mov	[cs:bx_box+6],dx
+	jmp	@@test
+@@horiz:
+	mov	[cs:bx_box],cx				; y = line, x from a1 to a2
+	mov	[cs:bx_box+2],bx
+	mov	[cs:bx_box+4],dx
+	mov	[cs:bx_box+6],bx
+@@test:
+	call	BoxClass
+	cmp	ax,1
+	je	@@skiprun
+@@draw:
+	inc	[WORD cs:wk_cnt+6]
+	mov	ax,[WORD cs:wk_runs+2]
+	push	ax
+	push	[WORD bp+WL_R]
+	call	DrawRun						; C; keeps SI, DI, BP
+	add	sp,4
+@@skiprun:
+	add	[WORD bp+WL_R],4
+	dec	[WORD bp+WL_K]
+	jmp	@@run
+@@nextnode:
+	mov	ax,[bp+WL_FAR]				; the far side: a loop, not a call
+	mov	[bp+WL_N],ax
+	jmp	@@node
+@@ret:
+	mov	sp,bp
+	pop	bp
+	ret
+ENDP
+
+;
+; BoxClass: the box in bx_box (tiles) against the view's planes -- AX 1 if
+; wholly behind one, 2 if wholly inside all three, else 0.  Keeps DI.
+;
+PROC	BoxClass NEAR
+	push	di
+	xor	di,di
+	mov	[cs:bv_in],2
+@@plane:
+	mov	si,[cs:bv_sel2+di]
+	mov	ax,[cs:bx_box+si]			; the corner furthest along the normal
+	shl	ax,8
+	sub	ax,[cs:bv_cx]
+	imul	[WORD cs:bv_p+di]
+	mov	cx,ax
+	mov	bx,dx
+	mov	si,[cs:bv_sel2+2+di]
+	mov	ax,[cs:bx_box+si]
+	shl	ax,8
+	sub	ax,[cs:bv_cy]
+	imul	[WORD cs:bv_p+2+di]
+	add	ax,cx
+	adc	dx,bx
+	js	@@out
+	cmp	[cs:bv_in],0
+	je	@@next
+	mov	si,4						; the nearest corner: the other x and y
+	sub	si,[cs:bv_sel2+di]
+	mov	ax,[cs:bx_box+si]
+	shl	ax,8
+	sub	ax,[cs:bv_cx]
+	imul	[WORD cs:bv_p+di]
+	mov	cx,ax
+	mov	bx,dx
+	mov	si,8
+	sub	si,[cs:bv_sel2+2+di]
+	mov	ax,[cs:bx_box+si]
+	shl	ax,8
+	sub	ax,[cs:bv_cy]
+	imul	[WORD cs:bv_p+2+di]
+	add	ax,cx
+	adc	dx,bx
+	jns	@@next
+	mov	[cs:bv_in],0
+@@next:
+	add	di,4
+	cmp	di,12
+	jb	@@plane
+	mov	ax,[cs:bv_in]
+	pop	di
+	ret
+@@out:
+	mov	ax,1
+	pop	di
+	ret
+ENDP
+
+;
+; BoxHid: CF set if the box in bx_box lies wholly behind what is drawn --
+; its two silhouette corners (which two by where the camera is: Doom's
+; checkcoord), their rough columns (ApproxCol), and those columns, widened
+; by 4, inside one claimed range.  Clobbers all but BP.
+;
+BH_SLACK	=	4
+
+PROC	BoxHid NEAR
+	mov	ax,[cs:bx_box]				; the camera left of, within or right of
+	shl	ax,8						; the box: 0, 1, 2; above, within, below:
+	xor	bx,bx						; 0, 3, 6
+	cmp	[cs:bv_cx],ax
+	jl	@@hx
+	inc	bx
+	mov	ax,[cs:bx_box+4]
+	shl	ax,8
+	cmp	[cs:bv_cx],ax
+	jle	@@hx
+	inc	bx
+@@hx:
+	mov	ax,[cs:bx_box+2]
+	shl	ax,8
+	cmp	[cs:bv_cy],ax
+	jl	@@hy
+	add	bx,3
+	mov	ax,[cs:bx_box+6]
+	shl	ax,8
+	cmp	[cs:bv_cy],ax
+	jle	@@hy
+	add	bx,3
+@@hy:
+	cmp	bx,4
+	je	@@no						; the camera is in it
+	shl	bx,1
+	shl	bx,1
+	mov	si,bx						; 4 bytes a case: x, y, x, y selectors
+	mov	bl,[cs:bh_tab+si]
+	xor	bh,bh
+	mov	ax,[cs:bx_box+bx]
+	mov	bl,[cs:bh_tab+si+1]
+	mov	dx,[cs:bx_box+bx]
+	push	si
+	call	ApproxCol
+	pop	si
+	jc	@@no
+	mov	[cs:bh_c1],ax
+	mov	bl,[cs:bh_tab+si+2]
+	xor	bh,bh
+	mov	ax,[cs:bx_box+bx]
+	mov	bl,[cs:bh_tab+si+3]
+	mov	dx,[cs:bx_box+bx]
+	call	ApproxCol
+	jc	@@no
+	mov	bx,[cs:bh_c1]				; Covered: c1 the lesser, both widened
+	cmp	bx,ax
+	jle	@@ord
+	xchg	bx,ax
+@@ord:
+	sub	bx,BH_SLACK
+	add	ax,BH_SLACK+1
+	jns	@@c1ok
+	xor	bx,bx
+@@c1ok:
+	or	bx,bx
+	jns	@@c1pos
+	xor	bx,bx
+@@c1pos:
+	cmp	ax,[viewwidth]
+	jle	@@c2ok
+	mov	ax,[viewwidth]
+@@c2ok:
+	cmp	bx,ax
+	jge	@@yes						; nothing on the screen
+	les	si,[DWORD cs:wk_solid]
+@@find:
+	cmp	[es:si+2],bx				; the first range ending past c1
+	jg	@@found
+	add	si,4
+	jmp	@@find
+@@found:
+	cmp	[es:si],bx
+	jg	@@no
+	cmp	[es:si+2],ax
+	jl	@@no
+@@yes:
+	stc
+	ret
+@@no:
+	clc
+	ret
+ENDP
+
+bh_tab	db	4,2,0,6, 0,2,4,2, 0,2,4,6	; per case: the two corners' x and y,
+		db	0,2,0,6, 0,0,0,0, 4,2,4,6	; as offsets into bx_box (x1 0, y1 2,
+		db	0,2,4,6, 0,6,4,6, 4,2,0,6	; x2 4, y2 6)
+bh_c1	dw	0
+bx_box	dw	4 DUP (0)				; the box being tested, in tiles
+bv_sel2	dw	6 DUP (0)				; each plane's corner, as bx_box offsets
+wk_nodes	dd	0
+wk_runs		dd	0
+wk_solid	dd	0
+wk_left		dd	0
+wk_cnt		dw	4 DUP (0)			; nodes, culled, hidden, runs drawn
+
 
 
 bv_cx		dw	0				; the camera, 8.8 tiles

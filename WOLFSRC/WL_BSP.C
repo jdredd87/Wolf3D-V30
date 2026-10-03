@@ -861,6 +861,8 @@ bsprange	far solid[MAXSOLID];
 int			far nsolid;
 
 int BSPColRange (int x1, int y1, int x2, int y2, int *c1, int *c2);
+void BSPWalk (void far *nodes, void far *runs, void far *solid, int far *left);
+unsigned BSPWalkStat (int which);
 
 #define HIDESLACK	4					// columns: BSPColRange's error, and more
 
@@ -1383,7 +1385,7 @@ static int Ends (long gx1, long gy1, long gx2, long gy2, long u1, long u2,
 //
 // one wall run: its unclaimed columns, each with its own post
 //
-static void DrawRun (bsprun far *r)
+void DrawRun (bsprun far *r)			// (called by BSPWalk, in WL_DR_A.ASM)
 {
 	bspend		e1, e2, t;
 	int			col, cs, ce, c1, c2, k, end, vertical, up, a1, a2, rl, pic;
@@ -1921,7 +1923,11 @@ void BSPRefresh (void)
 	postmin = 0x7fff;					// step 62's least wall, this frame
 	SetPlanes ();
 	st_frames++;
-	Walk (0,0);
+	BSPWalk (bb.nodes,bb.runs,solid,&bspleft);	// the tree, in WL_DR_A.ASM
+	st_nodes += BSPWalkStat (0);
+	st_culled += BSPWalkStat (1);
+	st_boxhid += BSPWalkStat (2);
+	st_runs += BSPWalkStat (3);
 	if (bspleft > 0)					// columns no wall reached: the claims
 	{									// as a byte a column, for the doors
 		int	k;
