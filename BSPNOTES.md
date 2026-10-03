@@ -270,3 +270,46 @@ the 60 maps had was 1,198 runs, 145 more cut, and 987 nodes) -- a map that
 needed more would simply be drawn by the walk.
 
 **BSP is now the default on this branch**; `WALK` gives id's rays.
+
+Checked against the walk frame by frame on G240 (E1M1's portrait wall):
+every tenth frame through the push, the walk in and the turn, differing
+only in single texels, mostly on the right half of the view (id's rays put
+that half one column over from its own sprite projection, which the tree
+follows).  Pushwall maps on the V30, play frames, before and after the
+standing blocks went into the tree:
+
+| demo | walk | blocks drawn apart | blocks in the tree |
+|---|---|---|---|
+| G245 (floor 6) | 6.67 | 4.53 | 5.23 |
+| G255 (floor 16) | 6.66 | 4.10 | 4.91 |
+| G266 (floor 31) | 7.31 | 4.86 | 5.88 |
+| G281 (floor 51) | 6.05 | 3.99 | 4.70 |
+
+## Last steps of the day, and a hang (2026-10-03)
+
+* **`BSPCols` in fewer bytes.**  On the V30 the column loop is
+  fetch-bound -- some 750 clocks a column for about 150 bytes of
+  instructions -- so: the height in CX:BP (its step's remainder left out,
+  1/65536 a column), the flip as an XOR mask (0FC0h - t is t xor 0FC0h),
+  and no page compare, since a post never spans a tile change.  Demo 0
+  3.91 -> 4.01, G245 5.23 -> 5.42.
+* **`BSPClassify`**: a node wholly inside the view needs no frustum test
+  below it.  Demo 0 4.01 -> 4.05; little, but nothing lost.
+* **Map 52 hung at load** (generated demo G102), with `WALK` as much as
+  with the tree, because the tree is built either way.  Its tree is the
+  deepest of the 60, and with the pushwalls' faces `Build`'s recursion plus
+  `ChooseSplit`'s 390 bytes of counts overran the game's 4 KB stack -- the
+  milestone 1 lesson again.  The counts are far statics now (`ChooseSplit`
+  is never re-entered), and a tree deeper than 24 is given up for the walk.
+  Found only by playing every generated demo with the BSP; the scan of all
+  288 on the 486 is the test this branch is held to.
+
+**Where it stands**: on the V30 the BSP runs demo 0 at 4.05 fps against
+the walk's 4.98 (81%), and pushwall maps at 78-81%.  Its own code is now
+mostly assembly; what is left is spread thin -- the column loop 8%, object
+visibility 5%, the tree walk and its tests (`Walk`, `BSPOutside`,
+`BSPColRange`, `BoxHidden`) about 14%, the runs' set-up about 7%.  The
+estimate made before milestone 2 -- 4-5% better than the walk at best on
+this machine -- still looks right: the walk's tile stepping is cheap
+assembly, and the tree has to pay for the walk, culling and set-up it
+replaces it with.
