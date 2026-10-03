@@ -1243,6 +1243,17 @@ void InitGame (void)
 	PM_Startup ();
 	PM_UnlockMainMem ();
 	SD_Startup ();
+	{									// FASTOPL (StevenC & Claude): no waits between
+		int i;							// AdLib writes, for an emulated OPL2
+		extern unsigned alDelayAddr,alDelayData;
+		for (i = 1;i < _argc;i++)
+		{
+			char far *a = _argv[i];
+			if ((a[0]|32)=='f' && (a[1]|32)=='a' && (a[2]|32)=='s' && (a[3]|32)=='t'
+				&& (a[4]|32)=='o' && (a[5]|32)=='p' && (a[6]|32)=='l' && !a[7])
+				alDelayAddr = alDelayData = 0;
+		}
+	}
 	CA_Startup ();
 	US_Startup ();
 

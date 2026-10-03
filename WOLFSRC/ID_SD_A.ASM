@@ -673,18 +673,22 @@ ARG		n:WORD, b:WORD
 	mov	al,[BYTE n]
 	out	dx,al
 	mov	cx,[alDelayAddr]
+	jcxz	@@naddr					; FASTOPL: no wait at all
 @@waddr:
 	in	al,dx
 	loop	@@waddr
+@@naddr:
 	inc	dx
 	mov	al,[BYTE b]
 	out	dx,al
 	popf
 	dec	dx
 	mov	cx,[alDelayData]
+	jcxz	@@ndata
 @@wdata:
 	in	al,dx
 	loop	@@wdata
+@@ndata:
 	ret
 ENDP
 
