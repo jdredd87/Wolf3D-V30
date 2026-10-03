@@ -1014,6 +1014,165 @@ PUBLIC	ScalePostF
 	retf
 ENDP
 
+;============================
+;
+; BSPCols (the BSP branch, StevenC & Claude): DrawRun's column loop, from
+; WL_BSP.C, where Borland kept every value in memory and reloaded it per
+; use.  For each column from c->col to c->end: the height, the stepped
+; height, its whole part (at least 1); the texel, the stepped u*h over it
+; by one DIV, clamped to the run; its texture column, flipped for the
+; side; then the post -- the same texture column as the last widens it,
+; another draws the last (ScalePostA) and starts this one -- and both
+; steps advance exactly (a quotient, and a remainder carried).
+;
+; int BSPCols (bspcols *c) -- AX 0 when c->col reaches c->end; 1 when the
+; next column is on another tile than c->tile, which is set to it and the
+; column left undone: the C loads that tile's page and calls again.
+;
+; The struct is DrawRun's local (SS = DS); the offsets are the C's own.
+;
+BC_COL	=	0
+BC_END	=	2
+BC_HV	=	4						; bspstep H: v (16.16), q, r, e, d
+BC_HQ	=	8
+BC_HR	=	12
+BC_HE	=	14
+BC_HD	=	16
+BC_UV	=	18						; bspstep UH
+BC_UQ	=	22
+BC_UR	=	26
+BC_UE	=	28
+BC_UD	=	30
+BC_TILE	=	32
+BC_A1	=	34
+BC_UMAX	=	36
+BC_PAGE	=	38
+BC_FLIP	=	40
+
+PROC	BSPCols FAR
+PUBLIC	BSPCols
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	mov	si,[bp+6]
+
+@@col:
+	mov	di,[si+BC_COL]
+	cmp	di,[si+BC_END]
+	jge	@@done
+	mov	cx,[si+BC_HV+2]			; h
+	or	cx,cx
+	jnz	@@hok
+	inc	cx
+@@hok:
+	mov	dx,[si+BC_UV+2]			; u = uh/h, clamped to the run
+	or	dx,dx
+	js	@@u0
+	cmp	dx,cx
+	jae	@@umax
+	mov	ax,[si+BC_UV]
+	div	cx
+	cmp	ax,[si+BC_UMAX]
+	jbe	@@uok
+@@umax:
+	mov	ax,[si+BC_UMAX]
+	jmp	@@uok
+@@u0:
+	xor	ax,ax
+@@uok:
+	mov	bx,ax
+	shr	bx,6
+	add	bx,[si+BC_A1]
+	cmp	bx,[si+BC_TILE]
+	jne	@@newtile
+	and	ax,63					; the texture column
+	shl	ax,6
+	cmp	[WORD si+BC_FLIP],0
+	je	@@noflip
+	neg	ax
+	add	ax,0fc0h
+@@noflip:
+	mov	dx,[si+BC_PAGE]
+	cmp	[postwidth],0
+	je	@@newpost
+	cmp	ax,[WORD postsource]
+	jne	@@flush
+	cmp	dx,[WORD postsource+2]
+	jne	@@flush
+	inc	[postwidth]				; the same texture column: wider
+	mov	bx,di
+	shl	bx,1
+	mov	ax,[wallheight+bx-2]
+	mov	[wallheight+bx],ax
+	jmp	@@step
+@@flush:
+	push	ax
+	push	dx
+	push	cx
+	push	di
+	call	ScalePostA				; keeps SI
+	pop	di
+	pop	cx
+	pop	dx
+	pop	ax
+@@newpost:
+	mov	[WORD postsource],ax
+	mov	[WORD postsource+2],dx
+	mov	[postx],di
+	mov	[postwidth],1
+	mov	bx,di
+	shl	bx,1
+	mov	[wallheight+bx],cx
+
+@@step:
+	mov	ax,[si+BC_HQ]			; H += q, and the remainder carried
+	add	[si+BC_HV],ax
+	mov	ax,[si+BC_HQ+2]
+	adc	[si+BC_HV+2],ax
+	mov	ax,[si+BC_HE]
+	add	ax,[si+BC_HR]
+	jc	@@hc					; (e + r can pass 0FFFFh: unsigned)
+	cmp	ax,[si+BC_HD]
+	jb	@@hn
+@@hc:
+	sub	ax,[si+BC_HD]
+	add	[WORD si+BC_HV],1
+	adc	[WORD si+BC_HV+2],0
+@@hn:
+	mov	[si+BC_HE],ax
+	mov	ax,[si+BC_UQ]			; UH likewise
+	add	[si+BC_UV],ax
+	mov	ax,[si+BC_UQ+2]
+	adc	[si+BC_UV+2],ax
+	mov	ax,[si+BC_UE]
+	add	ax,[si+BC_UR]
+	jc	@@uc
+	cmp	ax,[si+BC_UD]
+	jb	@@un
+@@uc:
+	sub	ax,[si+BC_UD]
+	add	[WORD si+BC_UV],1
+	adc	[WORD si+BC_UV+2],0
+@@un:
+	mov	[si+BC_UE],ax
+	inc	[WORD si+BC_COL]
+	jmp	@@col
+
+@@newtile:
+	mov	[si+BC_TILE],bx
+	mov	ax,1
+	jmp	@@ret
+@@done:
+	xor	ax,ax
+@@ret:
+	pop	di
+	pop	si
+	pop	bp
+	retf
+ENDP
+
+
 
 ;============================
 ;

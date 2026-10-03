@@ -537,6 +537,63 @@ byte	far bspclaim[MAXVIEWWIDTH];	// columns drawn this frame
 int		far bspleft;				// and how many are not
 
 //
+// The columns claimed so far, as sorted ranges [a,b) with a sentinel at
+// each end (Doom's solidsegs): a run is stepped only through the gaps
+// between them.  The first version stepped every column a run covered and
+// skipped the claimed ones -- a far wall behind a near one cost all its
+// columns -- and that loop was 37% of DrawRun on the V30.
+//
+typedef struct
+{
+	int		a, b;
+} bsprange;
+
+#define MAXSOLID	(MAXVIEWWIDTH/2+4)
+
+bsprange	far solid[MAXSOLID];
+int			far nsolid;
+
+static void ClaimInit (void)
+{
+	solid[0].a = -0x7fff;
+	solid[0].b = 0;
+	solid[1].a = viewwidth;
+	solid[1].b = 0x7fff;
+	nsolid = 2;
+}
+
+//
+// [cs,ce) is claimed: merged with every range it overlaps or touches
+//
+static void Claim (int cs, int ce)
+{
+	int		i, j;
+
+	for (i = 0; solid[i].b < cs; i++)
+		;
+	for (j = i; j < nsolid && solid[j].a <= ce; j++)
+		;
+	if (i == j)							// touches nothing: a new range
+	{
+		if (nsolid >= MAXSOLID)
+			return;
+		_fmemmove (&solid[i+1],&solid[i],(nsolid-i)*sizeof(bsprange));
+		solid[i].a = cs;
+		solid[i].b = ce;
+		nsolid++;
+		return;
+	}
+	if (cs < solid[i].a)
+		solid[i].a = cs;
+	solid[i].b = ce > solid[j-1].b ? ce : solid[j-1].b;
+	if (j - i > 1)
+	{
+		_fmemmove (&solid[i+1],&solid[j],(nsolid-j)*sizeof(bsprange));
+		nsolid -= j - i - 1;
+	}
+}
+
+//
 // The arithmetic of a run's ends, on the 8086's own MUL and DIV.  Borland
 // does every long multiply and divide in a helper (LXMUL@, LDIV@ -- the
 // divide a 32-step loop), and a run's ends took two dozen of them: on the
@@ -742,15 +799,15 @@ typedef struct
 		long		l;
 		unsigned	w[2];		// w[1]: the whole part of a 16.16 height
 	} v;
-	long	q;
-	int		r, e, d;
+	long		q;
+	unsigned	r, e, d;	// (unsigned: e + r can pass 32767)
 } bspstep;
 
 //
 // floor(dv*x/d) and its remainder (0 <= rem < d): the product is 48 bits,
 // divided by three DIVs, so nothing overflows on the way
 //
-static long MulDivFloor (long dv, unsigned x, unsigned d, int *rem)
+static long MulDivFloor (long dv, unsigned x, unsigned d, unsigned *rem)
 {
 	unsigned	neg = 0, p0, q0, q1, r;
 	bspword		w;
@@ -796,14 +853,31 @@ asm	mov	[r],dx
 	return -(long)w.l;
 }
 
-static void StepInit (bspstep *s, long a, long b, int off, int d)
+static void StepInit (bspstep *s, long a, long b, unsigned off, unsigned d)
 {
 	s->d = d;
 	s->q = MulDivFloor (b-a,64,d,&s->r);
 	s->v.l = a + MulDivFloor (b-a,off,d,&s->e);
 }
 
-#define STEP(s)	((s).v.l += (s).q, ((s).e += (s).r) >= (s).d ? ((s).e -= (s).d, (s).v.l++) : 0)
+#define STEP(s)	((s).v.l += (s).q, ((s).e += (s).r) >= (s).d || (s).e < (s).r ? ((s).e -= (s).d, (s).v.l++) : 0)
+
+//
+// DrawRun's column loop, in WL_DR_A.ASM: the struct's layout is the
+// assembly's (BC_ offsets there)
+//
+typedef struct
+{
+	int			col, end;		// the columns to do, [col,end)
+	bspstep		H, UH;
+	int			tile;			// the tile whose page is loaded
+	int			a1;				// the run's first tile
+	unsigned	umax;			// its last texel
+	unsigned	page;			// the texture's segment
+	int			flip;
+} bspcols;
+
+int BSPCols (bspcols *c);
 
 //
 // A view-space point's column (in 64ths, and whole) and height, and u*h,
@@ -963,11 +1037,11 @@ static int Ends (long gx1, long gy1, long gx2, long gy2, long u1, long u2,
 static void DrawRun (bsprun far *r)
 {
 	bspend		e1, e2, t;
-	int			col, cs, ce, c1, c2, vertical, up, flip, tile, lasttile, a1, a2, rl, pic;
+	int			col, cs, ce, c1, c2, k, end, vertical, up, a1, a2, rl, pic;
 	long		line;
-	bspstep		H, UH;
+	bspcols		bc;
 	bspword		hw1, hw2;
-	unsigned	h, u, uhlo, uhhi, texture, tilehitv, page;
+	unsigned	tilehitv;
 
 	vertical = !(r->of & 1);
 	up = r->of & 2;
@@ -996,94 +1070,66 @@ static void DrawRun (bsprun far *r)
 	ce = c2 > viewwidth << 6 ? viewwidth : (c2 + 63) >> 6;
 	if (cs >= ce)
 		return;
+	for (k = 0; solid[k].b <= cs; k++)
+		;
+	if (solid[k].a <= cs && solid[k].b >= ce)
+		return;							// wholly behind what is drawn
 	hw1.w[0] = hw2.w[0] = 0;
 	hw1.w[1] = (unsigned)e1.h;
 	hw2.w[1] = (unsigned)e2.h;
-	StepInit (&H,(long)hw1.l,(long)hw2.l,(cs << 6) - c1,c2 - c1);
-	StepInit (&UH,e1.uh,e2.uh,(cs << 6) - c1,c2 - c1);
-	flip = vertical ? up : !up;
+	bc.flip = vertical ? up : !up;
+	bc.a1 = a1;
+	bc.umax = ((a2-a1) << 6) - 1;
+	bc.tile = -1;
+	bc.page = 0;
 
-	lasttile = -1;
-	page = 0;
-	postwidth = 0;
-	for (col = cs; col < ce; col++, STEP(H), STEP(UH))
+	col = cs;
+	while (col < ce)
 	{
-		if (bspclaim[col])
+		if (solid[k].a <= col)
+		{
+			col = solid[k].b;				// claimed: on past it
+			k++;
+			continue;
+		}
+		end = solid[k].a < ce ? solid[k].a : ce;
+		bspleft -= end - col;
+		StepInit (&bc.H,(long)hw1.l,(long)hw2.l,(col << 6) - c1,c2 - c1);
+		StepInit (&bc.UH,e1.uh,e2.uh,(col << 6) - c1,c2 - c1);
+		bc.col = col;
+		bc.end = end;
+		postwidth = 0;
+		while (BSPCols (&bc))			// a new tile: its page
 		{
 			if (postwidth)
 			{
-				ScalePostF ();
-				postwidth = 0;
+				ScalePostF ();				// before PM_GetPage, which can
+				postwidth = 0;				// evict the page it points into
 			}
-			continue;
-		}
-		h = H.v.w[1];
-		if (!h)
-			h = 1;
-		uhhi = UH.v.w[1];
-		if ((int)uhhi < 0)
-			u = 0;
-		else if (uhhi >= h)
-			u = 0xffff;
-		else
-		{
-			uhlo = UH.v.w[0];
-asm			mov	ax,[uhlo]
-asm			mov	dx,[uhhi]
-asm			div	[h]
-asm			mov	[u],ax
-		}
-		tile = a1 + (u >> 6);
-		if (tile >= a2)
-		{
-			tile = a2-1;
-			u = ((a2-a1) << 6) - 1;
-		}
-		if (tile != lasttile)
-		{
-			lasttile = tile;
 			if (vertical)
 			{
-				tilehitv = tilemap[up ? rl-1 : rl][tile];
-				if ((tilehitv & 0x40) && (tilemap[up ? rl : rl-1][tile] & 0x80))
+				tilehitv = tilemap[up ? rl-1 : rl][bc.tile];
+				if ((tilehitv & 0x40) && (tilemap[up ? rl : rl-1][bc.tile] & 0x80))
 					pic = DOORWALL+3;
 				else
 					pic = vertwall[tilehitv & ~0x40];
 			}
 			else
 			{
-				tilehitv = tilemap[tile][up ? rl-1 : rl];
-				if ((tilehitv & 0x40) && (tilemap[tile][up ? rl : rl-1] & 0x80))
+				tilehitv = tilemap[bc.tile][up ? rl-1 : rl];
+				if ((tilehitv & 0x40) && (tilemap[bc.tile][up ? rl : rl-1] & 0x80))
 					pic = DOORWALL+2;
 				else
 					pic = horizwall[tilehitv & ~0x40];
 			}
-			page = (unsigned)PM_GetPage (pic);
+			bc.page = (unsigned)PM_GetPage (pic);
 		}
-		texture = (u & 63) << 6;
-		if (flip)
-			texture = 0xfc0 - texture;
-		bspclaim[col] = 1;
-		bspleft--;
-		if (postwidth && col == postx+postwidth
-			&& ((unsigned *)&postsource)[0] == texture
-			&& ((unsigned *)&postsource)[1] == page)
-		{
-			postwidth++;					// the same texture column: wider
-			wallheight[col] = wallheight[col-1];
-			continue;
-		}
-		wallheight[col] = h;
 		if (postwidth)
 			ScalePostF ();
-		((unsigned *)&postsource)[0] = texture;
-		((unsigned *)&postsource)[1] = page;
-		postx = col;
-		postwidth = 1;
+		postwidth = 0;
+		col = end;
 	}
-	if (postwidth)
-		ScalePostF ();
-	postwidth = 0;
+	Claim (cs,ce);
 }
 
 //
@@ -1107,7 +1153,11 @@ int		far pn[3][2];
 //
 static int SignMag (long v)
 {
-	return (v & 0x80000000L) ? -(int)((v & 0x7fffffffL) >> 8) : (int)(v >> 8);
+	int		m;
+
+asm	mov	ax,word ptr [v+1]				/* the magnitude >> 8: it is under 2^17 */
+asm	mov	[m],ax
+	return (((byte *)&v)[3] & 0x80) ? -m : m;
 }
 
 //
@@ -1283,7 +1333,7 @@ static void DrawDoors (void)
 			h = H.v.w[1];
 			if (!h)
 				h = 1;
-			if (bspclaim[col] && h <= wallheight[col])
+			if ((!bspleft || bspclaim[col]) && h <= wallheight[col])
 				continue;					// a wall in front of it
 			if ((int)UH.v.w[1] < 0)
 				u = 0;
@@ -1304,7 +1354,7 @@ asm				mov	[u],ax
 				continue;					// the open part: what is behind shows
 			texture = ((frac - dp) >> 4) & 0xfc0;
 			wallheight[col] = h;
-			if (!bspclaim[col])
+			if (bspleft && !bspclaim[col])
 			{
 				bspclaim[col] = 1;
 				bspleft--;
@@ -1427,12 +1477,20 @@ void BSPRefresh (void)
 {
 	int	col;
 
-	_fmemset (bspclaim,0,sizeof(bspclaim));
 	bspleft = viewwidth;
+	ClaimInit ();
 	postmin = 0x7fff;					// step 62's least wall, this frame
 	SetPlanes ();
 	st_frames++;
 	Walk (0);
+	if (bspleft > 0)					// columns no wall reached: the claims
+	{									// as a byte a column, for the doors
+		int	k;
+		_fmemset (bspclaim,1,sizeof(bspclaim));
+		for (k = 0; k < nsolid-1; k++)
+			_fmemset (&bspclaim[solid[k].b < 0 ? 0 : solid[k].b],0,
+				solid[k+1].a - (solid[k].b < 0 ? 0 : solid[k].b));
+	}
 	DrawDoors ();
 	st_left += bspleft;
 	if (bspleft == viewwidth)
@@ -1449,6 +1507,7 @@ void BSPRefresh (void)
 			;
 		st_llast = c;
 	}
+	if (bspleft > 0)
 	for (col = 0; col < viewwidth; col++)
 		if (!bspclaim[col])				// nothing there: the band, not an
 		{								// old frame (as step 92)
