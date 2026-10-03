@@ -1056,50 +1056,35 @@ PUBLIC	BSPCols
 	push	si
 	push	di
 	mov	si,[bp+6]
+	mov	di,[si+BC_COL]			; DI the column
+	mov	bp,[si+BC_HV]			; CX:BP the height, 16.16 (its step's
+	mov	cx,[si+BC_HV+2]			; remainder is left out: 1/65536 a column)
 
 @@col:
-	mov	di,[si+BC_COL]
 	cmp	di,[si+BC_END]
 	jge	@@done
-	mov	cx,[si+BC_HV+2]			; h
-	or	cx,cx
-	jnz	@@hok
-	inc	cx
+	jcxz	@@h0					; under a pixel: at least 1
 @@hok:
-	mov	dx,[si+BC_UV+2]			; u = uh/h, clamped to the run
-	or	dx,dx
-	js	@@u0
+	mov	ax,[si+BC_UV]			; u = uh/h
+	mov	dx,[si+BC_UV+2]
 	cmp	dx,cx
 	jae	@@umax
-	mov	ax,[si+BC_UV]
 	div	cx
 	cmp	ax,[si+BC_UMAX]
-	jbe	@@uok
-@@umax:
-	mov	ax,[si+BC_UMAX]
-	jmp	@@uok
-@@u0:
-	xor	ax,ax
+	ja	@@umax
 @@uok:
 	mov	bx,ax
 	shr	bx,6
 	add	bx,[si+BC_A1]
 	cmp	bx,[si+BC_TILE]
 	jne	@@newtile
-	and	ax,63					; the texture column
-	shl	ax,6
-	cmp	[WORD si+BC_FLIP],0
-	je	@@noflip
-	neg	ax
-	add	ax,0fc0h
-@@noflip:
-	mov	dx,[si+BC_PAGE]
+	and	ax,63					; the texture column, flipped by a mask
+	shl	ax,6					; (0FC0h - t is t xor 0FC0h)
+	xor	ax,[si+BC_FLIP]
 	cmp	[postwidth],0
 	je	@@newpost
-	cmp	ax,[WORD postsource]
-	jne	@@flush
-	cmp	dx,[WORD postsource+2]
-	jne	@@flush
+	cmp	ax,[WORD postsource]	; (the page is the same: a new tile's
+	jne	@@flush					; page comes after the post is drawn)
 	inc	[postwidth]				; the same texture column: wider
 	mov	bx,di
 	shl	bx,1
@@ -1108,17 +1093,18 @@ PUBLIC	BSPCols
 	jmp	@@step
 @@flush:
 	push	ax
-	push	dx
 	push	cx
 	push	di
+	push	bp
 	call	ScalePostA				; keeps SI
+	pop	bp
 	pop	di
 	pop	cx
-	pop	dx
 	pop	ax
 @@newpost:
 	mov	[WORD postsource],ax
-	mov	[WORD postsource+2],dx
+	mov	ax,[si+BC_PAGE]
+	mov	[WORD postsource+2],ax
 	mov	[postx],di
 	mov	[postwidth],1
 	mov	bx,di
@@ -1126,28 +1112,15 @@ PUBLIC	BSPCols
 	mov	[wallheight+bx],cx
 
 @@step:
-	mov	ax,[si+BC_HQ]			; H += q, and the remainder carried
-	add	[si+BC_HV],ax
-	mov	ax,[si+BC_HQ+2]
-	adc	[si+BC_HV+2],ax
-	mov	ax,[si+BC_HE]
-	add	ax,[si+BC_HR]
-	jc	@@hc					; (e + r can pass 0FFFFh: unsigned)
-	cmp	ax,[si+BC_HD]
-	jb	@@hn
-@@hc:
-	sub	ax,[si+BC_HD]
-	add	[WORD si+BC_HV],1
-	adc	[WORD si+BC_HV+2],0
-@@hn:
-	mov	[si+BC_HE],ax
-	mov	ax,[si+BC_UQ]			; UH likewise
+	add	bp,[si+BC_HQ]			; the height
+	adc	cx,[si+BC_HQ+2]
+	mov	ax,[si+BC_UQ]			; uh, exactly: a remainder carried
 	add	[si+BC_UV],ax
 	mov	ax,[si+BC_UQ+2]
 	adc	[si+BC_UV+2],ax
 	mov	ax,[si+BC_UE]
 	add	ax,[si+BC_UR]
-	jc	@@uc
+	jc	@@uc					; (e + r can pass 0FFFFh: unsigned)
 	cmp	ax,[si+BC_UD]
 	jb	@@un
 @@uc:
@@ -1156,8 +1129,20 @@ PUBLIC	BSPCols
 	adc	[WORD si+BC_UV+2],0
 @@un:
 	mov	[si+BC_UE],ax
-	inc	[WORD si+BC_COL]
+	inc	di
 	jmp	@@col
+
+@@h0:
+	inc	cx
+	jmp	@@hok
+@@umax:
+	or	dx,dx					; uh below 0 (rounding at the start): 0
+	js	@@u0
+	mov	ax,[si+BC_UMAX]
+	jmp	@@uok
+@@u0:
+	xor	ax,ax
+	jmp	@@uok
 
 @@newtile:
 	mov	[si+BC_TILE],bx
@@ -1166,6 +1151,9 @@ PUBLIC	BSPCols
 @@done:
 	xor	ax,ax
 @@ret:
+	mov	[si+BC_COL],di			; where it stopped, and the height there
+	mov	[si+BC_HV],bp
+	mov	[si+BC_HV+2],cx
 	pop	di
 	pop	si
 	pop	bp

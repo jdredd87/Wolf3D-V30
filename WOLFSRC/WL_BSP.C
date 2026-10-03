@@ -1016,7 +1016,7 @@ typedef struct
 	int			a1;				// the run's first tile
 	unsigned	umax;			// its last texel
 	unsigned	page;			// the texture's segment
-	int			flip;
+	unsigned	flip;			// 0, or 0FC0h: the texture column xored
 } bspcols;
 
 int BSPCols (bspcols *c);
@@ -1244,7 +1244,7 @@ static void DrawRun (bsprun far *r)
 	hw1.w[0] = hw2.w[0] = 0;
 	hw1.w[1] = (unsigned)e1.h;
 	hw2.w[1] = (unsigned)e2.h;
-	bc.flip = vertical ? up : !up;
+	bc.flip = (vertical ? up : !up) ? 0xfc0 : 0;
 	bc.a1 = a1;
 	bc.umax = ((a2-a1) << 6) - 1;
 	bc.tile = -1;
