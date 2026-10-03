@@ -952,6 +952,8 @@ PM_SetPageLock(int pagenum,PMLockType lock)
 //		Calls the update function after each load, indicating the current
 //		page, and the total pages that need to be loaded (for thermometer).
 //
+word	far pmbigsize, far pmruns;		// TIMEDEMO: the run buffer and its reads
+
 void
 PM_Preload(boolean (*update)(word current,word total))
 {
@@ -964,6 +966,9 @@ PM_Preload(boolean (*update)(word current,word total))
 					xmsfree,xmstotal;
 	memptr			addr;
 	PageListStruct	far *p;
+	byte			far *big;
+	word			bigsize,span,n,k,run,best,bestat,xpage;
+	long			start;
 
 	mainfree = (MainPagesAvail - MainPagesUsed) + (EMSPagesAvail - EMSPagesUsed);
 	xmsfree = (XMSPagesAvail - XMSPagesUsed);
@@ -998,6 +1003,87 @@ PM_Preload(boolean (*update)(word current,word total))
 
 	page = 0;
 	current = 0;
+
+//
+// NEC V30 build, StevenC & Claude: the XMS pages first, a run at a time.
+// Read one by one, with a seek each, the first level's 6.5 s of loading on
+// the V30 was nearly all the PicoMEM's cost per read: a test reading VSWAP
+// as id does took 110 ticks, in 32 KB blocks 48.  So when no main-memory
+// block is in use yet (the first level), the longest stretch of them lying
+// one after another in memory -- they were allocated in a row -- is the
+// buffer: pages that follow one another in the file are read into it at
+// once and each copied to XMS from there.  The main blocks are filled after,
+// as before; which page goes where is id's.  (A buffer of its own could not
+// be had: the page cache holds everything free by now.)  Only 183 of the
+// 662 steps from one page to the next are seamless; the rest cross up to
+// 511 bytes of padding, which is read with them.
+//
+	pmbigsize = pmruns = 0;
+	if (xmstotal && !MainPagesUsed)
+	{
+		best = bestat = run = 0;
+		for (i = 0; i < MainPagesAvail; i++)
+		{
+			if (i && run < 8 && (unsigned)MainMemPages[i]
+				== (unsigned)MainMemPages[i-1] + PMPageSizeSeg)
+				run++;
+			else
+				run = 1;
+			if (run > best)
+			{
+				best = run;
+				bestat = i - run + 1;
+			}
+		}
+		if (best >= 2)
+		{
+			big = (byte far *)MainMemPages[bestat];
+			bigsize = best * PMPageSize;
+			pmbigsize = bigsize;
+			xpage = 0;					// past the pages main memory will take
+			for (k = maintotal; k; xpage++)
+				if (PMPages[xpage].offset && PMPages[xpage].mainPage == -1
+					&& PMPages[xpage].emsPage == -1)
+					k--;
+			while (xmstotal)
+			{
+				while ( !PMPages[xpage].offset || PMPages[xpage].xmsPage != -1 )
+					xpage++;
+				if (xpage >= ChunksInFile)
+					Quit ("PM_Preload: Pages>=ChunksInFile");
+				p = &PMPages[xpage];
+				if (p->length > PMPageSize)
+					Quit("PM_Preload: Page too long");
+				start = p->offset;
+				span = p->length;
+				for (n = 1; n < xmstotal && xpage+n < ChunksInFile; n++)
+				{						// the run: next in the file (VSWAP pads
+					p = &PMPages[xpage+n];	// each page to 512 bytes: the padding
+					if (!p->offset || p->xmsPage != -1	// is read too), not loaded,
+						|| p->offset < start + span		// and room in the buffer
+						|| p->offset - (start + span) >= 512
+						|| p->length > PMPageSize
+						|| p->offset - start + p->length + 1 > bigsize)
+						break;
+					span = (word)(p->offset - start) + p->length;
+				}
+				PML_ReadFromFile(big,start,span);
+				pmruns++;
+				for (k = 0; k < n; k++)
+				{
+					p = &PMPages[xpage+k];
+					p->xmsPage = XMSPagesUsed++;
+					if (XMSPagesUsed > XMSPagesAvail)
+						Quit("PM_Preload: Exceeded XMS pages");
+					PML_CopyToXMS(big + (word)(p->offset - start),p->xmsPage,p->length);
+					current++;
+					xmstotal--;
+					update(current,total);
+				}
+				xpage += n;
+			}
+		}
+	}
 
 //
 // cache main/ems blocks

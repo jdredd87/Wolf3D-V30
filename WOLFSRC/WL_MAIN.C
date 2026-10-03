@@ -1669,9 +1669,13 @@ void TimeDemo (void)
 	{
 	extern long ALStat (int which);
 	static char far f[] = "OPL writes to 20h and up: %ld, skipped as unchanged: %ld\n";
+	static char far g[] = "preload buffer %u bytes, %u reads into it\n";
+	extern word far pmbigsize, far pmruns;
 	char	s[64];
 	_fstrcpy ((char far *)s,f);
 	printf (s,ALStat (0),ALStat (1));
+	_fstrcpy ((char far *)s,g);
+	printf (s,pmbigsize,pmruns);
 	}
 	printf ("view %d x %d%s%s%s%s%s%s%s\n",viewwidth,viewheight,pixstep == 2 ? ", LOWWALLS" : "",
 		lowsprites ? ", LOWSPRITES" : "",flatwalls ? ", FLATWALLS" : "",lowvert ? ", LOWVERT" : "",solidart ? ", FLATART" : "",
