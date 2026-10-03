@@ -105,3 +105,30 @@ string longer than the stack buffer it is copied into overran that.  The
 format strings are far data copied to the stack for `printf`, because
 DGROUP has 4 bytes left (the two block handles took the other 4).
 
+## Before milestone 2: what a BSP can actually win here (2026-10-02)
+
+The plan's 15-20% assumed the BSP would replace most of the ray loop's 42%.
+It cannot: it replaces only the walk's tile stepping, and the profile after
+step 90 (demo 0, EMS, labels of `AsmRefresh`) puts that at about **8% of a
+frame** -- the loop head and its tile test (`ivt`, 2.7%: its bucket holds
+`vertcheck`), the vertical step (`vspotop`, 2.5%), the horizontal side's
+entry (`vyadc`, 1.6%), the rays' initial values (`ivxt`, 0.8%) and the
+horizontal step's adds (`hxadd`, `hxadc`, 0.8%).  Everything else in the
+loop -- each ray's setup, the hit routines, the heights, the posts -- a BSP
+needs as much as the walk does.
+
+And the BSP's own work replaces it: each column's intercept computed
+directly (three or four multiplies, operands wider than 16 bits), where the
+walk gets it from additions; some 40 runs projected (four multiplies and a
+divide each); some 80 nodes visited -- about 45,000 clocks a frame on the
+V30, some 3% of one.  **So the net is about 4-5% on the V30**, for doors,
+pushwalls and visibility rebuilt and game play changed.  Step 86 measured
+40-77% because a Pascal walk's steps are dear; this one's are compares and
+adds in assembly, which is why the exact build got there.
+
+On the 486 the balance is different (its multiplies are cheap next to its
+memory), and FARBLOBS showed a gain can be the 486's alone.  Milestone 2 is
+held here until StevenC decides whether 4-5% on the V30 is worth it, or
+whether this branch should go after larger non-exact wins (the compiled
+scalers are a third of a frame).
+
