@@ -1087,6 +1087,7 @@ hvw_tex:
 	cmp	cx,[lastkey]
 	jne	hvw_nwt				; (a short hop: see hvw_nwt)
 	cmp	si,[WORD postsource]
+hvwmrg:									; step 97: JMP with LOWWALLS4 (EB for 75)
 	jne	hvw_newcol
 wideadd1:								; step 79: pixstep, patched (83 06 iw ib: at +4)
 	add	[WORD postwidth],1		; wide scale
@@ -1858,12 +1859,14 @@ PUBLIC	AsmRefresh
 	mov	[WORD cs:postw2+4],ax
 	mov	[WORD cs:postw3+4],ax
 	mov	[WORD cs:postw4+4],ax
-	mov	bl,90h					; NOP
-	cmp	ax,1
-	je	@@pxone
-	mov	bl,43h					; INC BX
-@@pxone:
-	mov	[BYTE cs:pxstep],bl
+	mov	[BYTE cs:pxstep+2],al	; step 97: ADD BX,pixstep
+	mov	bl,75h					; JNE: a ray's post widens the last when the
+	cmp	al,4					; texture column is the same -- but not with
+	jb	@@pxmrg					; LOWWALLS4, where three rays' 12 columns would
+	mov	bl,0EBh					; pass ScalePostA's 8 (JMP: always a new post)
+@@pxmrg:
+	mov	[BYTE cs:hvwmrg],bl
+	mov	[BYTE cs:hhwmrg],bl
 	mov	ax,OFFSET wallheight
 	sub	ax,[pixstep]
 	sub	ax,[pixstep]
@@ -1908,9 +1911,8 @@ done:
 	EVEN
 nextpix:
 	mov	bx,[pixx]
-	inc	bx
 pxstep:
-	nop								; step 79: 43h, INC BX, for LOWDETAIL
+	add	bx,1					; step 97: pixstep, patched (83 C3 ib: at +2)
 	mov	[pixx],bx
 npvw:
 	cmp	bx,1234h				; viewwidth, patched per frame (81 FB iw)
@@ -2621,6 +2623,7 @@ hhw_tex:
 	cmp	cx,[lastkey]
 	jne	hhw_nwt				; (a short hop: see hhw_nwt)
 	cmp	si,[WORD postsource]
+hhwmrg:									; step 97: JMP with LOWWALLS4 (EB for 75)
 	jne	hhw_newcol
 wideadd2:								; step 79: pixstep, patched (83 06 iw ib: at +4)
 	add	[WORD postwidth],1		; wide scale

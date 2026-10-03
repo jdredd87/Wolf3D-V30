@@ -1187,6 +1187,17 @@ void InitGame (void)
 	MM_Startup ();                  // so the signon screen can be freed
 	if (MS_CheckParm ("lowwalls") || MS_CheckParm ("lowdetail"))
 		pixstep = 2;					// NEC V30 build (step 79): one ray a column pair
+	{									// step 97: LOWWALLS4, one ray in four
+		int		i;						// (compared in code: no string in DGROUP)
+		for (i = 1;i < _argc;i++)
+		{
+			char far *a = _argv[i];
+			if ((a[0]|32)=='l' && (a[1]|32)=='o' && (a[2]|32)=='w' && (a[3]|32)=='w'
+				&& (a[4]|32)=='a' && (a[5]|32)=='l' && (a[6]|32)=='l' && (a[7]|32)=='s'
+				&& a[8]=='4' && !a[9])
+				pixstep = 4;
+		}
+	}
 	if (MS_CheckParm ("lowsprites") || MS_CheckParm ("lowdetail"))
 		lowsprites = 1;					// NEC V30 build (step 80): sprites in column pairs
 	if (MS_CheckParm ("flatwalls"))
@@ -1667,7 +1678,7 @@ void TimeDemo (void)
 	_fstrcpy ((char far *)s,g);
 	printf (s,pmbigsize,pmruns);
 	}
-	printf ("view %d x %d%s%s%s%s%s%s%s\n",viewwidth,viewheight,pixstep == 2 ? ", LOWWALLS" : "",
+	printf ("view %d x %d%s%s%s%s%s%s%s\n",viewwidth,viewheight,pixstep > 1 ? ", LOWWALLS" : "",
 		lowsprites ? ", LOWSPRITES" : "",flatwalls ? ", FLATWALLS" : "",lowvert ? ", LOWVERT" : "",solidart ? ", FLATART" : "",
 		tdmaxframes ? ", QUICK (demo 0, 200 frames)" : "",
 		tdpreload ? ", PRELOAD" : "");
