@@ -157,14 +157,20 @@ static void FindRuns (void)
 // down; a second kept them far, and the V30 took 15 s a tree on far
 // accesses).
 //
+//
+// ChooseSplit's counts, a byte a coordinate (a line holds at most 32 runs, a
+// coordinate starts or ends at most 64).  As ints in its frame they were 780
+// bytes, which with Build 15 deep overran the game's 4 KB stack; as bytes
+// there, 390, and the pushwalls' faces made map 52's tree deeper still (the
+// 486 hung loading it, with the walk as much as the tree).  ChooseSplit is
+// never re-entered, so they are far statics now: no stack at all.
+//
+byte	far par0[MAPSIZE+1], far par1[MAPSIZE+1], far ends0[MAPSIZE+1],
+		far ends1[MAPSIZE+1], far starts0[MAPSIZE+1], far starts1[MAPSIZE+1];
+
 static void ChooseSplit (unsigned base, unsigned count, int *paxis, int *pc)
 {
-	byte		par0[MAPSIZE+1], par1[MAPSIZE+1], ends0[MAPSIZE+1], ends1[MAPSIZE+1];
-	byte		starts0[MAPSIZE+1], starts1[MAPSIZE+1];
-	byte		*pa, *pe, *ps;		// bytes: a line holds at most 32 runs, a coordinate
-								// starts or ends at most 64 -- as ints this frame was
-								// 780 bytes, which with Build 15 deep overran the
-								// game's 4 KB stack (both machines hung)
+	byte		far *pa, far *pe, far *ps;
 	int			lo0, hi0, lo1, hi1, ptot0, ptot1, totpar0, totpar1;
 	int			axis, c, lo, hi, ptot, totpar, below, above, cut, best, k;
 	int			lowpar, endsle, startsge;
@@ -172,12 +178,12 @@ static void ChooseSplit (unsigned base, unsigned count, int *paxis, int *pc)
 	bsprun		far *R = bb.r, far *r;
 	unsigned	far *L = bb.list + base;
 
-	memset (par0,0,sizeof(par0));
-	memset (par1,0,sizeof(par1));
-	memset (ends0,0,sizeof(ends0));
-	memset (ends1,0,sizeof(ends1));
-	memset (starts0,0,sizeof(starts0));
-	memset (starts1,0,sizeof(starts1));
+	_fmemset (par0,0,sizeof(par0));
+	_fmemset (par1,0,sizeof(par1));
+	_fmemset (ends0,0,sizeof(ends0));
+	_fmemset (ends1,0,sizeof(ends1));
+	_fmemset (starts0,0,sizeof(starts0));
+	_fmemset (starts1,0,sizeof(starts1));
 	lo0 = lo1 = MAPSIZE;
 	hi0 = hi1 = 0;
 	ptot0 = ptot1 = totpar0 = totpar1 = 0;
@@ -265,6 +271,11 @@ static int Build (unsigned base, unsigned count, int depth)
 
 	if (!count || bb.fail)
 		return -1;
+	if (depth > 24)						// (deeper than any map: the walk draws it,
+	{									// rather than the stack running out)
+		bb.fail = 1;
+		return -1;
+	}
 	if (depth > bb.maxdepth)
 		bb.maxdepth = depth;
 	ChooseSplit (base,count,&axis,&c);
@@ -1028,6 +1039,7 @@ void BSPSetPlanes (int cam8x, int cam8y, int p0x, int p0y, int p1x, int p1y,
 	int p2x, int p2y);
 void BSPSetBox (int x1, int y1, int x2, int y2);
 int BSPOutside (int x1, int y1, int x2, int y2);
+int BSPClassify (int x1, int y1, int x2, int y2);
 void BSPMarkVis (void);
 
 
@@ -1382,7 +1394,7 @@ static int BoxHidden (int x1, int y1, int x2, int y2)
 //
 // front to back from node n
 //
-static void Walk (int n)
+static void Walk (int n, int inside)
 {
 	bspnode	far *node;
 	long	cam;
@@ -1393,10 +1405,15 @@ static void Walk (int n)
 	{
 		node = &bb.nodes[n];
 		st_nodes++;
-		if (BSPOutside (node->x1,node->y1,node->x2,node->y2))
+		if (!inside)						// (a box wholly in view: all below it too)
 		{
-			st_culled++;
-			return;							// nothing below it is in view
+			k = BSPClassify (node->x1,node->y1,node->x2,node->y2);
+			if (k == 1)
+			{
+				st_culled++;
+				return;						// nothing below it is in view
+			}
+			inside = k == 2;
 		}
 		if (BoxHidden (node->x1,node->y1,node->x2,node->y2))
 		{
@@ -1414,14 +1431,16 @@ static void Walk (int n)
 			nearc = node->hi;
 			farc = node->lo;
 		}
-		Walk (nearc);
+		Walk (nearc,inside);
 		if (bspleft <= 0)
 			return;
 		for (k = 0, r = &bb.runs[node->first]; k < node->count; k++, r++)
 			if ((r->of & 2) ? cam > ((long)node->coord << TILESHIFT)
 				: cam < ((long)node->coord << TILESHIFT))
 			{
-				if (r->of & 1)
+				if (inside)
+					;
+				else if (r->of & 1)
 				{
 					if (BSPOutside (r->a1,r->line,r->a2,r->line))
 						continue;
@@ -1717,7 +1736,7 @@ void BSPRefresh (void)
 	postmin = 0x7fff;					// step 62's least wall, this frame
 	SetPlanes ();
 	st_frames++;
-	Walk (0);
+	Walk (0,0);
 	if (bspleft > 0)					// columns no wall reached: the claims
 	{									// as a byte a column, for the doors
 		int	k;

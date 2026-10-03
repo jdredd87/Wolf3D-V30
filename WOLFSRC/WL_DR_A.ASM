@@ -1746,6 +1746,71 @@ PUBLIC	BSPOutside
 	retf
 ENDP
 
+;
+; int BSPClassify (int x1, int y1, int x2, int y2) -- as BSPOutside, but 2
+; when the box is wholly inside all three planes (its nearest corner to each
+; is in front too): then nothing below it in the tree needs testing.
+;
+PROC	BSPClassify FAR
+PUBLIC	BSPClassify
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	xor	di,di					; plane offset
+	mov	[cs:bv_in],2			; wholly inside, until a near corner is not
+@@plane:
+	mov	si,[cs:bv_sel+di]
+	mov	ax,[bp+si]				; the corner furthest along the normal
+	shl	ax,8
+	sub	ax,[cs:bv_cx]
+	imul	[WORD cs:bv_p+di]
+	mov	cx,ax
+	mov	bx,dx
+	mov	si,[cs:bv_sel+2+di]
+	mov	ax,[bp+si]
+	shl	ax,8
+	sub	ax,[cs:bv_cy]
+	imul	[WORD cs:bv_p+2+di]
+	add	ax,cx
+	adc	dx,bx
+	js	@@out					; still behind the plane
+	cmp	[cs:bv_in],0
+	je	@@next					; already known to straddle one
+	mov	si,16					; the nearest corner: the other x and y
+	sub	si,[cs:bv_sel+di]
+	mov	ax,[bp+si]
+	shl	ax,8
+	sub	ax,[cs:bv_cx]
+	imul	[WORD cs:bv_p+di]
+	mov	cx,ax
+	mov	bx,dx
+	mov	si,20
+	sub	si,[cs:bv_sel+2+di]
+	mov	ax,[bp+si]
+	shl	ax,8
+	sub	ax,[cs:bv_cy]
+	imul	[WORD cs:bv_p+2+di]
+	add	ax,cx
+	adc	dx,bx
+	jns	@@next
+	mov	[cs:bv_in],0			; straddles this plane
+@@next:
+	add	di,4
+	cmp	di,12
+	jb	@@plane
+	mov	ax,[cs:bv_in]
+	jmp	@@ret
+@@out:
+	mov	ax,1
+@@ret:
+	pop	di
+	pop	si
+	pop	bp
+	retf
+ENDP
+
+
 PROC	BSPMarkVis FAR
 PUBLIC	BSPMarkVis
 	push	bp
@@ -2040,6 +2105,7 @@ bv_box		dw	4 DUP (0)		; x1, y1, x2, y2: what can be seen
 vt_dx		dw	0
 vt_dy		dw	0
 vt_nx		dd	0
+bv_in		dw	0				; BSPClassify: 2 while wholly inside
 
 
 
