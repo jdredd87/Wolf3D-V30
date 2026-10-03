@@ -31,7 +31,8 @@ EXTRN	HitHorizPWall:FAR
 EXTRN	HitVertPWall:FAR
 EXTRN	ScaleShape:FAR
 EXTRN	PM_GetPage:FAR
-EXTRN	DrawRun:FAR				; WL_BSP.C: the BSP branch's run, for BSPWalk
+EXTRN	RunPage:FAR				; WL_BSP.C, for DrawRunA: a new tile's page
+EXTRN	BSPClaim:FAR			; and the claim
 EXTRN	GetBonus:FAR
 EXTRN	CalcRotate:FAR
 EXTRN	RemoveObj:FAR
@@ -2155,6 +2156,7 @@ PUBLIC	BSPWalk
 	mov	[cs:wk_cnt+2],ax
 	mov	[cs:wk_cnt+4],ax
 	mov	[cs:wk_cnt+6],ax
+	mov	[cs:wk_cnt+8],ax
 	xor	bx,bx						; node 0, not known inside
 	call	WalkNode
 	pop	di
@@ -2342,11 +2344,8 @@ PROC	WalkNode NEAR
 	je	@@skiprun
 @@draw:
 	inc	[WORD cs:wk_cnt+6]
-	mov	ax,[WORD cs:wk_runs+2]
-	push	ax
-	push	[WORD bp+WL_R]
-	call	DrawRun						; C; keeps SI, DI, BP
-	add	sp,4
+	mov	ax,[bp+WL_R]
+	call	DrawRunA					; keeps BP
 @@skiprun:
 	add	[WORD bp+WL_R],4
 	dec	[WORD bp+WL_K]
@@ -2472,16 +2471,1097 @@ PROC	BoxHid NEAR
 	mov	dx,[cs:bx_box+bx]
 	call	ApproxCol
 	jc	@@no
-	mov	bx,[cs:bh_c1]				; Covered: c1 the lesser, both widened
+	mov	bx,[cs:bh_c1]
+	call	CoveredA
+	ret
+@@no:
+	clc
+	ret
+ENDP
+
+;============================
+;
+; DrawRunA (the BSP branch, StevenC & Claude): WL_BSP.C's DrawRun -- one
+; wall run, projected at its ends and drawn through the gaps in the claimed
+; columns -- with all its arithmetic here: Ends (the view-space ends by id's
+; FixedByFrac, the cut at the near plane, the clip to the view's sides),
+; ColHeight, StepInit and MulDivFloor, each statement for statement as the
+; C, so the picture is the same.  C is left only what runs once a span or
+; less: the texture page of a new tile (RunPage) and the claim (BSPClaim).
+;
+; AX: the run's offset (its segment is wk_runs+2).  Keeps BP.
+;
+; An end, in the code segment: nx, ny, u (longs), then col (64ths), h, uh.
+;
+EN_NX	=	0
+EN_NY	=	4
+EN_U	=	8
+EN_COL	=	12
+EN_H	=	16
+EN_UH	=	18
+EN_SIZE	=	22
+BC_SIZE	=	42							; bspcols, as BSPCols reads it
+
+DR_CS	=	-2
+DR_CE	=	-4
+DR_C1	=	-6
+DR_C2	=	-8
+DR_K	=	-10							; solid[k], as an offset
+DR_COL	=	-12
+DR_END	=	-14
+DR_BC	=	-14-BC_SIZE					; the bspcols struct
+
+PROC	DrawRunA NEAR
+	push	bp
+	mov	bp,sp
+	sub	sp,14+BC_SIZE
+	push	si
+	push	di
+	les	di,[DWORD cs:wk_runs]
+	mov	di,ax
+	mov	al,[es:di]					; of
+	xor	ah,ah
+	mov	[cs:dr_of],ax
+	mov	al,[es:di+1]
+	mov	[cs:dr_line],ax
+	mov	al,[es:di+2]
+	mov	[cs:dr_a1],ax
+	mov	al,[es:di+3]
+	mov	[cs:dr_a2],ax
+	test	[BYTE cs:dr_of],4			; a block's face: only while one stands
+	jz	@@noblock
+	mov	bx,[cs:dr_line]
+	test	[BYTE cs:dr_of],2
+	jz	@@bl1
+	dec	bx
+@@bl1:
+	test	[BYTE cs:dr_of],1
+	jnz	@@blh
+	shl	bx,6						; tilemap[x][a1]
+	add	bx,[cs:dr_a1]
+	jmp	@@blt
+@@blh:
+	mov	ax,[cs:dr_a1]				; tilemap[a1][y]
+	shl	ax,6
+	add	bx,ax
+@@blt:
+	mov	al,[tilemap+bx]
+	or	al,al
+	jz	@@ret
+	test	al,80h
+	jnz	@@ret
+@@noblock:
+	;
+	; roughly where it lands: behind what is drawn there already?
+	;
+	test	[BYTE cs:dr_of],1
+	jnz	@@pch
+	mov	ax,[cs:dr_line]
+	mov	dx,[cs:dr_a1]
+	call	ApproxCol
+	jc	@@project
+	mov	[cs:bh_c1],ax
+	mov	ax,[cs:dr_line]
+	mov	dx,[cs:dr_a2]
+	jmp	@@pc2
+@@pch:
+	mov	ax,[cs:dr_a1]
+	mov	dx,[cs:dr_line]
+	call	ApproxCol
+	jc	@@project
+	mov	[cs:bh_c1],ax
+	mov	ax,[cs:dr_a2]
+	mov	dx,[cs:dr_line]
+@@pc2:
+	call	ApproxCol
+	jc	@@project
+	mov	bx,[cs:bh_c1]
+	call	CoveredA
+	jnc	@@project
+	inc	[WORD cs:wk_cnt+8]
+	jmp	@@ret
+
+@@project:
+	;
+	; Ends: the view-space ends, by id's FixedByFrac
+	;
+	xor	ax,ax
+	mov	[WORD cs:dr_e1+EN_U],ax
+	mov	[WORD cs:dr_e1+EN_U+2],ax
+	mov	[WORD cs:dr_e2+EN_U+2],ax
+	mov	ax,[cs:dr_a2]
+	sub	ax,[cs:dr_a1]
+	shl	ax,6
+	mov	[WORD cs:dr_e2+EN_U],ax
+	test	[BYTE cs:dr_of],1
+	jnz	@@ehoriz
+	mov	ax,[cs:dr_line]				; x = line for both ends
+	call	GXview
+	call	MulCosSave					; A = gx*cos
+	mov	[WORD cs:dr_ta],ax
+	mov	[WORD cs:dr_ta+2],dx
+	call	MulSinRe					; D = gx*sin
+	mov	[WORD cs:dr_td],ax
+	mov	[WORD cs:dr_td+2],dx
+	mov	ax,[cs:dr_a1]
+	mov	si,OFFSET dr_e1
+	call	VEnd
+	mov	ax,[cs:dr_a2]
+	mov	si,OFFSET dr_e2
+	call	VEnd
+	jmp	@@ends
+@@ehoriz:
+	mov	ax,[cs:dr_line]				; y = line for both ends
+	call	GYview
+	call	MulSinSave					; B = gy*sin
+	mov	[WORD cs:dr_tb],ax
+	mov	[WORD cs:dr_tb+2],dx
+	call	MulCosRe					; C = gy*cos
+	mov	[WORD cs:dr_tc],ax
+	mov	[WORD cs:dr_tc+2],dx
+	mov	ax,[cs:dr_a1]
+	mov	si,OFFSET dr_e1
+	call	HEnd
+	mov	ax,[cs:dr_a2]
+	mov	si,OFFSET dr_e2
+	call	HEnd
+@@ends:
+	mov	si,OFFSET dr_e1
+	call	BelowNear
+	jnc	@@n1ok
+	mov	si,OFFSET dr_e2
+	call	BelowNear
+	jc	@@ret						; wholly behind the near plane
+	call	NearCut1
+	jmp	@@nearok
+@@n1ok:
+	mov	si,OFFSET dr_e2
+	call	BelowNear
+	jnc	@@nearok
+	call	NearCut2
+@@nearok:
+	call	UPos
+	mov	si,OFFSET dr_e1
+	call	ColHeightA
+	mov	si,OFFSET dr_e2
+	call	ColHeightA
+	mov	si,OFFSET dr_e1				; an end far off the screen: clip first
+	call	ColFar
+	jc	@@clip
+	mov	si,OFFSET dr_e2
+	call	ColFar
+	jnc	@@clipped
+@@clip:
+	mov	ax,[WORD scale]
+	mov	bx,[centerx]
+	add	bx,2
+	call	SideClipA
+	jc	@@ret
+	mov	ax,[WORD scale]
+	neg	ax
+	mov	bx,[viewwidth]
+	add	bx,2
+	sub	bx,[centerx]
+	call	SideClipA
+	jc	@@ret
+	call	UPos
+	mov	si,OFFSET dr_e1
+	call	ColHeightA
+	mov	si,OFFSET dr_e2
+	call	ColHeightA
+@@clipped:
+	;
+	; the ends in screen order; the columns whose rays cross the run
+	;
+	mov	ax,[WORD cs:dr_e1+EN_COL]
+	mov	dx,[WORD cs:dr_e1+EN_COL+2]
+	cmp	dx,[WORD cs:dr_e2+EN_COL+2]
+	jl	@@inorder
+	jg	@@swap
+	cmp	ax,[WORD cs:dr_e2+EN_COL]
+	jbe	@@inorder
+@@swap:
+	push	ds
+	push	es
+	mov	ax,cs
+	mov	ds,ax
+	mov	es,ax
+	mov	si,OFFSET dr_e1				; e1 <-> e2 (through dr_et)
+	mov	di,OFFSET dr_et
+	mov	cx,EN_SIZE/2
+	rep	movsw
+	mov	si,OFFSET dr_e2
+	mov	di,OFFSET dr_e1
+	mov	cx,EN_SIZE/2
+	rep	movsw
+	mov	si,OFFSET dr_et
+	mov	di,OFFSET dr_e2
+	mov	cx,EN_SIZE/2
+	rep	movsw
+	pop	es
+	pop	ds
+@@inorder:
+	mov	ax,[WORD cs:dr_e1+EN_COL]	; (an end is within COLLO..COLHI)
+	mov	[bp+DR_C1],ax
+	mov	bx,[WORD cs:dr_e2+EN_COL]
+	mov	[bp+DR_C2],bx
+	xor	cx,cx						; cs = c1 < 0 ? 0 : (c1+63) >> 6
+	or	ax,ax
+	js	@@cs0
+	add	ax,63
+	shr	ax,6
+	mov	cx,ax
+@@cs0:
+	mov	[bp+DR_CS],cx
+	mov	ax,[viewwidth]				; ce = c2 > viewwidth<<6 ? viewwidth
+	mov	dx,ax						;	 : (c2+63) >> 6
+	shl	dx,6
+	cmp	bx,dx
+	jg	@@ce
+	add	bx,63
+	sar	bx,6
+	mov	ax,bx
+@@ce:
+	mov	[bp+DR_CE],ax
+	cmp	cx,ax
+	jge	@@ret
+	les	si,[DWORD cs:wk_solid]		; solid[k]: the first ending past cs
+@@fk:
+	cmp	[es:si+2],cx
+	jg	@@fkd
+	add	si,4
+	jmp	@@fk
+@@fkd:
+	mov	[bp+DR_K],si
+	cmp	[es:si],cx					; wholly behind what is drawn
+	jg	@@bcset
+	cmp	[es:si+2],ax
+	jge	@@ret
+@@bcset:
+	mov	ax,0FC0h					; flip: vertical ? up : !up
+	test	[BYTE cs:dr_of],1
+	jnz	@@fh
+	test	[BYTE cs:dr_of],2
+	jnz	@@fset
+	xor	ax,ax
+	jmp	@@fset
+@@fh:
+	test	[BYTE cs:dr_of],2
+	jz	@@fset
+	xor	ax,ax
+@@fset:
+	mov	[bp+DR_BC+BC_FLIP],ax
+	mov	ax,[cs:dr_a1]
+	mov	[bp+DR_BC+BC_A1],ax
+	mov	ax,[cs:dr_a2]
+	sub	ax,[cs:dr_a1]
+	shl	ax,6
+	dec	ax
+	mov	[bp+DR_BC+BC_UMAX],ax
+	mov	[WORD bp+DR_BC+BC_TILE],-1
+	mov	[WORD bp+DR_BC+BC_PAGE],0
+	mov	ax,[bp+DR_CS]
+	mov	[bp+DR_COL],ax
+
+@@gap:
+	mov	ax,[bp+DR_COL]
+	cmp	ax,[bp+DR_CE]
+	jge	@@claim
+	les	si,[DWORD cs:wk_solid]
+	mov	si,[bp+DR_K]
+	cmp	[es:si],ax
+	jg	@@span
+	mov	ax,[es:si+2]				; claimed: on past it
+	mov	[bp+DR_COL],ax
+	add	[WORD bp+DR_K],4
+	jmp	@@gap
+@@span:
+	mov	bx,[es:si]					; end = min (solid[k].a, ce)
+	cmp	bx,[bp+DR_CE]
+	jle	@@endok
+	mov	bx,[bp+DR_CE]
+@@endok:
+	mov	[bp+DR_END],bx
+	sub	bx,ax						; bspleft -= end - col
+	les	si,[DWORD cs:wk_left]
+	sub	[es:si],bx
+	;
+	; StepInit (&H, h1<<16, h2<<16, ...) and (&UH, uh1, uh2, ...), off =
+	; (col<<6) - c1, d = c2 - c1
+	;
+	mov	ax,[bp+DR_COL]
+	shl	ax,6
+	sub	ax,[bp+DR_C1]
+	mov	[cs:dr_off],ax
+	mov	ax,[bp+DR_C2]
+	sub	ax,[bp+DR_C1]
+	mov	[cs:dr_d],ax
+	xor	ax,ax						; H: a = h1<<16, b = h2<<16
+	mov	[WORD cs:dr_sa],ax
+	mov	[WORD cs:dr_sb],ax
+	mov	ax,[WORD cs:dr_e1+EN_H]
+	mov	[WORD cs:dr_sa+2],ax
+	mov	ax,[WORD cs:dr_e2+EN_H]
+	mov	[WORD cs:dr_sb+2],ax
+	lea	di,[bp+DR_BC+BC_HV]
+	call	StepInitA
+	mov	ax,[WORD cs:dr_e1+EN_UH]
+	mov	[WORD cs:dr_sa],ax
+	mov	ax,[WORD cs:dr_e1+EN_UH+2]
+	mov	[WORD cs:dr_sa+2],ax
+	mov	ax,[WORD cs:dr_e2+EN_UH]
+	mov	[WORD cs:dr_sb],ax
+	mov	ax,[WORD cs:dr_e2+EN_UH+2]
+	mov	[WORD cs:dr_sb+2],ax
+	lea	di,[bp+DR_BC+BC_UV]
+	call	StepInitA
+	mov	ax,[bp+DR_COL]
+	mov	[bp+DR_BC+BC_COL],ax
+	mov	ax,[bp+DR_END]
+	mov	[bp+DR_BC+BC_END],ax
+	mov	[postwidth],0
+@@cols:
+	lea	ax,[bp+DR_BC]
+	push	ax
+	call	BSPCols
+	add	sp,2
+	or	ax,ax
+	jz	@@spandone
+	cmp	[postwidth],0				; a new tile: its page -- after the post,
+	je	@@np						; which PM_GetPage could evict
+	call	ScalePostF					; (keeps BP: ScalePostA does not)
+	mov	[postwidth],0
+@@np:
+	push	[WORD bp+DR_BC+BC_TILE]		; RunPage (vertical, up, line, tile)
+	push	[cs:dr_line]
+	mov	ax,[cs:dr_of]
+	and	ax,2
+	push	ax
+	mov	ax,[cs:dr_of]
+	and	ax,1
+	xor	ax,1
+	push	ax
+	call	RunPage
+	add	sp,8
+	mov	[bp+DR_BC+BC_PAGE],ax
+	jmp	@@cols
+@@spandone:
+	cmp	[postwidth],0
+	je	@@nf
+	call	ScalePostF
+	mov	[postwidth],0
+@@nf:
+	mov	ax,[bp+DR_END]
+	mov	[bp+DR_COL],ax
+	jmp	@@gap
+@@claim:
+	push	[WORD bp+DR_CE]
+	push	[WORD bp+DR_CS]
+	call	BSPClaim
+	add	sp,4
+@@ret:
+	pop	di
+	pop	si
+	mov	sp,bp
+	pop	bp
+	ret
+ENDP
+
+;
+; FBF: id's FixedByFrac -- DX:AX times BX, a fraction, its sign in bit 15 of
+; SI; DX:AX out.  Clobbers CX, DI, SI.
+;
+PROC	FBF NEAR
+	or	dx,dx
+	jns	@@pos
+	neg	dx
+	neg	ax
+	sbb	dx,0
+	xor	si,8000h
+@@pos:
+	mov	cx,dx
+	mul	bx
+	mov	di,dx
+	mov	ax,cx
+	mul	bx
+	add	ax,di
+	adc	dx,0
+	test	si,8000h
+	jz	@@ok
+	neg	dx
+	neg	ax
+	sbb	dx,0
+@@ok:
+	ret
+ENDP
+
+;
+; DX:AX = (AX:0) - viewx / - viewy: a tile line, from the camera
+;
+PROC	GXview NEAR
+	mov	dx,ax
+	xor	ax,ax
+	sub	ax,[WORD viewx]
+	sbb	dx,[WORD viewx+2]
+	ret
+ENDP
+
+PROC	GYview NEAR
+	mov	dx,ax
+	xor	ax,ax
+	sub	ax,[WORD viewy]
+	sbb	dx,[WORD viewy+2]
+	ret
+ENDP
+
+;
+; DX:AX times viewcos or viewsin; the Save forms keep DX:AX in dr_g for a
+; Re form after (the same operand again).  Keep SI's caller value: no.
+;
+PROC	MulCosSave NEAR
+	mov	[WORD cs:dr_g],ax
+	mov	[WORD cs:dr_g+2],dx
+	push	si
+	mov	bx,[WORD viewcos]
+	mov	si,[WORD viewcos+2]
+	call	FBF
+	pop	si
+	ret
+ENDP
+
+PROC	MulSinSave NEAR
+	mov	[WORD cs:dr_g],ax
+	mov	[WORD cs:dr_g+2],dx
+	push	si
+	mov	bx,[WORD viewsin]
+	mov	si,[WORD viewsin+2]
+	call	FBF
+	pop	si
+	ret
+ENDP
+
+PROC	MulCosRe NEAR
+	mov	ax,[WORD cs:dr_g]
+	mov	dx,[WORD cs:dr_g+2]
+	push	si
+	mov	bx,[WORD viewcos]
+	mov	si,[WORD viewcos+2]
+	call	FBF
+	pop	si
+	ret
+ENDP
+
+PROC	MulSinRe NEAR
+	mov	ax,[WORD cs:dr_g]
+	mov	dx,[WORD cs:dr_g+2]
+	push	si
+	mov	bx,[WORD viewsin]
+	mov	si,[WORD viewsin+2]
+	call	FBF
+	pop	si
+	ret
+ENDP
+
+;
+; VEnd: the end of a run along x = line at y = AX (tiles), into the end at
+; SI: nx = A - gy*sin, ny = gy*cos + D (A, D: the line's, in dr_ta, dr_td)
+;
+PROC	VEnd NEAR
+	call	GYview
+	call	MulSinSave
+	mov	bx,[WORD cs:dr_ta]
+	mov	cx,[WORD cs:dr_ta+2]
+	sub	bx,ax
+	sbb	cx,dx
+	mov	[WORD cs:si+EN_NX],bx
+	mov	[WORD cs:si+EN_NX+2],cx
+	call	MulCosRe
+	add	ax,[WORD cs:dr_td]
+	adc	dx,[WORD cs:dr_td+2]
+	mov	[WORD cs:si+EN_NY],ax
+	mov	[WORD cs:si+EN_NY+2],dx
+	ret
+ENDP
+
+;
+; HEnd: the end of a run along y = line at x = AX: nx = gx*cos - B,
+; ny = C + gx*sin (B, C: the line's, in dr_tb, dr_tc)
+;
+PROC	HEnd NEAR
+	call	GXview
+	call	MulCosSave
+	sub	ax,[WORD cs:dr_tb]
+	sbb	dx,[WORD cs:dr_tb+2]
+	mov	[WORD cs:si+EN_NX],ax
+	mov	[WORD cs:si+EN_NX+2],dx
+	call	MulSinRe
+	add	ax,[WORD cs:dr_tc]
+	adc	dx,[WORD cs:dr_tc+2]
+	mov	[WORD cs:si+EN_NY],ax
+	mov	[WORD cs:si+EN_NY+2],dx
+	ret
+ENDP
+
+;
+; CF if the end at SI is nearer than NEARD (1/64 tile)
+;
+PROC	BelowNear NEAR
+	mov	dx,[WORD cs:si+EN_NX+2]
+	or	dx,dx
+	js	@@yes
+	jnz	@@no
+	cmp	[WORD cs:si+EN_NX],400h
+	jb	@@yes
+@@no:
+	clc
+	ret
+@@yes:
+	stc
+	ret
+ENDP
+
+;
+; FracA: (DX:AX)/(CX:BX) as a 16.16 fraction 0..1 (signs alike) -> DX:AX
+;
+PROC	FracA NEAR
+	or	cx,cx
+	jns	@@dpos
+	neg	dx
+	neg	ax
+	sbb	dx,0
+	neg	cx
+	neg	bx
+	sbb	cx,0
+@@dpos:
+	or	dx,dx						; num <= 0: 0
+	js	@@zero
+	jnz	@@pos
+	or	ax,ax
+	jz	@@zero
+@@pos:
+	cmp	dx,cx						; num >= den: 1
+	jl	@@lt
+	jg	@@one
+	cmp	ax,bx
+	jae	@@one
+@@lt:
+	or	cx,cx						; den to 15 bits, num with it
+	jnz	@@sh
+	cmp	bx,7fffh
+	jbe	@@div
+@@sh:
+	sar	dx,1
+	rcr	ax,1
+	sar	cx,1
+	rcr	bx,1
+	jmp	@@lt
+@@div:
+	mov	dx,ax						; (num << 16) / den, num < den
+	xor	ax,ax
+	div	bx
+	xor	dx,dx
+	ret
+@@zero:
+	xor	ax,ax
+	xor	dx,dx
+	ret
+@@one:
+	xor	ax,ax
+	mov	dx,1
+	ret
+ENDP
+
+;
+; MulFracA: DX:AX times dr_t (16.16, 0..1) -> DX:AX
+;
+PROC	MulFracA NEAR
+	cmp	[WORD cs:dr_t+2],0
+	jne	@@whole
+	push	si
+	push	di
+	push	cx
+	mov	bx,[WORD cs:dr_t]
+	xor	si,si
+	call	FBF
+	pop	cx
+	pop	di
+	pop	si
+@@whole:
+	ret
+ENDP
+
+;
+; the cut at the near plane: t = (NEARD - nx1)/(nx2 - nx1), and the end
+; behind it moved there (NearCut1: end 1; NearCut2: end 2)
+;
+PROC	NearT NEAR
+	mov	ax,400h
+	xor	dx,dx
+	sub	ax,[WORD cs:dr_e1+EN_NX]
+	sbb	dx,[WORD cs:dr_e1+EN_NX+2]
+	mov	bx,[WORD cs:dr_e2+EN_NX]
+	mov	cx,[WORD cs:dr_e2+EN_NX+2]
+	sub	bx,[WORD cs:dr_e1+EN_NX]
+	sbb	cx,[WORD cs:dr_e1+EN_NX+2]
+	call	FracA
+	mov	[WORD cs:dr_t],ax
+	mov	[WORD cs:dr_t+2],dx
+	ret
+ENDP
+
+;
+; DX:AX = end2.field - end1.field, field at BX
+;
+PROC	Diff21 NEAR
+	mov	ax,[WORD cs:dr_e2+bx]
+	mov	dx,[WORD cs:dr_e2+bx+2]
+	sub	ax,[WORD cs:dr_e1+bx]
+	sbb	dx,[WORD cs:dr_e1+bx+2]
+	ret
+ENDP
+
+PROC	NearCut1 NEAR
+	call	NearT
+	mov	bx,EN_NY					; ny1 += MulFrac (ny2-ny1,t)
+	call	Diff21
+	call	MulFracA
+	add	[WORD cs:dr_e1+EN_NY],ax
+	adc	[WORD cs:dr_e1+EN_NY+2],dx
+	mov	bx,EN_U						; u1 += MulFrac (u2-u1,t)
+	call	Diff21
+	call	MulFracA
+	add	[WORD cs:dr_e1+EN_U],ax
+	adc	[WORD cs:dr_e1+EN_U+2],dx
+	mov	[WORD cs:dr_e1+EN_NX],400h
+	mov	[WORD cs:dr_e1+EN_NX+2],0
+	ret
+ENDP
+
+PROC	NearCut2 NEAR
+	call	NearT
+	mov	bx,EN_NY					; ny2 = ny1 + MulFrac (ny2-ny1,t)
+	call	Diff21
+	call	MulFracA
+	add	ax,[WORD cs:dr_e1+EN_NY]
+	adc	dx,[WORD cs:dr_e1+EN_NY+2]
+	mov	[WORD cs:dr_e2+EN_NY],ax
+	mov	[WORD cs:dr_e2+EN_NY+2],dx
+	mov	bx,EN_U						; u2 = u1 + MulFrac (u2-u1,t)
+	call	Diff21
+	call	MulFracA
+	add	ax,[WORD cs:dr_e1+EN_U]
+	adc	dx,[WORD cs:dr_e1+EN_U+2]
+	mov	[WORD cs:dr_e2+EN_U],ax
+	mov	[WORD cs:dr_e2+EN_U+2],dx
+	mov	[WORD cs:dr_e2+EN_NX],400h
+	mov	[WORD cs:dr_e2+EN_NX+2],0
+	ret
+ENDP
+
+;
+; u1, u2 at least 0
+;
+PROC	UPos NEAR
+	cmp	[WORD cs:dr_e1+EN_U+2],0
+	jge	@@u1
+	mov	[WORD cs:dr_e1+EN_U],0
+	mov	[WORD cs:dr_e1+EN_U+2],0
+@@u1:
+	cmp	[WORD cs:dr_e2+EN_U+2],0
+	jge	@@u2
+	mov	[WORD cs:dr_e2+EN_U],0
+	mov	[WORD cs:dr_e2+EN_U+2],0
+@@u2:
+	ret
+ENDP
+
+;
+; CF if the end at SI is outside COLLO..COLHI (-100 to viewwidth+100
+; columns, in 64ths)
+;
+PROC	ColFar NEAR
+	mov	ax,[WORD cs:si+EN_COL]
+	mov	dx,[WORD cs:si+EN_COL+2]
+	cmp	dx,0FFFFh					; below -6400 (0FFFFE700h)?
+	jl	@@yes
+	jne	@@hi
+	cmp	ax,0E700h
+	jb	@@yes
+	clc
+	ret
+@@hi:
+	or	dx,dx
+	jnz	@@yes
+	mov	bx,[viewwidth]
+	add	bx,100
+	shl	bx,6
+	cmp	ax,bx
+	ja	@@yes
+	clc
+	ret
+@@yes:
+	stc
+	ret
+ENDP
+
+;
+; ColHeightA: WL_BSP.C's ColHeight for the end at SI (nx, ny, u in, col,
+; h, uh out)
+;
+PROC	ColHeightA NEAR
+	mov	[cs:ch_neg],0
+	mov	ax,[WORD cs:si+EN_NY]
+	mov	dx,[WORD cs:si+EN_NY+2]
+	or	dx,dx
+	jns	@@nypos
+	neg	dx
+	neg	ax
+	sbb	dx,0
+	mov	[cs:ch_neg],1
+@@nypos:
+	mov	[WORD cs:ch_ny],ax
+	mov	[WORD cs:ch_ny+2],dx
+	mov	cx,[WORD cs:si+EN_NX+1]		; h = heightnumerator / (nx>>8)
+	mov	ax,[WORD heightnumerator]
+	mov	dx,[WORD heightnumerator+2]
+	cmp	dx,cx
+	jae	@@hclamp
+	div	cx
+	cmp	ax,7fffh
+	jbe	@@hok
+@@hclamp:
+	mov	ax,7fffh
+@@hok:
+	mov	[WORD cs:si+EN_H],ax
+	mul	[WORD cs:si+EN_U]			; uh = u*h
+	mov	[WORD cs:si+EN_UH],ax
+	mov	[WORD cs:si+EN_UH+2],dx
+	mov	ax,[WORD cs:ch_ny]			; m = |ny|*scale
+	mul	[WORD scale]
+	mov	cx,ax
+	mov	bx,dx
+	mov	ax,[WORD cs:ch_ny+2]
+	mul	[WORD scale]
+	add	bx,ax
+	mov	ax,[WORD cs:si+EN_NX]
+	mov	dx,[WORD cs:si+EN_NX+2]
+@@norm:
+	or	dx,dx
+	jnz	@@shift
+	test	ax,8000h
+	jz	@@div
+@@shift:
+	shr	dx,1
+	rcr	ax,1
+	shr	bx,1
+	rcr	cx,1
+	jmp	@@norm
+@@div:
+	mov	[cs:ch_n],ax
+	mov	ax,bx
+	xor	dx,dx
+	div	[WORD cs:ch_n]
+	or	ax,ax
+	jnz	@@far
+	mov	ax,cx
+	div	[WORD cs:ch_n]
+	cmp	ax,7fffh
+	ja	@@far
+	mov	[cs:ch_q],ax
+	mov	ax,dx
+	mov	cx,64
+	mul	cx
+	div	[WORD cs:ch_n]
+	mov	[cs:ch_f],ax
+	jmp	@@col
+@@far:
+	mov	[WORD cs:ch_q],7fffh
+	mov	[WORD cs:ch_f],0
+@@col:
+	mov	ax,[cs:ch_q]				; off = q*64 + f
+	mov	cx,64
+	mul	cx
+	add	ax,[cs:ch_f]
+	adc	dx,0
+	cmp	[cs:ch_neg],0
+	je	@@pl
+	neg	dx
+	neg	ax
+	sbb	dx,0
+@@pl:
+	mov	bx,[centerx]				; col = centerx*64 +- off
+	shl	bx,6
+	add	ax,bx
+	adc	dx,0
+	mov	[WORD cs:si+EN_COL],ax
+	mov	[WORD cs:si+EN_COL+2],dx
+	ret
+ENDP
+
+;
+; MulS16A: (DX:AX) * BX, signed, the low 32 bits -> DX:AX.  Clobbers CX.
+;
+PROC	MulS16A NEAR
+	push	si
+	xor	si,si
+	or	dx,dx
+	jns	@@xp
+	neg	dx
+	neg	ax
+	sbb	dx,0
+	xor	si,1
+@@xp:
+	or	bx,bx
+	jns	@@kp
+	neg	bx
+	xor	si,1
+@@kp:
+	mov	cx,ax
+	mov	ax,dx
+	mul	bx
+	push	ax
+	mov	ax,cx
+	mul	bx
+	pop	cx
+	add	dx,cx
+	or	si,si
+	jz	@@r
+	neg	dx
+	neg	ax
+	sbb	dx,0
+@@r:
+	pop	si
+	ret
+ENDP
+
+;
+; d for the end at SI: (ny>>4)*a + (nx>>4)*b, a and b in sc_a, sc_b
+;
+PROC	SideD NEAR
+	mov	ax,[WORD cs:si+EN_NY]
+	mov	dx,[WORD cs:si+EN_NY+2]
+	REPT 4
+	sar	dx,1
+	rcr	ax,1
+	ENDM
+	mov	bx,[cs:sc_a]
+	call	MulS16A
+	push	dx
+	push	ax
+	mov	ax,[WORD cs:si+EN_NX]
+	mov	dx,[WORD cs:si+EN_NX+2]
+	REPT 4
+	sar	dx,1
+	rcr	ax,1
+	ENDM
+	mov	bx,[cs:sc_b]
+	call	MulS16A
+	pop	bx
+	pop	cx
+	add	ax,bx
+	adc	dx,cx
+	ret
+ENDP
+
+;
+; SideClipA: WL_BSP.C's SideClip, AX = a, BX = b; CF when the run is wholly
+; outside that side
+;
+PROC	SideClipA NEAR
+	mov	[cs:sc_a],ax
+	mov	[cs:sc_b],bx
+	mov	si,OFFSET dr_e1
+	call	SideD
+	mov	[WORD cs:sc_d1],ax
+	mov	[WORD cs:sc_d1+2],dx
+	mov	si,OFFSET dr_e2
+	call	SideD
+	mov	[WORD cs:sc_d2],ax
+	mov	[WORD cs:sc_d2+2],dx
+	mov	cx,[WORD cs:sc_d1+2]
+	or	cx,dx
+	jns	@@in						; both at or above 0
+	mov	cx,[WORD cs:sc_d1+2]
+	and	cx,dx
+	js	@@out						; both below
+	mov	ax,[WORD cs:sc_d1]			; t = Frac (d1, d1-d2)
+	mov	dx,[WORD cs:sc_d1+2]
+	mov	bx,ax
+	mov	cx,dx
+	sub	bx,[WORD cs:sc_d2]
+	sbb	cx,[WORD cs:sc_d2+2]
+	call	FracA
+	mov	[WORD cs:dr_t],ax
+	mov	[WORD cs:dr_t+2],dx
+	cmp	[WORD cs:sc_d1+2],0
+	jge	@@cut2
+	mov	bx,EN_NX					; end 1 moved
+	call	Diff21
+	call	MulFracA
+	push	dx
+	push	ax
+	mov	bx,EN_NY
+	call	Diff21
+	call	MulFracA
+	push	dx
+	push	ax
+	mov	bx,EN_U
+	call	Diff21
+	call	MulFracA
+	add	[WORD cs:dr_e1+EN_U],ax
+	adc	[WORD cs:dr_e1+EN_U+2],dx
+	pop	ax
+	pop	dx
+	add	[WORD cs:dr_e1+EN_NY],ax
+	adc	[WORD cs:dr_e1+EN_NY+2],dx
+	pop	ax
+	pop	dx
+	add	[WORD cs:dr_e1+EN_NX],ax
+	adc	[WORD cs:dr_e1+EN_NX+2],dx
+	jmp	@@in
+@@cut2:
+	mov	bx,EN_NX					; end 2 = end 1 + MulFrac (diff,t)
+	call	Diff21
+	call	MulFracA
+	push	dx
+	push	ax
+	mov	bx,EN_NY
+	call	Diff21
+	call	MulFracA
+	push	dx
+	push	ax
+	mov	bx,EN_U
+	call	Diff21
+	call	MulFracA
+	add	ax,[WORD cs:dr_e1+EN_U]
+	adc	dx,[WORD cs:dr_e1+EN_U+2]
+	mov	[WORD cs:dr_e2+EN_U],ax
+	mov	[WORD cs:dr_e2+EN_U+2],dx
+	pop	ax
+	pop	dx
+	add	ax,[WORD cs:dr_e1+EN_NY]
+	adc	dx,[WORD cs:dr_e1+EN_NY+2]
+	mov	[WORD cs:dr_e2+EN_NY],ax
+	mov	[WORD cs:dr_e2+EN_NY+2],dx
+	pop	ax
+	pop	dx
+	add	ax,[WORD cs:dr_e1+EN_NX]
+	adc	dx,[WORD cs:dr_e1+EN_NX+2]
+	mov	[WORD cs:dr_e2+EN_NX],ax
+	mov	[WORD cs:dr_e2+EN_NX+2],dx
+@@in:
+	clc
+	ret
+@@out:
+	stc
+	ret
+ENDP
+
+;
+; MulDivFloorA: floor((DX:AX)*CX / BX) -> DX:AX, its remainder (0..BX-1)
+; in DI -- 48-bit product, three DIVs (WL_BSP.C's MulDivFloor)
+;
+PROC	MulDivFloorA NEAR
+	push	si
+	xor	si,si
+	or	dx,dx
+	jns	@@pos
+	neg	dx
+	neg	ax
+	sbb	dx,0
+	inc	si
+@@pos:
+	push	bx
+	mov	bx,dx						; hi
+	mul	cx							; lo*x
+	mov	[cs:md_p0],ax
+	mov	di,dx
+	mov	ax,bx
+	mul	cx							; hi*x
+	add	ax,di
+	adc	dx,0						; DX:AX = p2:p1
+	pop	cx							; the divisor
+	mov	bx,ax
+	mov	ax,dx
+	xor	dx,dx
+	div	cx
+	mov	ax,bx
+	div	cx
+	mov	bx,ax						; q1
+	mov	ax,[cs:md_p0]
+	div	cx							; AX = q0, DX = r
+	mov	di,dx
+	mov	dx,bx
+	or	si,si
+	jz	@@r
+	or	di,di
+	jz	@@exact
+	neg	dx							; -w - 1, rem d - r
+	neg	ax
+	sbb	dx,0
+	sub	ax,1
+	sbb	dx,0
+	neg	di
+	add	di,cx
+	jmp	@@r
+@@exact:
+	neg	dx
+	neg	ax
+	sbb	dx,0
+@@r:
+	pop	si
+	ret
+ENDP
+
+;
+; StepInitA: the bspstep at SS:DI from dr_sa to dr_sb over dr_d 64ths,
+; starting dr_off in: q = floor (dv*64/d), v = a + floor (dv*off/d)
+;
+PROC	StepInitA NEAR
+	mov	ax,[cs:dr_d]
+	mov	[di+12],ax					; d (bspstep: v 0, q 4, r 8, e 10, d 12)
+	mov	ax,[WORD cs:dr_sb]
+	mov	dx,[WORD cs:dr_sb+2]
+	sub	ax,[WORD cs:dr_sa]
+	sbb	dx,[WORD cs:dr_sa+2]
+	mov	[WORD cs:dr_dv],ax
+	mov	[WORD cs:dr_dv+2],dx
+	push	di
+	mov	cx,64
+	mov	bx,[cs:dr_d]
+	call	MulDivFloorA
+	mov	bx,di
+	pop	di
+	mov	[di+4],ax					; q
+	mov	[di+6],dx
+	mov	[di+8],bx					; r
+	mov	ax,[WORD cs:dr_dv]
+	mov	dx,[WORD cs:dr_dv+2]
+	push	di
+	mov	cx,[cs:dr_off]
+	mov	bx,[cs:dr_d]
+	call	MulDivFloorA
+	mov	bx,di
+	pop	di
+	add	ax,[WORD cs:dr_sa]
+	adc	dx,[WORD cs:dr_sa+2]
+	mov	[di],ax						; v
+	mov	[di+2],dx
+	mov	[di+10],bx					; e
+	ret
+ENDP
+
+;
+; CoveredA: BX, AX two rough columns (either way round): CF if every column
+; between them, widened by 4, is claimed already, or none is on the screen
+;
+PROC	CoveredA NEAR
 	cmp	bx,ax
 	jle	@@ord
 	xchg	bx,ax
 @@ord:
 	sub	bx,BH_SLACK
 	add	ax,BH_SLACK+1
-	jns	@@c1ok
-	xor	bx,bx
-@@c1ok:
 	or	bx,bx
 	jns	@@c1pos
 	xor	bx,bx
@@ -2491,10 +3571,10 @@ PROC	BoxHid NEAR
 	mov	ax,[viewwidth]
 @@c2ok:
 	cmp	bx,ax
-	jge	@@yes						; nothing on the screen
+	jge	@@yes
 	les	si,[DWORD cs:wk_solid]
 @@find:
-	cmp	[es:si+2],bx				; the first range ending past c1
+	cmp	[es:si+2],bx
 	jg	@@found
 	add	si,4
 	jmp	@@find
@@ -2511,6 +3591,35 @@ PROC	BoxHid NEAR
 	ret
 ENDP
 
+dr_of	dw	0
+dr_line	dw	0
+dr_a1	dw	0
+dr_a2	dw	0
+dr_e1	db	EN_SIZE DUP (0)			; the run's two ends, and one to swap with
+dr_e2	db	EN_SIZE DUP (0)
+dr_et	db	EN_SIZE DUP (0)
+dr_g	dd	0
+dr_ta	dd	0
+dr_tb	dd	0
+dr_tc	dd	0
+dr_td	dd	0
+dr_t	dd	0
+dr_sa	dd	0
+dr_sb	dd	0
+dr_dv	dd	0
+dr_off	dw	0
+dr_d	dw	0
+ch_neg	dw	0
+ch_ny	dd	0
+ch_n	dw	0
+ch_q	dw	0
+ch_f	dw	0
+sc_a	dw	0
+sc_b	dw	0
+sc_d1	dd	0
+sc_d2	dd	0
+md_p0	dw	0
+
 bh_tab	db	4,2,0,6, 0,2,4,2, 0,2,4,6	; per case: the two corners' x and y,
 		db	0,2,0,6, 0,0,0,0, 4,2,4,6	; as offsets into bx_box (x1 0, y1 2,
 		db	0,2,4,6, 0,6,4,6, 4,2,0,6	; x2 4, y2 6)
@@ -2521,7 +3630,7 @@ wk_nodes	dd	0
 wk_runs		dd	0
 wk_solid	dd	0
 wk_left		dd	0
-wk_cnt		dw	4 DUP (0)			; nodes, culled, hidden, runs drawn
+wk_cnt		dw	5 DUP (0)			; nodes, culled, hidden, runs drawn, runs hidden
 
 
 

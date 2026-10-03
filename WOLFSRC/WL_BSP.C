@@ -876,35 +876,43 @@ static void ClaimInit (void)
 }
 
 //
-// Are the columns from c1 to c2 (either way round, BSPColRange's rough
-// ones) all claimed already, or off the screen?
-//
-static int Covered (int c1, int c2)
-{
-	int		k;
-
-	if (c1 > c2)
-	{
-		k = c1;
-		c1 = c2;
-		c2 = k;
-	}
-	c1 -= HIDESLACK;
-	c2 += HIDESLACK+1;
-	if (c1 < 0)
-		c1 = 0;
-	if (c2 > viewwidth)
-		c2 = viewwidth;
-	if (c1 >= c2)
-		return 1;
-	for (k = 0; solid[k].b <= c1; k++)
-		;
-	return solid[k].a <= c1 && solid[k].b >= c2;
-}
-
-//
 // [cs,ce) is claimed: merged with every range it overlaps or touches
 //
+//
+// for DrawRunA (WL_DR_A.ASM): the claim, and a new tile's texture page
+//
+void BSPClaim (int cs, int ce);
+static void Claim (int cs, int ce);
+
+unsigned RunPage (int vertical, int up, int rl, int tile)
+{
+	unsigned	tilehitv;
+	int			pic;
+
+	if (vertical)
+	{
+		tilehitv = tilemap[up ? rl-1 : rl][tile];
+		if ((tilehitv & 0x40) && (tilemap[up ? rl : rl-1][tile] & 0x80))
+			pic = DOORWALL+3;
+		else
+			pic = vertwall[tilehitv & ~0x40];
+	}
+	else
+	{
+		tilehitv = tilemap[tile][up ? rl-1 : rl];
+		if ((tilehitv & 0x40) && (tilemap[tile][up ? rl : rl-1] & 0x80))
+			pic = DOORWALL+2;
+		else
+			pic = horizwall[tilehitv & ~0x40];
+	}
+	return (unsigned)PM_GetPage (pic);
+}
+
+void BSPClaim (int cs, int ce)
+{
+	Claim (cs,ce);
+}
+
 static void Claim (int cs, int ce)
 {
 	int		i, j;
@@ -1383,122 +1391,6 @@ static int Ends (long gx1, long gy1, long gx2, long gy2, long u1, long u2,
 }
 
 //
-// one wall run: its unclaimed columns, each with its own post
-//
-void DrawRun (bsprun far *r)			// (called by BSPWalk, in WL_DR_A.ASM)
-{
-	bspend		e1, e2, t;
-	int			col, cs, ce, c1, c2, k, end, vertical, up, a1, a2, rl, pic;
-	long		line;
-	bspcols		bc;
-	bspword		hw1, hw2;
-	unsigned	tilehitv;
-
-	vertical = !(r->of & 1);
-	up = r->of & 2;
-	a1 = r->a1;
-	a2 = r->a2;
-	rl = r->line;
-	if (r->of & 4)
-	{									// a block's face: is one standing there?
-		k = vertical ? tilemap[up ? rl-1 : rl][a1] : tilemap[a1][up ? rl-1 : rl];
-		if (!k || (k & 0x80))
-			return;						// open, or the one on the move
-	}
-	if ((vertical ? BSPColRange (rl,a1,rl,a2,&c1,&c2)
-		: BSPColRange (a1,rl,a2,rl,&c1,&c2)) && Covered (c1,c2))
-	{									// roughly where it lands is behind
-		st_hidden++;					// what is drawn there already
-		return;
-	}
-	line = (long)rl << TILESHIFT;
-	if (vertical)
-	{
-		if (!Ends (line-viewx,((long)a1<<TILESHIFT)-viewy,line-viewx,
-			((long)a2<<TILESHIFT)-viewy,0,(long)(a2-a1)<<6,&e1,&e2))
-			return;
-	}
-	else if (!Ends (((long)a1<<TILESHIFT)-viewx,line-viewy,
-		((long)a2<<TILESHIFT)-viewx,line-viewy,0,(long)(a2-a1)<<6,&e1,&e2))
-		return;
-	if (e1.col > e2.col)
-	{
-		t = e1;
-		e1 = e2;
-		e2 = t;
-	}
-	c1 = (int)e1.col;						// (an end is within COLLO..COLHI)
-	c2 = (int)e2.col;
-	cs = c1 < 0 ? 0 : (c1 + 63) >> 6;		// the columns whose rays cross it
-	ce = c2 > viewwidth << 6 ? viewwidth : (c2 + 63) >> 6;
-	if (cs >= ce)
-		return;
-	for (k = 0; solid[k].b <= cs; k++)
-		;
-	if (solid[k].a <= cs && solid[k].b >= ce)
-	{
-		st_hidden++;
-		return;							// wholly behind what is drawn
-	}
-	hw1.w[0] = hw2.w[0] = 0;
-	hw1.w[1] = (unsigned)e1.h;
-	hw2.w[1] = (unsigned)e2.h;
-	bc.flip = (vertical ? up : !up) ? 0xfc0 : 0;
-	bc.a1 = a1;
-	bc.umax = ((a2-a1) << 6) - 1;
-	bc.tile = -1;
-	bc.page = 0;
-
-	col = cs;
-	while (col < ce)
-	{
-		if (solid[k].a <= col)
-		{
-			col = solid[k].b;				// claimed: on past it
-			k++;
-			continue;
-		}
-		end = solid[k].a < ce ? solid[k].a : ce;
-		bspleft -= end - col;
-		StepInit (&bc.H,(long)hw1.l,(long)hw2.l,(col << 6) - c1,c2 - c1);
-		StepInit (&bc.UH,e1.uh,e2.uh,(col << 6) - c1,c2 - c1);
-		bc.col = col;
-		bc.end = end;
-		postwidth = 0;
-		while (BSPCols (&bc))			// a new tile: its page
-		{
-			if (postwidth)
-			{
-				ScalePostF ();				// before PM_GetPage, which can
-				postwidth = 0;				// evict the page it points into
-			}
-			if (vertical)
-			{
-				tilehitv = tilemap[up ? rl-1 : rl][bc.tile];
-				if ((tilehitv & 0x40) && (tilemap[up ? rl : rl-1][bc.tile] & 0x80))
-					pic = DOORWALL+3;
-				else
-					pic = vertwall[tilehitv & ~0x40];
-			}
-			else
-			{
-				tilehitv = tilemap[bc.tile][up ? rl-1 : rl];
-				if ((tilehitv & 0x40) && (tilemap[bc.tile][up ? rl : rl-1] & 0x80))
-					pic = DOORWALL+2;
-				else
-					pic = horizwall[tilehitv & ~0x40];
-			}
-			bc.page = (unsigned)PM_GetPage (pic);
-		}
-		if (postwidth)
-			ScalePostF ();
-		postwidth = 0;
-		col = end;
-	}
-	Claim (cs,ce);
-}
-
-//
 // The view's three planes -- behind the camera, left of the left edge,
 // right of the right edge -- as 8.8 normals pointing in, set each frame.  A
 // box (in tiles) is outside when the one corner of it furthest along some
@@ -1548,97 +1440,6 @@ static void SetPlanes (void)
 		pn[k][1] = -SignMag (sintable[a]);			// -sin: y grows south
 	}
 	BSPSetPlanes (cam8x,cam8y,pn[0][0],pn[0][1],pn[1][0],pn[1][1],pn[2][0],pn[2][1]);
-}
-
-//
-// Is a box (in tiles) wholly behind what is drawn?  Its silhouette from the
-// camera is two corners -- which two depends on where the camera is
-// (Doom's checkcoord) -- and the columns between theirs are all it can
-// cover.  Doom culls whole subtrees so, and so does this.
-//
-static int BoxHidden (int x1, int y1, int x2, int y2)
-{
-	int		ax, ay, bx, by, c1, c2;
-
-	ax = cam8x < x1 << 8 ? 0 : (cam8x <= x2 << 8 ? 1 : 2);
-	ay = cam8y < y1 << 8 ? 0 : (cam8y <= y2 << 8 ? 1 : 2);
-	switch (ay*3 + ax)
-	{
-	case 0:	ax = x2; ay = y1; bx = x1; by = y2; break;
-	case 1:	ax = x1; ay = y1; bx = x2; by = y1; break;
-	case 2:	ax = x1; ay = y1; bx = x2; by = y2; break;
-	case 3:	ax = x1; ay = y1; bx = x1; by = y2; break;
-	case 5:	ax = x2; ay = y1; bx = x2; by = y2; break;
-	case 6:	ax = x1; ay = y1; bx = x2; by = y2; break;
-	case 7:	ax = x1; ay = y2; bx = x2; by = y2; break;
-	case 8:	ax = x2; ay = y1; bx = x1; by = y2; break;
-	default:
-		return 0;							// the camera is in it
-	}
-	return BSPColRange (ax,ay,bx,by,&c1,&c2) && Covered (c1,c2);
-}
-
-//
-// front to back from node n
-//
-static void Walk (int n, int inside)
-{
-	bspnode	far *node;
-	long	cam;
-	int		nearc, farc, k;				// (near and far are Borland's keywords)
-	bsprun	far *r;
-
-	while (n >= 0 && bspleft > 0)
-	{
-		node = &bb.nodes[n];
-		st_nodes++;
-		if (!inside)						// (a box wholly in view: all below it too)
-		{
-			k = BSPClassify (node->x1,node->y1,node->x2,node->y2);
-			if (k == 1)
-			{
-				st_culled++;
-				return;						// nothing below it is in view
-			}
-			inside = k == 2;
-		}
-		if (BoxHidden (node->x1,node->y1,node->x2,node->y2))
-		{
-			st_boxhid++;
-			return;							// nor anything that can be seen
-		}
-		cam = node->axis ? viewy : viewx;
-		if (cam < ((long)node->coord << TILESHIFT))
-		{
-			nearc = node->lo;
-			farc = node->hi;
-		}
-		else
-		{
-			nearc = node->hi;
-			farc = node->lo;
-		}
-		Walk (nearc,inside);
-		if (bspleft <= 0)
-			return;
-		for (k = 0, r = &bb.runs[node->first]; k < node->count; k++, r++)
-			if ((r->of & 2) ? cam > ((long)node->coord << TILESHIFT)
-				: cam < ((long)node->coord << TILESHIFT))
-			{
-				if (inside)
-					;
-				else if (r->of & 1)
-				{
-					if (BSPOutside (r->a1,r->line,r->a2,r->line))
-						continue;
-				}
-				else if (BSPOutside (r->line,r->a1,r->line,r->a2))
-					continue;
-				st_runs++;
-				DrawRun (r);
-			}
-		n = farc;							// the far side: a loop, not a call
-	}
 }
 
 //
@@ -1928,6 +1729,7 @@ void BSPRefresh (void)
 	st_culled += BSPWalkStat (1);
 	st_boxhid += BSPWalkStat (2);
 	st_runs += BSPWalkStat (3);
+	st_hidden += BSPWalkStat (4);
 	if (bspleft > 0)					// columns no wall reached: the claims
 	{									// as a byte a column, for the doors
 		int	k;
