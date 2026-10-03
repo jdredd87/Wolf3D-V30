@@ -1230,6 +1230,12 @@ void InitGame (void)
 			}
 		}
 	}
+	for (i = 1;i < _argc;i++)			// the BSP version: BSP, the tree draws the walls
+	{
+		char far *a = _argv[i];
+		if ((a[0]|32)=='b' && (a[1]|32)=='s' && (a[2]|32)=='p' && !a[3])
+			bspmode = 1;
+	}
 	if (flatwalls)						// NEC V30 build (step 84): the columns and the
 	{									// colours' averages, before the page cache
 		MM_GetPtr (&flatbuf,640+128*3+80*8+1);	// and the fill body: so only this mode pays

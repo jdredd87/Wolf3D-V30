@@ -1227,8 +1227,13 @@ void WallRefresh (void)
 		}
 		bandlim = 0xFFFF;
 	}
+	if (bspmode && !flatwalls && pixstep == 1 && BSPReady ())
+		BSPRefresh ();			// the BSP version: the walls from the tree
+	else
+	{
 	AsmRefresh ();
 	ScalePost ();			// no more optimization on last post
+	}
 	if (pixstep == 2)			// NEC V30 build (step 79): LOWDETAIL cast every
 	{							// other column; the sprites clip against both
 		int	i;

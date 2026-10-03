@@ -934,6 +934,9 @@ extern	boolean		tdfzdone;
 long	BiosTicks (void);
 void	BuildBSP (void);				// WL_BSP.C: the BSP version
 void	BSPReport (void);
+void	BSPRefresh (void);
+int		BSPReady (void);
+extern	int far bspmode;				// BSP: the tree draws the walls
 
 //
 // WL_PROF -- the PROFILE sampler (StevenC & Claude)

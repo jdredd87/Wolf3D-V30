@@ -132,3 +132,63 @@ held here until StevenC decides whether 4-5% on the V30 is worth it, or
 whether this branch should go after larger non-exact wins (the compiled
 scalers are a third of a frame).
 
+## Milestone 2, working (2026-10-03): the tree draws the game's walls
+
+StevenC asked for the BSP to run the actual game, so milestone 2 went ahead.
+`TIMEDEMO BSP`, or `BSP` on the command line, puts `BSPRefresh` in
+`WallRefresh` in place of `AsmRefresh` (the walk stays for `FLATWALLS` and
+`LOWWALLS`, and if a map's tree could not be built).  Front to back through
+the tree, frustum-culled by node box and by run; each run facing the camera
+is projected at its two ends and stepped across its columns; doors after the
+walls, wherever they are nearer; then object visibility (`spotvis`) from the
+same projection.  TIMEDEMO prints a line of per-frame counts.
+
+**The picture**: frame 50 of demo 0 against the walk differs in 2,726
+pixels, single texels at scattered columns -- the BSP samples each column
+where its own ray falls, from ends known to 1/64 column, and the walk
+truncates differently.  No holes: every column of every frame is claimed.
+
+**Speed, demo 0, `QUICK PRELOAD`, play frames:**
+
+| | 486 | V30 |
+|---|---|---|
+| the walk | 58-60 fps | 4.98 fps |
+| BSP, first working version | 20.8 | |
+| + the culling fixed (below) | 28.5 | 2.01 |
+| + exact stepping, view box for statics | 32.3 | |
+| + one routine per end, doors culled | **39.0** | **2.58** |
+
+So far it is half the walk's speed on the V30.  How each step was found:
+
+* **id's `sintable` is sign and magnitude** (a negative entry is the
+  magnitude with bit 31 set, as `FixedByFrac` takes).  Read with a plain
+  shift every negative sine came out positive, three quadrants' culling
+  planes pointed outward, and whole walls were culled -- an average of 93
+  columns a frame were left to the floor fill, and the tree walk never
+  stopped early.  Counters, not the picture, showed it: frame 50 looked fine.
+* **A run cut at the near plane can project thousands of columns off the
+  screen**, and stepping from there -- the start found by multiplying a
+  truncated step -- slid the texture along every near wall.  Runs are now
+  clipped to the view's sides (only when an end is more than 100 columns
+  out), ends kept in 64ths of a column, and the per-column steps exact: a
+  quotient and a remainder carried, as a line is drawn.
+* **Object visibility projected every static in the level, every frame**,
+  with six `FixedByFrac`s each -- 14% of the 486's frame.  Now the view's
+  triangle, cut off at the farthest wall drawn (`postmin`), gives a box that
+  rejects most statics with four compares, and the rest use 16-bit IMULs.
+* **Borland calls a helper for every 32-bit multiply, divide and shift**,
+  and the first run setup made sixty calls a run; `DrawDoors` also
+  projected every door on the level.  On the V30 those calls were a third
+  of the frame (the profile: `UDiv16` 7%, `Col64` 6%, `UMul16` 5%).
+  `ColHeight` now does a point's column, height and u*h inline on the
+  8086's MUL and DIV, `MulDivFloor` the stepping set-up as 48-bit products
+  over three DIVs, and doors are culled by the view and skipped when open.
+
+**Not handled yet**: pushwalls (a moving block is still in the tree where it
+started), and `spotvis` is marked only for objects (the tile under each
+static and actor whose projection is nearer than the wall in its column).
+
+**Where the V30's time goes now** is the next job: the per-column loop in C
+(`DrawRun`, 15% before the last step), the visibility pass, and the tree
+walk with its culling tests.  The walk is assembly throughout; to be worth
+anything here the column loop has to be as well.

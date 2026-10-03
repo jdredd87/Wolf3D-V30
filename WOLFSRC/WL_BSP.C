@@ -66,6 +66,11 @@ bsplogent	far bsplog[8];
 int			far bsplogn;
 
 char far bspfmt[] = "bsp: floor %2u  %4u runs (%u cut)  %4u nodes  depth %2u  %5u bytes  %u ticks (alloc %u, runs %u, tree %u)\n";
+long	far st_frames, far st_nodes, far st_culled, far st_runs,
+		far st_left;					// renderer counts, for BSPReport
+int		far st_lframe = -1, far st_lmax, far st_lfirst, far st_llast, far st_lnone;
+char far bspstat[] = "bsp: %ld frames drawn from the tree -- a frame: %ld nodes (%ld culled), %ld runs projected, %ld columns left to the fill\n";
+char far bspstat2[] = "bsp: most left %d at frame %d (claimed %d..%d); %d frames with none claimed\n";
 char far bspfail[] = "bsp: floor %2u  NOT BUILT -- more runs or nodes than it has room for\n";
 
 static void AddRun (int of, int line, int a1, int a2)
@@ -468,6 +473,18 @@ void BSPReport (void)
 	int			i;
 	bsplogent	far *l;
 
+	if (st_frames)
+	{
+		char	sfmt[140];
+		if (_fstrlen (bspstat) < sizeof(sfmt))
+		{
+			_fstrcpy ((char far *)sfmt,bspstat);
+			printf (sfmt,st_frames,st_nodes/st_frames,st_culled/st_frames,
+				st_runs/st_frames,st_left/st_frames);
+			_fstrcpy ((char far *)sfmt,bspstat2);
+			printf (sfmt,st_lmax,st_lframe,st_lfirst,st_llast,st_lnone);
+		}
+	}
 	for (i = 0; i < bsplogn; i++)
 	{
 		l = &bsplog[i];
@@ -487,4 +504,963 @@ void BSPReport (void)
 				l->talloc,l->tfind,l->tbuild);
 		}
 	}
+}
+
+/*
+=============================================================================
+
+						THE RENDERER (milestone 2)
+
+The walls from the tree: front to back, each run that faces the camera is
+projected to its screen columns, and every column of it not yet claimed
+gets its own exact intercept on the run's line, its height by id's
+CalcHeight arithmetic, its texture column, and a post through ScalePostF --
+so the compiled scalers draw it as ever.  Doors are not in the tree (they
+move): each frame each door in front is projected and drawn over any column
+where it is nearer than the wall there, a nearer face being always the
+taller.  Then the visibility the walk used to mark ray by ray: an actor or a
+static is visible when its tile's centre is in view and nearer than the
+wall in its column -- the game play change this branch allows.
+
+=============================================================================
+*/
+
+#define DOORWALL	(PMSpriteStart-8)		// as WL_DRAW.C
+extern int		midangle;
+extern long		postsource;
+extern unsigned	postx, postwidth, postmin;
+void	ScalePostF (void);
+void	DropFillF (void);
+
+int		far bspmode;				// BSP: the tree draws the walls
+byte	far bspclaim[MAXVIEWWIDTH];	// columns drawn this frame
+int		far bspleft;				// and how many are not
+
+//
+// The arithmetic of a run's ends, on the 8086's own MUL and DIV.  Borland
+// does every long multiply and divide in a helper (LXMUL@, LDIV@ -- the
+// divide a 32-step loop), and a run's ends took two dozen of them: on the
+// 486 it was 280 microseconds a run, the most of the renderer's time.  A
+// 32/16 DIV and a 16x16 MUL are all any of it needs.
+//
+typedef union
+{
+	unsigned long	l;
+	unsigned		w[2];
+} bspword;
+
+//
+// a/d and a%d for any 32-bit a and 16-bit d, by two DIVs
+//
+static unsigned long UDiv16 (unsigned long a, unsigned d, unsigned *rem)
+{
+	bspword		q;
+	unsigned	qh, ql, r;
+
+asm	mov	cx,[d]
+asm	mov	ax,word ptr [a+2]
+asm	xor	dx,dx
+asm	div	cx
+asm	mov	[qh],ax
+asm	mov	ax,word ptr [a]
+asm	div	cx
+asm	mov	[ql],ax
+asm	mov	[r],dx
+	*rem = r;
+	q.w[0] = ql;
+	q.w[1] = qh;
+	return q.l;
+}
+
+//
+// a*x, the low 32 bits
+//
+static unsigned long UMul16 (unsigned long a, unsigned x)
+{
+	bspword		p;
+	unsigned	lo, hi;
+
+asm	mov	ax,word ptr [a+2]
+asm	mul	[x]
+asm	mov	cx,ax
+asm	mov	ax,word ptr [a]
+asm	mul	[x]
+asm	add	dx,cx
+asm	mov	[lo],ax
+asm	mov	[hi],dx
+	p.w[0] = lo;
+	p.w[1] = hi;
+	return p.l;
+}
+
+static long MulS16 (long x, int k)
+{
+	int		neg = 0;
+	long	r;
+
+	if (x < 0)
+	{
+		x = -x;
+		neg = 1;
+	}
+	if (k < 0)
+	{
+		k = -k;
+		neg ^= 1;
+	}
+	r = (long)UMul16 (x,k);
+	return neg ? -r : r;
+}
+
+//
+// x*t, t a 16.16 fraction from 0 to 1
+//
+static long MulFrac (long x, unsigned long t)
+{
+	bspword		r;
+	unsigned	tt, lo, hi;
+	int			neg = 0;
+
+	if (t >= 0x10000L)
+		return x;
+	if (x < 0)
+	{
+		x = -x;
+		neg = 1;
+	}
+	tt = (unsigned)t;
+asm	mov	ax,word ptr [x]
+asm	mul	[tt]
+asm	mov	cx,dx
+asm	mov	ax,word ptr [x+2]
+asm	mul	[tt]
+asm	add	ax,cx
+asm	adc	dx,0
+asm	mov	[lo],ax
+asm	mov	[hi],dx
+	r.w[0] = lo;
+	r.w[1] = hi;
+	return neg ? -(long)r.l : (long)r.l;
+}
+
+//
+// num/den as a 16.16 fraction, for 0 <= num/den <= 1 (signs alike)
+//
+static unsigned long Frac (long num, long den)
+{
+	bspword		n;
+	unsigned	r;
+
+	if (den < 0)
+	{
+		num = -num;
+		den = -den;
+	}
+	if (num <= 0)
+		return 0;
+	if (num >= den)
+		return 0x10000L;
+	while (den > 0x7fffL)
+	{
+		num >>= 1;
+		den >>= 1;
+	}
+	n.w[1] = (unsigned)num;
+	n.w[0] = 0;
+	return UDiv16 (n.l,(unsigned)den,&r);
+}
+
+#define NEARD	0x400L				// 1/64 tile
+
+//
+// A wall's height on the screen (id's heightnumerator/(nx>>8), as 1/depth)
+// and its texture coordinate times that height are both linear across the
+// screen, so a run is projected at its two ends only and stepped across its
+// columns: an add for the height, an add and one 32/16 DIV for the texture.
+// (Doom's way; the first version did per column two 32-bit multiplies, a
+// 32-bit divide and a page lookup, and ran at a third of the walk's speed.)
+//
+typedef struct
+{
+	long	col;			// the screen column it lands on, in 64ths
+	long	h;				// heightnumerator/(nx>>8)
+	long	uh;				// texels along the run, times h
+	int		ci;				// the whole column (col floored)
+} bspend;
+
+//
+// Clip a view-space segment to one side of the view: d = ny*a + nx*b is
+// the signed distance (scaled) from the edge, a column past it.  Without
+// this, an end cut at the near plane could land thousands of columns off
+// the screen, and the stepping below -- however exact per column -- was
+// started from there: the texture slid along the near walls.
+//
+static int SideClip (long *nx1, long *ny1, long *u1, long *nx2, long *ny2,
+	long *u2, int a, int b)
+{
+	long			d1, d2, dx, dy, du;
+	unsigned long	t;
+
+	d1 = MulS16 (*ny1 >> 4,a) + MulS16 (*nx1 >> 4,b);
+	d2 = MulS16 (*ny2 >> 4,a) + MulS16 (*nx2 >> 4,b);
+	if (d1 >= 0 && d2 >= 0)
+		return 1;
+	if (d1 < 0 && d2 < 0)
+		return 0;
+	t = Frac (d1,d1-d2);				// 16.16, from 1 towards 2: where d = 0
+	dx = *nx2 - *nx1;
+	dy = *ny2 - *ny1;
+	du = *u2 - *u1;
+	if (d1 < 0)
+	{
+		*nx1 += MulFrac (dx,t);
+		*ny1 += MulFrac (dy,t);
+		*u1 += MulFrac (du,t);
+	}
+	else
+	{
+		*nx2 = *nx1 + MulFrac (dx,t);
+		*ny2 = *ny1 + MulFrac (dy,t);
+		*u2 = *u1 + MulFrac (du,t);
+	}
+	return 1;
+}
+
+//
+// A value linear across the screen, a at the column (in 64ths) where a
+// segment starts to b where it ends, d 64ths later, stepped exactly a whole
+// column at a time: a quotient and a remainder carried, as a line is drawn,
+// from the first whole column, off 64ths in.  So every column is sampled
+// where its own ray falls.  (A truncated step drifts by up to a unit a
+// column, and u = uh/h turned that into texels; starting at a rounded
+// column put every texel up to half a column out.)
+//
+typedef struct
+{
+	union
+	{
+		long		l;
+		unsigned	w[2];		// w[1]: the whole part of a 16.16 height
+	} v;
+	long	q;
+	int		r, e, d;
+} bspstep;
+
+//
+// floor(dv*x/d) and its remainder (0 <= rem < d): the product is 48 bits,
+// divided by three DIVs, so nothing overflows on the way
+//
+static long MulDivFloor (long dv, unsigned x, unsigned d, int *rem)
+{
+	unsigned	neg = 0, p0, q0, q1, r;
+	bspword		w;
+
+	if (dv < 0)
+	{
+		dv = -dv;
+		neg = 1;
+	}
+asm	mov	ax,word ptr [dv]
+asm	mul	word ptr [x]
+asm	mov	[p0],ax
+asm	mov	bx,dx
+asm	mov	ax,word ptr [dv+2]
+asm	mul	word ptr [x]
+asm	add	ax,bx
+asm	adc	dx,0
+asm	mov	cx,[d]
+asm	mov	bx,ax
+asm	mov	ax,dx
+asm	xor	dx,dx
+asm	div	cx
+asm	mov	ax,bx
+asm	div	cx
+asm	mov	[q1],ax
+asm	mov	ax,[p0]
+asm	div	cx
+asm	mov	[q0],ax
+asm	mov	[r],dx
+	w.w[0] = q0;
+	w.w[1] = q1;
+	if (!neg)
+	{
+		*rem = r;
+		return (long)w.l;
+	}
+	if (r)
+	{
+		*rem = d - r;
+		return -(long)w.l - 1;
+	}
+	*rem = 0;
+	return -(long)w.l;
+}
+
+static void StepInit (bspstep *s, long a, long b, int off, int d)
+{
+	s->d = d;
+	s->q = MulDivFloor (b-a,64,d,&s->r);
+	s->v.l = a + MulDivFloor (b-a,off,d,&s->e);
+}
+
+#define STEP(s)	((s).v.l += (s).q, ((s).e += (s).r) >= (s).d ? ((s).e -= (s).d, (s).v.l++) : 0)
+
+//
+// A view-space point's column (in 64ths, and whole) and height, and u*h,
+// in one routine on the 8086's MUL and DIV: the first version called a
+// helper for every multiply and divide, sixty calls a run, and on the V30
+// those calls were a third of the frame.  The column is centerx +
+// ny*scale/nx, nx shifted to 15 bits so that one DIV (two, for the whole
+// 32-bit quotient) does it; a point off the screen by more than 0x7fff
+// columns reads as 0x7fff.  The height is id's heightnumerator/(nx>>8),
+// clamped as ScalePost clamps it.
+//
+static void ColHeight (long nx, long ny, unsigned u, bspend *e)
+{
+	unsigned	h, n, q, f, neg, ulo, uhi, olo, ohi;
+	bspword		w;
+
+	neg = ny < 0;
+	if (neg)
+		ny = -ny;
+asm	mov	cx,word ptr [nx+1]
+asm	mov	ax,word ptr [heightnumerator]
+asm	mov	dx,word ptr [heightnumerator+2]
+asm	cmp	dx,cx
+asm	jae	chclamp
+asm	div	cx
+asm	cmp	ax,7fffh
+asm	jbe	chhok
+chclamp:
+asm	mov	ax,7fffh
+chhok:
+asm	mov	[h],ax
+asm	mul	word ptr [u]
+asm	mov	[ulo],ax
+asm	mov	[uhi],dx
+asm	mov	ax,word ptr [ny]
+asm	mul	word ptr [scale]
+asm	mov	cx,ax
+asm	mov	bx,dx
+asm	mov	ax,word ptr [ny+2]
+asm	mul	word ptr [scale]
+asm	add	bx,ax
+asm	mov	ax,word ptr [nx]
+asm	mov	dx,word ptr [nx+2]
+chnorm:
+asm	or	dx,dx
+asm	jnz	chshift
+asm	test	ax,8000h
+asm	jz	chdiv
+chshift:
+asm	shr	dx,1
+asm	rcr	ax,1
+asm	shr	bx,1
+asm	rcr	cx,1
+asm	jmp	chnorm
+chdiv:
+asm	mov	[n],ax
+asm	mov	ax,bx
+asm	xor	dx,dx
+asm	div	word ptr [n]
+asm	or	ax,ax
+asm	jnz	chfar
+asm	mov	ax,cx
+asm	div	word ptr [n]
+asm	cmp	ax,7fffh
+asm	ja	chfar
+asm	mov	[q],ax
+asm	mov	ax,dx
+asm	mov	cx,64
+asm	mul	cx
+asm	div	word ptr [n]
+asm	mov	[f],ax
+asm	jmp	chcol
+chfar:
+asm	mov	word ptr [q],7fffh
+asm	mov	word ptr [f],0
+chcol:
+asm	mov	ax,[q]
+asm	mov	cx,64
+asm	mul	cx
+asm	add	ax,[f]
+asm	adc	dx,0
+asm	mov	[olo],ax
+asm	mov	[ohi],dx
+	e->h = h;
+	w.w[0] = ulo;
+	w.w[1] = uhi;
+	e->uh = (long)w.l;
+	w.w[0] = olo;
+	w.w[1] = ohi;
+	e->col = (long)(centerx << 6) + (neg ? -(long)w.l : (long)w.l);
+	e->ci = neg ? centerx - q - (f != 0) : centerx + q;
+}
+
+//
+// a point far enough off the screen that the run must be clipped to it
+// first: the stepping's 64ths have to fit an int
+//
+#define COLLO	(-100*64L)
+#define COLHI	((long)(viewwidth+100)*64)
+
+//
+// view-space ends (nx, ny) of a segment, texel positions u1, u2 along it,
+// clipped to the near plane and the sides of the view; 0 if none is left
+//
+static int Ends (long gx1, long gy1, long gx2, long gy2, long u1, long u2,
+	bspend *e1, bspend *e2)
+{
+	long			nx1, ny1, nx2, ny2;
+	unsigned long	t;
+
+	nx1 = FixedByFrac (gx1,viewcos) - FixedByFrac (gy1,viewsin);
+	nx2 = FixedByFrac (gx2,viewcos) - FixedByFrac (gy2,viewsin);
+	if (nx1 < NEARD && nx2 < NEARD)
+		return 0;
+	ny1 = FixedByFrac (gy1,viewcos) + FixedByFrac (gx1,viewsin);
+	ny2 = FixedByFrac (gy2,viewcos) + FixedByFrac (gx2,viewsin);
+	if (nx1 < NEARD || nx2 < NEARD)		// cut where nx = NEARD (linear along it)
+	{
+		t = Frac (NEARD-nx1,nx2-nx1);		// 16.16, from 1 towards 2
+		if (nx1 < NEARD)
+		{
+			ny1 += MulFrac (ny2-ny1,t);
+			u1 += MulFrac (u2-u1,t);
+			nx1 = NEARD;
+		}
+		else
+		{
+			ny2 = ny1 + MulFrac (ny2-ny1,t);
+			u2 = u1 + MulFrac (u2-u1,t);
+			nx2 = NEARD;
+		}
+	}
+	if (u1 < 0)
+		u1 = 0;
+	if (u2 < 0)
+		u2 = 0;
+	ColHeight (nx1,ny1,(unsigned)u1,e1);
+	ColHeight (nx2,ny2,(unsigned)u2,e2);
+	if (e1->col < COLLO || e1->col > COLHI || e2->col < COLLO || e2->col > COLHI)
+	{
+		if (!SideClip (&nx1,&ny1,&u1,&nx2,&ny2,&u2,(int)scale,centerx+2)
+			|| !SideClip (&nx1,&ny1,&u1,&nx2,&ny2,&u2,-(int)scale,viewwidth+2-centerx))
+			return 0;
+		if (u1 < 0)
+			u1 = 0;
+		if (u2 < 0)
+			u2 = 0;
+		ColHeight (nx1,ny1,(unsigned)u1,e1);
+		ColHeight (nx2,ny2,(unsigned)u2,e2);
+	}
+	return 1;
+}
+
+//
+// one wall run: its unclaimed columns, each with its own post
+//
+static void DrawRun (bsprun far *r)
+{
+	bspend		e1, e2, t;
+	int			col, cs, ce, c1, c2, vertical, up, flip, tile, lasttile, a1, a2, rl, pic;
+	long		line;
+	bspstep		H, UH;
+	bspword		hw1, hw2;
+	unsigned	h, u, uhlo, uhhi, texture, tilehitv, page;
+
+	vertical = !(r->of & 1);
+	up = r->of & 2;
+	a1 = r->a1;
+	a2 = r->a2;
+	rl = r->line;
+	line = (long)rl << TILESHIFT;
+	if (vertical)
+	{
+		if (!Ends (line-viewx,((long)a1<<TILESHIFT)-viewy,line-viewx,
+			((long)a2<<TILESHIFT)-viewy,0,(long)(a2-a1)<<6,&e1,&e2))
+			return;
+	}
+	else if (!Ends (((long)a1<<TILESHIFT)-viewx,line-viewy,
+		((long)a2<<TILESHIFT)-viewx,line-viewy,0,(long)(a2-a1)<<6,&e1,&e2))
+		return;
+	if (e1.col > e2.col)
+	{
+		t = e1;
+		e1 = e2;
+		e2 = t;
+	}
+	c1 = (int)e1.col;						// (an end is within COLLO..COLHI)
+	c2 = (int)e2.col;
+	cs = c1 < 0 ? 0 : (c1 + 63) >> 6;		// the columns whose rays cross it
+	ce = c2 > viewwidth << 6 ? viewwidth : (c2 + 63) >> 6;
+	if (cs >= ce)
+		return;
+	hw1.w[0] = hw2.w[0] = 0;
+	hw1.w[1] = (unsigned)e1.h;
+	hw2.w[1] = (unsigned)e2.h;
+	StepInit (&H,(long)hw1.l,(long)hw2.l,(cs << 6) - c1,c2 - c1);
+	StepInit (&UH,e1.uh,e2.uh,(cs << 6) - c1,c2 - c1);
+	flip = vertical ? up : !up;
+
+	lasttile = -1;
+	page = 0;
+	postwidth = 0;
+	for (col = cs; col < ce; col++, STEP(H), STEP(UH))
+	{
+		if (bspclaim[col])
+		{
+			if (postwidth)
+			{
+				ScalePostF ();
+				postwidth = 0;
+			}
+			continue;
+		}
+		h = H.v.w[1];
+		if (!h)
+			h = 1;
+		uhhi = UH.v.w[1];
+		if ((int)uhhi < 0)
+			u = 0;
+		else if (uhhi >= h)
+			u = 0xffff;
+		else
+		{
+			uhlo = UH.v.w[0];
+asm			mov	ax,[uhlo]
+asm			mov	dx,[uhhi]
+asm			div	[h]
+asm			mov	[u],ax
+		}
+		tile = a1 + (u >> 6);
+		if (tile >= a2)
+		{
+			tile = a2-1;
+			u = ((a2-a1) << 6) - 1;
+		}
+		if (tile != lasttile)
+		{
+			lasttile = tile;
+			if (vertical)
+			{
+				tilehitv = tilemap[up ? rl-1 : rl][tile];
+				if ((tilehitv & 0x40) && (tilemap[up ? rl : rl-1][tile] & 0x80))
+					pic = DOORWALL+3;
+				else
+					pic = vertwall[tilehitv & ~0x40];
+			}
+			else
+			{
+				tilehitv = tilemap[tile][up ? rl-1 : rl];
+				if ((tilehitv & 0x40) && (tilemap[tile][up ? rl : rl-1] & 0x80))
+					pic = DOORWALL+2;
+				else
+					pic = horizwall[tilehitv & ~0x40];
+			}
+			page = (unsigned)PM_GetPage (pic);
+		}
+		texture = (u & 63) << 6;
+		if (flip)
+			texture = 0xfc0 - texture;
+		bspclaim[col] = 1;
+		bspleft--;
+		if (postwidth && col == postx+postwidth
+			&& ((unsigned *)&postsource)[0] == texture
+			&& ((unsigned *)&postsource)[1] == page)
+		{
+			postwidth++;					// the same texture column: wider
+			wallheight[col] = wallheight[col-1];
+			continue;
+		}
+		wallheight[col] = h;
+		if (postwidth)
+			ScalePostF ();
+		((unsigned *)&postsource)[0] = texture;
+		((unsigned *)&postsource)[1] = page;
+		postx = col;
+		postwidth = 1;
+	}
+	if (postwidth)
+		ScalePostF ();
+	postwidth = 0;
+}
+
+//
+// The view's three planes -- behind the camera, left of the left edge,
+// right of the right edge -- as 8.8 normals pointing in, set each frame.  A
+// box (in tiles) is outside when the one corner of it furthest along some
+// normal is still behind that plane: two 16-bit multiplies a plane.  Whole
+// subtrees, and runs before they are projected, are skipped so.  (Without
+// it the walk visited every node nearer than the farthest wall it drew,
+// those behind the camera included, and projected every run there that
+// faced it.)
+//
+int		far cam8x, far cam8y;
+int		far pn[3][2];
+
+//
+// id's sintable is sign and magnitude (a negative entry is the magnitude
+// with bit 31 set, which FixedByFrac takes) -- as an 8.8 int.  Read with a
+// plain shift, every negative sine came out positive, and three of the
+// four quadrants' planes pointed the wrong way: whole walls were culled.
+//
+static int SignMag (long v)
+{
+	return (v & 0x80000000L) ? -(int)((v & 0x7fffffffL) >> 8) : (int)(v >> 8);
+}
+
+//
+// p*u + q*v, two 16-bit IMULs (Borland calls LXMUL@ for (long)int*int)
+//
+static long Dot (int p, int q, int u, int v)
+{
+	long	r;
+
+asm	mov	ax,[p]
+asm	imul	word ptr [u]
+asm	mov	bx,ax
+asm	mov	cx,dx
+asm	mov	ax,[q]
+asm	imul	word ptr [v]
+asm	add	ax,bx
+asm	adc	dx,cx
+asm	mov	word ptr [r],ax
+asm	mov	word ptr [r+2],dx
+	return r;
+}
+
+static void SetPlanes (void)
+{
+	int		k, a, h;
+	int		ang[3];
+
+	cam8x = (int)(viewx >> 8);
+	cam8y = (int)(viewy >> 8);
+	h = pixelangle[0]/10 + 2;				// half the field of view, and a margin
+	ang[0] = viewangle;
+	ang[1] = viewangle + h - 90;
+	ang[2] = viewangle - h + 90;
+	for (k = 0; k < 3; k++)
+	{
+		a = ang[k];
+		while (a < 0)
+			a += ANGLES;
+		while (a >= ANGLES)
+			a -= ANGLES;
+		pn[k][0] = SignMag (sintable[a+ANGLES/4]);	// cos
+		pn[k][1] = -SignMag (sintable[a]);			// -sin: y grows south
+	}
+}
+
+static int Outside (int x1, int y1, int x2, int y2)
+{
+	int		k, px, py;
+
+	for (k = 0; k < 3; k++)
+	{
+		px = ((pn[k][0] >= 0 ? x2 : x1) << 8) - cam8x;
+		py = ((pn[k][1] >= 0 ? y2 : y1) << 8) - cam8y;
+		if (Dot (px,py,pn[k][0],pn[k][1]) < 0)
+			return 1;
+	}
+	return 0;
+}
+
+//
+// front to back from node n
+//
+static void Walk (int n)
+{
+	bspnode	far *node;
+	long	cam;
+	int		nearc, farc, k;				// (near and far are Borland's keywords)
+	bsprun	far *r;
+
+	while (n >= 0 && bspleft > 0)
+	{
+		node = &bb.nodes[n];
+		st_nodes++;
+		if (Outside (node->x1,node->y1,node->x2,node->y2))
+		{
+			st_culled++;
+			return;							// nothing below it is in view
+		}
+		cam = node->axis ? viewy : viewx;
+		if (cam < ((long)node->coord << TILESHIFT))
+		{
+			nearc = node->lo;
+			farc = node->hi;
+		}
+		else
+		{
+			nearc = node->hi;
+			farc = node->lo;
+		}
+		Walk (nearc);
+		if (bspleft <= 0)
+			return;
+		for (k = 0, r = &bb.runs[node->first]; k < node->count; k++, r++)
+			if ((r->of & 2) ? cam > ((long)node->coord << TILESHIFT)
+				: cam < ((long)node->coord << TILESHIFT))
+			{
+				if (r->of & 1)
+				{
+					if (Outside (r->a1,r->line,r->a2,r->line))
+						continue;
+				}
+				else if (Outside (r->line,r->a1,r->line,r->a2))
+					continue;
+				st_runs++;
+				DrawRun (r);
+			}
+		n = farc;							// the far side: a loop, not a call
+	}
+}
+
+//
+// the doors, over the walls wherever they are nearer -- projected the same
+// way, one tile long, the open part (doorposition) left out
+//
+static void DrawDoors (void)
+{
+	doorobj_t	*d;
+	bspend		e1, e2, t;
+	int			col, cs, ce, c1, c2, page;
+	long		line, base;
+	bspstep		H, UH;
+	bspword		hw1, hw2;
+	unsigned	h, u, frac, dp, texture;
+
+	for (d = doorobjlist; d < lastdoorobj; d++)
+	{
+		if (doorposition[d-doorobjlist] > 0xfc00
+			|| Outside (d->tilex,d->tiley,d->tilex+1,d->tiley+1))
+			continue;					// open, or out of the view
+		if (d->vertical)
+		{
+			line = ((long)d->tilex << TILESHIFT) + TILEGLOBAL/2;
+			base = (long)d->tiley << TILESHIFT;
+			if (!Ends (line-viewx,base-viewy,line-viewx,base+TILEGLOBAL-viewy,0,64,&e1,&e2))
+				continue;
+		}
+		else
+		{
+			line = ((long)d->tiley << TILESHIFT) + TILEGLOBAL/2;
+			base = (long)d->tilex << TILESHIFT;
+			if (!Ends (base-viewx,line-viewy,base+TILEGLOBAL-viewx,line-viewy,0,64,&e1,&e2))
+				continue;
+		}
+		if (e1.col > e2.col)
+		{
+			t = e1;
+			e1 = e2;
+			e2 = t;
+		}
+		c1 = (int)e1.col;
+		c2 = (int)e2.col;
+		cs = c1 < 0 ? 0 : (c1 + 63) >> 6;
+		ce = c2 > viewwidth << 6 ? viewwidth : (c2 + 63) >> 6;
+		if (cs >= ce)
+			continue;
+		switch (d->lock)
+		{
+		case dr_normal:		page = DOORWALL;	break;
+		case dr_elevator:	page = DOORWALL+4;	break;
+		default:			page = DOORWALL+6;	break;
+		}
+		if (d->vertical)
+			page++;
+		page = (unsigned)PM_GetPage (page);
+		dp = doorposition[d-doorobjlist];
+		hw1.w[0] = hw2.w[0] = 0;
+		hw1.w[1] = (unsigned)e1.h;
+		hw2.w[1] = (unsigned)e2.h;
+		StepInit (&H,(long)hw1.l,(long)hw2.l,(cs << 6) - c1,c2 - c1);
+		StepInit (&UH,e1.uh,e2.uh,(cs << 6) - c1,c2 - c1);
+		for (col = cs; col < ce; col++, STEP(H), STEP(UH))
+		{
+			h = H.v.w[1];
+			if (!h)
+				h = 1;
+			if (bspclaim[col] && h <= wallheight[col])
+				continue;					// a wall in front of it
+			if ((int)UH.v.w[1] < 0)
+				u = 0;
+			else if (UH.v.w[1] >= h)
+				u = 63;
+			else
+			{
+				unsigned	uhlo = UH.v.w[0], uhhi = UH.v.w[1];
+asm				mov	ax,[uhlo]
+asm				mov	dx,[uhhi]
+asm				div	[h]
+asm				mov	[u],ax
+			}
+			if (u > 63)
+				u = 63;
+			frac = u << 10;
+			if (frac < dp)
+				continue;					// the open part: what is behind shows
+			texture = ((frac - dp) >> 4) & 0xfc0;
+			wallheight[col] = h;
+			if (!bspclaim[col])
+			{
+				bspclaim[col] = 1;
+				bspleft--;
+			}
+			postsource = ((long)page << 16) | texture;
+			postx = col;
+			postwidth = 1;
+			ScalePostF ();
+		}
+	}
+}
+
+//
+// What the walk marked in spotvis, for the objects that read it: an object
+// is visible when it is in the view and nearer than the wall drawn in its
+// column.  In 8.8 tiles from the camera, so the three plane tests and the
+// view-space position are 16-bit IMULs (pn[0] is (cos,-sin) of the view);
+// only an object that passes them is projected, with one 32-bit multiply
+// and divide.  (The first version projected every static in the level
+// with six FixedByFracs and did the depth twice: 14% of the frame.)  The
+// side planes get half a tile of slack, so an object straddling the edge
+// of the view is drawn, as the walk's rays would have found its tile.
+//
+#define VISSLACK	(-128L*256)			// half a tile, in 8.8 x 8.8
+
+static void MarkVisible (int x8, int y8, byte *spot)
+{
+	int		dx = x8 - cam8x, dy = y8 - cam8y, col;
+	long	nx;
+	bspend	e;
+
+	nx = Dot (dx,dy,pn[0][0],pn[0][1]);	// the depth, in global units
+	if (nx < NEARD)
+		return;
+	if (Dot (dx,dy,pn[1][0],pn[1][1]) < VISSLACK
+		|| Dot (dx,dy,pn[2][0],pn[2][1]) < VISSLACK)
+		return;
+	ColHeight (nx,Dot (dy,dx,pn[0][0],-pn[0][1]),0,&e);
+	col = e.ci < 0 ? 0 : (e.ci >= viewwidth ? viewwidth-1 : e.ci);
+	if (e.h > wallheight[col])
+		*spot = vismark;
+}
+
+//
+// Everything visible is inside the triangle of the view cut off at the
+// farthest wall drawn (the least post, postmin, is its height), so its
+// bounding box, a tile wider, rejects most of a level's statics with four
+// compares and no multiply.  When some column drew no wall there is no
+// such bound, and every object is tested.
+//
+static void ViewBox (int *bx1, int *by1, int *bx2, int *by2)
+{
+	long	d;
+	int		k, a, hf, px, py;
+
+	*bx1 = *bx2 = cam8x;
+	*by1 = *by2 = cam8y;
+	if (bspleft > 0 || postmin < 4 || postmin >= 0x7fff)
+	{
+		*bx1 = *by1 = -0x7fff;
+		*bx2 = *by2 = 0x7fff;
+		return;
+	}
+	d = heightnumerator / (postmin << 1);	// the farthest depth, in 8.8 tiles
+	d += d >> 1;							// along the edges: past 1/cos(40)
+	if (d > 0x5c00)
+		d = 0x5c00;							// the map's diagonal
+	hf = pixelangle[0]/10 + 2;
+	for (k = -1; k <= 1; k += 2)
+	{
+		a = viewangle + k*hf;
+		while (a < 0)
+			a += ANGLES;
+		while (a >= ANGLES)
+			a -= ANGLES;
+		px = cam8x + (int)((d * SignMag (sintable[a+ANGLES/4])) >> 8);
+		py = cam8y - (int)((d * SignMag (sintable[a])) >> 8);
+		if (px < *bx1) *bx1 = px;
+		if (px > *bx2) *bx2 = px;
+		if (py < *by1) *by1 = py;
+		if (py > *by2) *by2 = py;
+	}
+	*bx1 -= 256;
+	*by1 -= 256;
+	*bx2 += 256;
+	*by2 += 256;
+}
+
+static void BSPVisibility (void)
+{
+	statobj_t	*s;
+	objtype		*ob;
+	int			bx1, by1, bx2, by2, x8, y8;
+
+	ViewBox (&bx1,&by1,&bx2,&by2);
+	for (s = statobjlist; s < laststatobj; s++)
+		if (s->shapenum != -1)
+		{
+			x8 = (s->tilex << 8) + 128;
+			y8 = (s->tiley << 8) + 128;
+			if (x8 >= bx1 && x8 <= bx2 && y8 >= by1 && y8 <= by2)
+				MarkVisible (x8,y8,s->visspot);
+		}
+	for (ob = player->next; ob; ob = ob->next)
+		MarkVisible ((int)(ob->x >> 8),(int)(ob->y >> 8),
+			&spotvis[ob->tilex][ob->tiley]);
+}
+
+/*
+=====================
+=
+= BSPRefresh
+=
+= WallRefresh's AsmRefresh, from the tree
+=
+=====================
+*/
+
+void BSPRefresh (void)
+{
+	int	col;
+
+	_fmemset (bspclaim,0,sizeof(bspclaim));
+	bspleft = viewwidth;
+	postmin = 0x7fff;					// step 62's least wall, this frame
+	SetPlanes ();
+	st_frames++;
+	Walk (0);
+	DrawDoors ();
+	st_left += bspleft;
+	if (bspleft == viewwidth)
+		st_lnone++;
+	else if (bspleft > st_lmax)
+	{
+		int c;
+		st_lmax = bspleft;
+		st_lframe = (int)st_frames;
+		for (c = 0; c < viewwidth && !bspclaim[c]; c++)
+			;
+		st_lfirst = c;
+		for (c = viewwidth-1; c >= 0 && !bspclaim[c]; c--)
+			;
+		st_llast = c;
+	}
+	for (col = 0; col < viewwidth; col++)
+		if (!bspclaim[col])				// nothing there: the band, not an
+		{								// old frame (as step 92)
+			wallheight[col] = 0;
+			postx = col;
+			postwidth = 1;
+			DropFillF ();
+		}
+	BSPVisibility ();
+}
+
+int BSPReady (void)
+{
+	return bb.numnodes != 0;
 }
