@@ -2626,80 +2626,8 @@ PROC	DrawRunA NEAR
 	mov	si,OFFSET dr_e2
 	call	HEnd
 @@ends:
-	mov	si,OFFSET dr_e1
-	call	BelowNear
-	jnc	@@n1ok
-	mov	si,OFFSET dr_e2
-	call	BelowNear
-	jc	@@ret						; wholly behind the near plane
-	call	NearCut1
-	jmp	@@nearok
-@@n1ok:
-	mov	si,OFFSET dr_e2
-	call	BelowNear
-	jnc	@@nearok
-	call	NearCut2
-@@nearok:
-	call	UPos
-	mov	si,OFFSET dr_e1
-	call	ColHeightA
-	mov	si,OFFSET dr_e2
-	call	ColHeightA
-	mov	si,OFFSET dr_e1				; an end far off the screen: clip first
-	call	ColFar
-	jc	@@clip
-	mov	si,OFFSET dr_e2
-	call	ColFar
-	jnc	@@clipped
-@@clip:
-	mov	ax,[WORD scale]
-	mov	bx,[centerx]
-	add	bx,2
-	call	SideClipA
+	call	EndsTail
 	jc	@@ret
-	mov	ax,[WORD scale]
-	neg	ax
-	mov	bx,[viewwidth]
-	add	bx,2
-	sub	bx,[centerx]
-	call	SideClipA
-	jc	@@ret
-	call	UPos
-	mov	si,OFFSET dr_e1
-	call	ColHeightA
-	mov	si,OFFSET dr_e2
-	call	ColHeightA
-@@clipped:
-	;
-	; the ends in screen order; the columns whose rays cross the run
-	;
-	mov	ax,[WORD cs:dr_e1+EN_COL]
-	mov	dx,[WORD cs:dr_e1+EN_COL+2]
-	cmp	dx,[WORD cs:dr_e2+EN_COL+2]
-	jl	@@inorder
-	jg	@@swap
-	cmp	ax,[WORD cs:dr_e2+EN_COL]
-	jbe	@@inorder
-@@swap:
-	push	ds
-	push	es
-	mov	ax,cs
-	mov	ds,ax
-	mov	es,ax
-	mov	si,OFFSET dr_e1				; e1 <-> e2 (through dr_et)
-	mov	di,OFFSET dr_et
-	mov	cx,EN_SIZE/2
-	rep	movsw
-	mov	si,OFFSET dr_e2
-	mov	di,OFFSET dr_e1
-	mov	cx,EN_SIZE/2
-	rep	movsw
-	mov	si,OFFSET dr_et
-	mov	di,OFFSET dr_e2
-	mov	cx,EN_SIZE/2
-	rep	movsw
-	pop	es
-	pop	ds
 @@inorder:
 	mov	ax,[WORD cs:dr_e1+EN_COL]	; (an end is within COLLO..COLHI)
 	mov	[bp+DR_C1],ax
@@ -2866,6 +2794,323 @@ PROC	DrawRunA NEAR
 	pop	bp
 	ret
 ENDP
+
+;
+; EndsTail: the ends in dr_e1, dr_e2 (nx, ny, u) cut at the near plane,
+; their columns and heights, clipped to the view's sides when far off it,
+; and put in screen order -- CF when nothing of it is left to draw
+;
+PROC	EndsTail NEAR
+	mov	si,OFFSET dr_e1
+	call	BelowNear
+	jnc	@@n1ok
+	mov	si,OFFSET dr_e2
+	call	BelowNear
+	jc	@@rej						; wholly behind the near plane
+	call	NearCut1
+	jmp	@@nearok
+@@n1ok:
+	mov	si,OFFSET dr_e2
+	call	BelowNear
+	jnc	@@nearok
+	call	NearCut2
+@@nearok:
+	call	UPos
+	mov	si,OFFSET dr_e1
+	call	ColHeightA
+	mov	si,OFFSET dr_e2
+	call	ColHeightA
+	mov	si,OFFSET dr_e1				; an end far off the screen: clip first
+	call	ColFar
+	jc	@@clip
+	mov	si,OFFSET dr_e2
+	call	ColFar
+	jnc	@@clipped
+@@clip:
+	mov	ax,[WORD scale]
+	mov	bx,[centerx]
+	add	bx,2
+	call	SideClipA
+	jc	@@rej
+	mov	ax,[WORD scale]
+	neg	ax
+	mov	bx,[viewwidth]
+	add	bx,2
+	sub	bx,[centerx]
+	call	SideClipA
+	jc	@@rej
+	call	UPos
+	mov	si,OFFSET dr_e1
+	call	ColHeightA
+	mov	si,OFFSET dr_e2
+	call	ColHeightA
+@@clipped:
+	;
+	; the ends in screen order; the columns whose rays cross the run
+	;
+	mov	ax,[WORD cs:dr_e1+EN_COL]
+	mov	dx,[WORD cs:dr_e1+EN_COL+2]
+	cmp	dx,[WORD cs:dr_e2+EN_COL+2]
+	jl	@@inorder
+	jg	@@swap
+	cmp	ax,[WORD cs:dr_e2+EN_COL]
+	jbe	@@inorder
+@@swap:
+	push	ds
+	push	es
+	mov	ax,cs
+	mov	ds,ax
+	mov	es,ax
+	mov	si,OFFSET dr_e1				; e1 <-> e2 (through dr_et)
+	mov	di,OFFSET dr_et
+	mov	cx,EN_SIZE/2
+	rep	movsw
+	mov	si,OFFSET dr_e2
+	mov	di,OFFSET dr_e1
+	mov	cx,EN_SIZE/2
+	rep	movsw
+	mov	si,OFFSET dr_et
+	mov	di,OFFSET dr_e2
+	mov	cx,EN_SIZE/2
+	rep	movsw
+	pop	es
+	pop	ds
+@@inorder:
+	clc
+	ret
+@@rej:
+	stc
+	ret
+ENDP
+
+;
+; void BSPFace (long gx1, long gy1, long gx2, long gy2, unsigned page,
+;	unsigned dp, unsigned flip, byte far *claim) -- a door, or a face of the
+; moving pushwall: the segment from (gx1,gy1) to (gx2,gy2), view-relative,
+; the lower end first, its texels 0 to 64 along it, drawn in each column
+; where it is nearer than what is there.  dp: a door's position (the part
+; of the texture before it is the open part, not drawn); flip: 0 or 0FC0h.
+; WL_BSP.C's DrawDoors and BlockFace, the column loop in C before.
+;
+FC_GX1	=	6
+FC_GY1	=	10
+FC_GX2	=	14
+FC_GY2	=	18
+FC_PAGE	=	22
+FC_DP	=	24
+FC_FLIP	=	26
+FC_CLAIM =	28
+FL_H	=	-14							; bspstep H, then UH (14 bytes each)
+FL_UH	=	-28
+FL_COL	=	-30
+FL_CE	=	-32
+
+PROC	BSPFace FAR
+PUBLIC	BSPFace
+	push	bp
+	mov	bp,sp
+	sub	sp,32
+	push	si
+	push	di
+	xor	ax,ax
+	mov	[WORD cs:dr_e1+EN_U],ax
+	mov	[WORD cs:dr_e1+EN_U+2],ax
+	mov	[WORD cs:dr_e2+EN_U+2],ax
+	mov	[WORD cs:dr_e2+EN_U],64
+	mov	si,OFFSET dr_e1
+	mov	ax,[bp+FC_GX1]
+	mov	dx,[bp+FC_GX1+2]
+	mov	bx,[bp+FC_GY1]
+	mov	cx,[bp+FC_GY1+2]
+	call	GEnd
+	mov	si,OFFSET dr_e2
+	mov	ax,[bp+FC_GX2]
+	mov	dx,[bp+FC_GX2+2]
+	mov	bx,[bp+FC_GY2]
+	mov	cx,[bp+FC_GY2+2]
+	call	GEnd
+	call	EndsTail
+	jc	@@ret
+	mov	ax,[WORD cs:dr_e1+EN_COL]	; c1, c2; cs, ce as DrawRunA's
+	mov	[cs:fc_c1],ax
+	mov	bx,[WORD cs:dr_e2+EN_COL]
+	mov	[cs:fc_c2],bx
+	xor	cx,cx
+	or	ax,ax
+	js	@@cs0
+	add	ax,63
+	shr	ax,6
+	mov	cx,ax
+@@cs0:
+	mov	[bp+FL_COL],cx
+	mov	ax,[viewwidth]
+	mov	dx,ax
+	shl	dx,6
+	cmp	bx,dx
+	jg	@@ce
+	add	bx,63
+	sar	bx,6
+	mov	ax,bx
+@@ce:
+	mov	[bp+FL_CE],ax
+	cmp	cx,ax
+	jge	@@ret
+	shl	cx,6						; the steps: off = (cs<<6) - c1, d = c2 - c1
+	sub	cx,[cs:fc_c1]
+	mov	[cs:dr_off],cx
+	mov	ax,[cs:fc_c2]
+	sub	ax,[cs:fc_c1]
+	mov	[cs:dr_d],ax
+	xor	ax,ax
+	mov	[WORD cs:dr_sa],ax
+	mov	[WORD cs:dr_sb],ax
+	mov	ax,[WORD cs:dr_e1+EN_H]
+	mov	[WORD cs:dr_sa+2],ax
+	mov	ax,[WORD cs:dr_e2+EN_H]
+	mov	[WORD cs:dr_sb+2],ax
+	lea	di,[bp+FL_H]
+	call	StepInitA
+	mov	ax,[WORD cs:dr_e1+EN_UH]
+	mov	[WORD cs:dr_sa],ax
+	mov	ax,[WORD cs:dr_e1+EN_UH+2]
+	mov	[WORD cs:dr_sa+2],ax
+	mov	ax,[WORD cs:dr_e2+EN_UH]
+	mov	[WORD cs:dr_sb],ax
+	mov	ax,[WORD cs:dr_e2+EN_UH+2]
+	mov	[WORD cs:dr_sb+2],ax
+	lea	di,[bp+FL_UH]
+	call	StepInitA
+
+@@col:
+	mov	si,[bp+FL_COL]
+	cmp	si,[bp+FL_CE]
+	jge	@@ret
+	mov	cx,[bp+FL_H+2]				; h, at least 1
+	or	cx,cx
+	jnz	@@hok
+	inc	cx
+@@hok:
+	les	bx,[DWORD cs:wk_left]		; a wall in front of it?  (every column
+	cmp	[WORD es:bx],0				; is a wall's when none is left)
+	je	@@claimed
+	les	bx,[bp+FC_CLAIM]
+	cmp	[BYTE es:bx+si],0
+	je	@@front
+@@claimed:
+	mov	bx,si
+	shl	bx,1
+	cmp	cx,[wallheight+bx]
+	jbe	@@next
+@@front:
+	mov	dx,[bp+FL_UH+2]				; u = uh/h, 0 to 63
+	or	dx,dx
+	js	@@u0
+	cmp	dx,cx
+	jae	@@u63
+	mov	ax,[bp+FL_UH]
+	div	cx
+	cmp	ax,63
+	jbe	@@uok
+@@u63:
+	mov	ax,63
+	jmp	@@uok
+@@u0:
+	xor	ax,ax
+@@uok:
+	shl	ax,10						; frac = u << 10
+	cmp	ax,[bp+FC_DP]
+	jb	@@next						; the open part: what is behind shows
+	sub	ax,[bp+FC_DP]
+	shr	ax,4
+	and	ax,0FC0h
+	xor	ax,[bp+FC_FLIP]
+	mov	[WORD postsource],ax
+	mov	ax,[bp+FC_PAGE]
+	mov	[WORD postsource+2],ax
+	mov	bx,si
+	shl	bx,1
+	mov	[wallheight+bx],cx
+	les	bx,[DWORD cs:wk_left]		; a column no wall reached: the door's now
+	cmp	[WORD es:bx],0
+	je	@@post
+	les	bx,[bp+FC_CLAIM]
+	cmp	[BYTE es:bx+si],0
+	jne	@@post
+	mov	[BYTE es:bx+si],1
+	les	bx,[DWORD cs:wk_left]
+	dec	[WORD es:bx]
+@@post:
+	mov	[postx],si
+	mov	[postwidth],1
+	call	ScalePostF					; keeps BP, DI
+@@next:
+	mov	ax,[bp+FL_H+4]				; H += q, the remainder carried
+	add	[bp+FL_H],ax
+	mov	ax,[bp+FL_H+6]
+	adc	[bp+FL_H+2],ax
+	mov	ax,[bp+FL_H+10]
+	add	ax,[bp+FL_H+8]
+	jc	@@hc
+	cmp	ax,[bp+FL_H+12]
+	jb	@@hn
+@@hc:
+	sub	ax,[bp+FL_H+12]
+	add	[WORD bp+FL_H],1
+	adc	[WORD bp+FL_H+2],0
+@@hn:
+	mov	[bp+FL_H+10],ax
+	mov	ax,[bp+FL_UH+4]				; UH likewise
+	add	[bp+FL_UH],ax
+	mov	ax,[bp+FL_UH+6]
+	adc	[bp+FL_UH+2],ax
+	mov	ax,[bp+FL_UH+10]
+	add	ax,[bp+FL_UH+8]
+	jc	@@uc
+	cmp	ax,[bp+FL_UH+12]
+	jb	@@un
+@@uc:
+	sub	ax,[bp+FL_UH+12]
+	add	[WORD bp+FL_UH],1
+	adc	[WORD bp+FL_UH+2],0
+@@un:
+	mov	[bp+FL_UH+10],ax
+	inc	[WORD bp+FL_COL]
+	jmp	@@col
+@@ret:
+	pop	di
+	pop	si
+	mov	sp,bp
+	pop	bp
+	retf
+ENDP
+
+;
+; GEnd: the end at SI from its view-relative position, DX:AX = gx and
+; CX:BX = gy: nx = gx*cos - gy*sin, ny = gy*cos + gx*sin (FixedByFrac)
+;
+PROC	GEnd NEAR
+	mov	[WORD cs:fc_gy],bx
+	mov	[WORD cs:fc_gy+2],cx
+	call	MulCosSave					; gx*cos
+	mov	[WORD cs:si+EN_NX],ax
+	mov	[WORD cs:si+EN_NX+2],dx
+	call	MulSinRe					; gx*sin
+	mov	[WORD cs:si+EN_NY],ax
+	mov	[WORD cs:si+EN_NY+2],dx
+	mov	ax,[WORD cs:fc_gy]
+	mov	dx,[WORD cs:fc_gy+2]
+	call	MulSinSave					; gy*sin
+	sub	[WORD cs:si+EN_NX],ax
+	sbb	[WORD cs:si+EN_NX+2],dx
+	call	MulCosRe					; gy*cos
+	add	[WORD cs:si+EN_NY],ax
+	adc	[WORD cs:si+EN_NY+2],dx
+	ret
+ENDP
+
+fc_c1	dw	0
+fc_c2	dw	0
+fc_gy	dd	0
 
 ;
 ; FBF: id's FixedByFrac -- DX:AX times BX, a fraction, its sign in bit 15 of

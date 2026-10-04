@@ -335,3 +335,26 @@ maps built and then read from one 43 KB cache give the same view checksums
 at every point.  Floor 18 -- 179 pushable walls -- needs 1,912 runs of the
 2,000 the builder borrows room for: it fits, and a map that did not would be
 drawn by the walk.
+
+## Everything per frame in assembly (2026-10-03)
+
+StevenC's rule from here on: whatever assembly can speed up goes into
+assembly.  Three conversions, each checked against the C it replaced:
+
+| | V30 demo 0 | V30 G245 |
+|---|---|---|
+| before (the C walk and set-up) | 4.03-4.06 | 5.39-5.40 |
+| `BSPWalk`: the tree walk and its node and run tests | 4.03-4.06 | 5.40 |
+| `DrawRunA`: a run's projection, clip, steps and gap loop | 4.16 | 5.50 |
+| `BSPFace`: doors and the moving pushwall's faces | **4.30** | **5.70** |
+| (the walk) | 4.98 | 6.67 |
+
+The walk in assembly measured no gain: the C overhead had been small, and
+what its tests cost is their own multiplies and divides (the frustum
+classification and the two corner estimates of the hidden test, some 12%
+of the frame together).  The set-up and the faces each gave about 3%.
+Checks: frame 50 of demo 0 identical, the pushwall demo's frames identical
+to the C version's to the pixel count, 158 generated demos played through,
+and the C helpers they replaced (Ends, StepInit, ColHeight, SideClip,
+MulDivFloor and the rest) deleted -- 3 KB, which the 486's start-up memory
+check needed.  86% of the walk now, on the V30.
