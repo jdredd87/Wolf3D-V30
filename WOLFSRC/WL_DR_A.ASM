@@ -1888,7 +1888,16 @@ PUBLIC	BSPMarkVis
 	push	bp
 	push	si
 	push	di
+	mov	ax,[cs:bv_box]			; (2026-10-04) the frame's box, patched
+	mov	[WORD cs:bm_x1-2],ax	; into the loop as immediates: it is
+	mov	ax,[cs:bv_box+4]		; tested once for every static
+	mov	[WORD cs:bm_x2-2],ax
+	mov	ax,[cs:bv_box+2]
+	mov	[WORD cs:bm_y1-2],ax
+	mov	ax,[cs:bv_box+6]
+	mov	[WORD cs:bm_y2-2],ax
 	mov	si,OFFSET statobjlist
+	jmp	@@stat
 @@stat:
 	cmp	si,[laststatobj]
 	jae	@@actors
@@ -1896,15 +1905,19 @@ PUBLIC	BSPMarkVis
 	je	@@snext
 	mov	ah,[si+ST_TILEX]		; the tile's middle, 8.8
 	mov	al,128
-	cmp	ax,[cs:bv_box]
+	cmp	ax,1234h
+bm_x1:
 	jl	@@snext
-	cmp	ax,[cs:bv_box+4]
+	cmp	ax,1234h
+bm_x2:
 	jg	@@snext
 	mov	dh,[si+ST_TILEY]
 	mov	dl,128
-	cmp	dx,[cs:bv_box+2]
+	cmp	dx,1234h
+bm_y1:
 	jl	@@snext
-	cmp	dx,[cs:bv_box+6]
+	cmp	dx,1234h
+bm_y2:
 	jg	@@snext
 	mov	bl,dh					; its area: shut off from the player's by
 	xor	bh,bh					; closed doors, it cannot be seen

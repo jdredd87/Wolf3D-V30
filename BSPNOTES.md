@@ -399,3 +399,21 @@ Two things measured on the way:
   memory check.  It still builds; the checks run on the V30.
 
 StevenC & Claude.
+
+## The statics' view box as immediates (2026-10-04)
+
+`BSPMarkVis` tests every static on the level against the frame's view box
+-- four compares with words in the code segment, for some hundreds of
+statics a frame.  The box is now patched into the loop as immediates once a
+frame.  Same picture (the attract loop on the V30: 5E770848 / B65CE968;
+21,452 play ticks against 21,550).  Demo 0: 833.8 against 837.0, eight
+rounds each, every round faster: 0.4%.
+
+Measured and not kept, the same day: the view planes tested only where a
+box still straddles them (a mask passed down the tree) -- 840.0 against
+836.0, slower: a frame visits some forty nodes, and the near corner it
+then tests on every plane costs more than the descendants' tests saved.
+And a second DIV per column costs 1.5% (849.3 against 836.7, with its
+moves), so interpolating the texel between exact columns could save at
+most about 1%, before its own resync and with a different picture: not
+done.
