@@ -32,7 +32,6 @@ EXTRN	HitVertPWall:FAR
 EXTRN	ScaleShape:FAR
 EXTRN	PM_GetPage:FAR
 EXTRN	RunPage:FAR				; WL_BSP.C, for DrawRunA: a new tile's page
-EXTRN	BSPClaim:FAR			; and the claim
 EXTRN	GetBonus:FAR
 EXTRN	CalcRotate:FAR
 EXTRN	RemoveObj:FAR
@@ -2872,6 +2871,7 @@ PROC	DrawRunA NEAR
 	pop	bp
 	ret
 ENDP
+	nop							; (BSPClaim's call is a byte shorter now: keeps the parity)
 
 ;
 ; EndsTail: the ends in dr_e1, dr_e2 (nx, ny, u) cut at the near plane,
@@ -3528,6 +3528,131 @@ PROC	ColFar NEAR
 ENDP
 
 ;
+; BSPClaim (2026-10-04, from WL_BSP.C's Claim): [cs,ce) is claimed, merged
+; with every range in solid[] it overlaps or touches.  solid[] ends with a
+; range reaching 7FFFh, so the first search needs no bound.  The count is
+; the C's nsolid, through the pointer BSPNSolid was given.
+;
+CL_MAX	=	(320/2+4)*4					; MAXSOLID, in bytes
+
+PROC	BSPNSolid FAR
+PUBLIC	BSPNSolid
+	push	bp
+	mov	bp,sp
+	mov	ax,[bp+6]
+	mov	[WORD cs:wk_nsolid],ax
+	mov	ax,[bp+8]
+	mov	[WORD cs:wk_nsolid+2],ax
+	pop	bp
+	retf
+ENDP
+
+PROC	BSPClaim FAR
+PUBLIC	BSPClaim
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	push	ds
+	mov	ax,[bp+6]					; cs
+	mov	dx,[bp+8]					; ce
+	les	di,[DWORD cs:wk_nsolid]
+	mov	cx,[es:di]
+	shl	cx,2						; nsolid, in bytes
+	lds	bx,[DWORD cs:wk_solid]		; DS:BX the ranges
+	xor	si,si
+@@fi:
+	cmp	[bx+si+2],ax				; i: the first ending at cs or after
+	jge	@@gi
+	add	si,4
+	jmp	@@fi
+@@gi:
+	mov	di,si
+@@fj:
+	cmp	di,cx						; j: past every one starting by ce
+	jge	@@gj
+	cmp	[bx+di],dx
+	jg	@@gj
+	add	di,4
+	jmp	@@fj
+@@gj:
+	cmp	di,si
+	jne	@@merge
+	cmp	cx,CL_MAX					; touches nothing: a new range at i
+	jge	@@ret
+	mov	[cs:cl_a],ax
+	mov	[cs:cl_b],dx
+	mov	[cs:cl_i],si
+	push	ds
+	pop	es
+	mov	dx,cx						; the words from i to the end, moved up
+	sub	dx,si
+	shr	dx,1
+	mov	si,bx
+	add	si,cx
+	sub	si,2
+	mov	di,si
+	add	di,4
+	mov	cx,dx
+	std
+	rep	movsw
+	cld
+	mov	si,[cs:cl_i]
+	mov	ax,[cs:cl_a]
+	mov	[bx+si],ax
+	mov	ax,[cs:cl_b]
+	mov	[bx+si+2],ax
+	les	di,[DWORD cs:wk_nsolid]
+	inc	[WORD es:di]
+	jmp	@@ret
+@@merge:
+	cmp	ax,[bx+si]					; solid[i].a = min (it, cs)
+	jge	@@a
+	mov	[bx+si],ax
+@@a:
+	mov	ax,[bx+di-2]				; solid[i].b = max (ce, solid[j-1].b)
+	cmp	dx,ax
+	jle	@@b
+	mov	ax,dx
+@@b:
+	mov	[bx+si+2],ax
+	mov	ax,di
+	sub	ax,si
+	cmp	ax,4
+	jle	@@ret
+	mov	[cs:cl_d],ax				; more than one merged: close the gap
+	push	ds
+	pop	es
+	mov	dx,cx
+	sub	dx,di
+	shr	dx,1
+	lea	ax,[bx+di]
+	lea	di,[bx+si+4]
+	mov	si,ax
+	mov	cx,dx
+	cld
+	rep	movsw
+	mov	ax,[cs:cl_d]
+	shr	ax,2
+	dec	ax
+	les	di,[DWORD cs:wk_nsolid]
+	sub	[es:di],ax
+@@ret:
+	pop	ds
+	pop	di
+	pop	si
+	pop	bp
+	retf
+ENDP
+
+cl_a	dw	0
+cl_b	dw	0
+cl_i	dw	0
+cl_d	dw	0
+wk_nsolid	dd	0
+		db	0						; (parity: what follows stays where it was)
+
+;
 ; ColHeightA: WL_BSP.C's ColHeight for the end at SI (nx, ny, u in, col,
 ; h, uh out)
 ;
@@ -3568,6 +3693,18 @@ PROC	ColHeightA NEAR
 	add	bx,ax
 	mov	ax,[WORD cs:si+EN_NX]
 	mov	dx,[WORD cs:si+EN_NX+2]
+@@norm8:
+	or	dh,dh						; (2026-10-04) a byte at a time while the
+	jz	@@norm						; top byte is set -- such a value needs
+	mov	al,ah						; ten shifts or more, so never too many
+	mov	ah,dl
+	mov	dl,dh
+	xor	dh,dh
+	mov	cl,ch
+	mov	ch,bl
+	mov	bl,bh
+	xor	bh,bh
+	jmp	@@norm8
 @@norm:
 	or	dx,dx
 	jnz	@@shift

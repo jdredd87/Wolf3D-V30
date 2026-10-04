@@ -868,8 +868,11 @@ void BSPFace (long gx1, long gy1, long gx2, long gy2, unsigned page,
 
 #define HIDESLACK	4					// columns: BSPColRange's error, and more
 
+void BSPNSolid (int far *n);		// WL_DR_A.ASM: BSPClaim's count
+
 static void ClaimInit (void)
 {
+	BSPNSolid (&nsolid);
 	solid[0].a = -0x7fff;
 	solid[0].b = 0;
 	solid[1].a = viewwidth;
@@ -883,8 +886,7 @@ static void ClaimInit (void)
 //
 // for DrawRunA (WL_DR_A.ASM): the claim, and a new tile's texture page
 //
-void BSPClaim (int cs, int ce);
-static void Claim (int cs, int ce);
+void BSPClaim (int cs, int ce);		// WL_DR_A.ASM (2026-10-04)
 
 unsigned RunPage (int vertical, int up, int rl, int tile)
 {
@@ -910,38 +912,6 @@ unsigned RunPage (int vertical, int up, int rl, int tile)
 	return (unsigned)PM_GetPage (pic);
 }
 
-void BSPClaim (int cs, int ce)
-{
-	Claim (cs,ce);
-}
-
-static void Claim (int cs, int ce)
-{
-	int		i, j;
-
-	for (i = 0; solid[i].b < cs; i++)
-		;
-	for (j = i; j < nsolid && solid[j].a <= ce; j++)
-		;
-	if (i == j)							// touches nothing: a new range
-	{
-		if (nsolid >= MAXSOLID)
-			return;
-		_fmemmove (&solid[i+1],&solid[i],(nsolid-i)*sizeof(bsprange));
-		solid[i].a = cs;
-		solid[i].b = ce;
-		nsolid++;
-		return;
-	}
-	if (cs < solid[i].a)
-		solid[i].a = cs;
-	solid[i].b = ce > solid[j-1].b ? ce : solid[j-1].b;
-	if (j - i > 1)
-	{
-		_fmemmove (&solid[i+1],&solid[j],(nsolid-j)*sizeof(bsprange));
-		nsolid -= j - i - 1;
-	}
-}
 
 //
 // The arithmetic of a run's ends, on the 8086's own MUL and DIV.  Borland
