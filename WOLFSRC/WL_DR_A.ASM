@@ -1053,36 +1053,82 @@ BC_FLIP	=	40
 
 PROC	BSPCols FAR
 PUBLIC	BSPCols
+;
+; (2026-10-04) Everything constant for the call -- the end column, the
+; texel bound, the tile and its first texel, the flip, the page, and the
+; height's and uh's steps -- is patched into the loop as immediates (the
+; last two bytes of each instruction labelled bk_), so the loop reads no
+; struct: SI holds uh's low word, its high word and the error are kept in
+; the code segment, and all of it is written back on the way out.
+;
 	push	bp
 	mov	bp,sp
 	push	si
 	push	di
-	mov	si,[bp+6]
-	mov	di,[si+BC_COL]			; DI the column
-	mov	bp,[si+BC_HV]			; CX:BP the height, 16.16 (its step's
-	mov	cx,[si+BC_HV+2]			; remainder is left out: 1/65536 a column)
+	mov	bx,[bp+6]
+	mov	[cs:bcv_ptr],bx
+	mov	ax,[bx+BC_END]
+	mov	[WORD cs:bk_end-2],ax
+	mov	ax,[bx+BC_UMAX]
+	mov	[WORD cs:bk_umax1-2],ax
+	mov	[WORD cs:bk_umax2-2],ax
+	mov	ax,[bx+BC_A1]
+	mov	[WORD cs:bk_a1-2],ax
+	mov	ax,[bx+BC_TILE]
+	mov	[WORD cs:bk_tile-2],ax
+	mov	ax,[bx+BC_FLIP]
+	mov	[WORD cs:bk_flip-2],ax
+	mov	ax,[bx+BC_PAGE]
+	mov	[WORD cs:bk_page-2],ax
+	mov	ax,[bx+BC_HQ]
+	mov	[WORD cs:bk_hq0-2],ax
+	mov	ax,[bx+BC_HQ+2]
+	mov	[WORD cs:bk_hq1-2],ax
+	mov	ax,[bx+BC_UQ]
+	mov	[WORD cs:bk_uq0-2],ax
+	mov	ax,[bx+BC_UQ+2]
+	mov	[WORD cs:bk_uq1-2],ax
+	mov	ax,[bx+BC_UR]
+	mov	[WORD cs:bk_ur-2],ax
+	mov	ax,[bx+BC_UD]
+	mov	[WORD cs:bk_ud1-2],ax
+	mov	[WORD cs:bk_ud2-2],ax
+	mov	ax,[bx+BC_UV+2]
+	mov	[cs:bcv_uvhi],ax
+	mov	ax,[bx+BC_UE]
+	mov	[cs:bcv_ue],ax
+	mov	si,[bx+BC_UV]			; SI uh's low word
+	mov	di,[bx+BC_COL]			; DI the column
+	mov	bp,[bx+BC_HV]			; CX:BP the height, 16.16
+	mov	cx,[bx+BC_HV+2]
+	jmp	@@col					; (and the patched bytes leave the queue)
 
 @@col:
-	cmp	di,[si+BC_END]
+	cmp	di,1234h
+bk_end:
 	jge	@@done
 	jcxz	@@h0					; under a pixel: at least 1
 @@hok:
-	mov	ax,[si+BC_UV]			; u = uh/h
-	mov	dx,[si+BC_UV+2]
+	mov	ax,si					; u = uh/h
+	mov	dx,[cs:bcv_uvhi]
 	cmp	dx,cx
 	jae	@@umax
 	div	cx
-	cmp	ax,[si+BC_UMAX]
+	cmp	ax,1234h
+bk_umax1:
 	ja	@@umax
 @@uok:
 	mov	bx,ax
 	shr	bx,6
-	add	bx,[si+BC_A1]
-	cmp	bx,[si+BC_TILE]
+	add	bx,1234h
+bk_a1:
+	cmp	bx,1234h
+bk_tile:
 	jne	@@newtile
 	and	ax,63					; the texture column, flipped by a mask
 	shl	ax,6					; (0FC0h - t is t xor 0FC0h)
-	xor	ax,[si+BC_FLIP]
+	xor	ax,1234h
+bk_flip:
 	cmp	[postwidth],0
 	je	@@newpost
 	cmp	ax,[WORD postsource]	; (the page is the same: a new tile's
@@ -1105,7 +1151,8 @@ PUBLIC	BSPCols
 	pop	ax
 @@newpost:
 	mov	[WORD postsource],ax
-	mov	ax,[si+BC_PAGE]
+	mov	ax,1234h
+bk_page:
 	mov	[WORD postsource+2],ax
 	mov	[postx],di
 	mov	[postwidth],1
@@ -1114,23 +1161,28 @@ PUBLIC	BSPCols
 	mov	[wallheight+bx],cx
 
 @@step:
-	add	bp,[si+BC_HQ]			; the height
-	adc	cx,[si+BC_HQ+2]
-	mov	ax,[si+BC_UQ]			; uh, exactly: a remainder carried
-	add	[si+BC_UV],ax
-	mov	ax,[si+BC_UQ+2]
-	adc	[si+BC_UV+2],ax
-	mov	ax,[si+BC_UE]
-	add	ax,[si+BC_UR]
+	add	bp,1234h				; the height
+bk_hq0:
+	adc	cx,1234h
+bk_hq1:
+	add	si,1234h				; uh, exactly: a remainder carried
+bk_uq0:
+	adc	[WORD cs:bcv_uvhi],1234h
+bk_uq1:
+	mov	ax,[cs:bcv_ue]
+	add	ax,1234h
+bk_ur:
 	jc	@@uc					; (e + r can pass 0FFFFh: unsigned)
-	cmp	ax,[si+BC_UD]
+	cmp	ax,1234h
+bk_ud1:
 	jb	@@un
 @@uc:
-	sub	ax,[si+BC_UD]
-	add	[WORD si+BC_UV],1
-	adc	[WORD si+BC_UV+2],0
+	sub	ax,1234h
+bk_ud2:
+	add	si,1
+	adc	[WORD cs:bcv_uvhi],0
 @@un:
-	mov	[si+BC_UE],ax
+	mov	[cs:bcv_ue],ax
 	inc	di
 	jmp	@@col
 
@@ -1140,27 +1192,40 @@ PUBLIC	BSPCols
 @@umax:
 	or	dx,dx					; uh below 0 (rounding at the start): 0
 	js	@@u0
-	mov	ax,[si+BC_UMAX]
+	mov	ax,1234h
+bk_umax2:
 	jmp	@@uok
 @@u0:
 	xor	ax,ax
 	jmp	@@uok
 
 @@newtile:
-	mov	[si+BC_TILE],bx
+	mov	dx,bx
+	mov	bx,[cs:bcv_ptr]
+	mov	[bx+BC_TILE],dx
 	mov	ax,1
 	jmp	@@ret
 @@done:
+	mov	bx,[cs:bcv_ptr]
 	xor	ax,ax
 @@ret:
-	mov	[si+BC_COL],di			; where it stopped, and the height there
-	mov	[si+BC_HV],bp
-	mov	[si+BC_HV+2],cx
+	mov	[bx+BC_COL],di			; where it stopped, and the height there
+	mov	[bx+BC_HV],bp
+	mov	[bx+BC_HV+2],cx
+	mov	[bx+BC_UV],si
+	mov	dx,[cs:bcv_uvhi]
+	mov	[bx+BC_UV+2],dx
+	mov	dx,[cs:bcv_ue]
+	mov	[bx+BC_UE],dx
 	pop	di
 	pop	si
 	pop	bp
 	retf
 ENDP
+
+bcv_ptr		dw	0
+bcv_uvhi		dw	0
+bcv_ue		dw	0
 
 
 

@@ -373,3 +373,29 @@ rounds each) -- and on the V30 its demo 0 picture did not even match, which
 was not chased.  A frame visits some thirty nodes, so building 544 entries
 costs more than the multiplies it replaces, on both machines.  Reverted.
 StevenC & Claude.
+
+## The column loop with its constants as immediates (2026-10-04)
+
+`BSPCols` read a dozen of the run's constants from DrawRun's struct on
+every column -- the end column, the texel bound, the tile, the first
+texel, the flip, the page, and the steps of the height and of uh.  They
+are now patched into the loop's own instructions when it is called (the
+last two bytes of each instruction labelled `bk_`), uh's low word lives in
+SI, and its high word and the error term in the code segment, written back
+on the way out.  Same picture: the attract loop gives 5E770848 / B65CE968
+on the V30.  836 against 841 ticks (V30, three rounds each): 0.6%.
+
+Two things measured on the way:
+
+* **Keeping the statics' areas** (they never move) measured nothing --
+  843.7 against 841.0 -- and its first version was 2.4% *slower* only
+  because it moved all the code after it by an odd number of bytes.  An
+  `EVEN` before every routine and every code-segment variable measured
+  nothing either (840.3 against 840.7), and neither did flipping the whole
+  module by one byte.  So: keep an insertion in `WL_DR_A.ASM` an even
+  size, and measure.
+* **The 486 cannot run the game since 2026-10-04**: StevenC loaded a CD-ROM
+  driver and MSCDEX on it (62 KB), leaving 487 KB, under id's start-up
+  memory check.  It still builds; the checks run on the V30.
+
+StevenC & Claude.
