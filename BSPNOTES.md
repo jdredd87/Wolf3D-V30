@@ -417,3 +417,8 @@ And a second DIV per column costs 1.5% (849.3 against 836.7, with its
 moves), so interpolating the texel between exact columns could save at
 most about 1%, before its own resync and with a different picture: not
 done.
+
+Also not kept: the same immediates in `BSPFace`'s column loop (doors and
+the moving pushwall) -- 833.8 against 833.0, nothing; a frame has few
+door columns.  And `ApproxCol`/`VisTest` were left as they are: five
+multiplies and a divide each, which immediates do not shorten.
