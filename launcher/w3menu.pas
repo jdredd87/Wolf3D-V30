@@ -5,7 +5,10 @@
   with a key that turns it on or off, and remembers them in W3MENU.CFG.
   + and - pick the game's window size, id's own Change View sizes 4-19
   (VIEW n; "the game's own" passes nothing, so CONFIG.WL6 decides).
-  P (or Enter) writes W3RUN.BAT -- "WOLF3DV" and the switches -- and exits
+  T picks the version when WOLF3DB.EXE is here too: WOLF3DV (id's rays,
+  id's picture exactly) or WOLF3DB (the BSP tree), whose own switch WALK
+  (K) gives it id's rays.  Every other switch works with either.
+  P (or Enter) writes W3RUN.BAT -- the version and the switches -- and exits
   0, and PLAY.BAT runs that and comes back here; B does the same for the
   200-frame benchmark; Q or Esc exits 1, which ends PLAY.BAT.  So nothing
   of the menu is in memory while the game runs: every 4 KB it kept would
@@ -49,6 +52,9 @@ const
 var
   SwOn: array[1..NSW] of Boolean;
   ViewSz: Integer;            { 4..19, or 0: the game's own setting }
+  HaveBsp: Boolean;           { WOLF3DB.EXE is here }
+  UseBsp: Boolean;            { T: run it rather than WOLF3DV }
+  BspWalk: Boolean;           { K: WALK, the BSP version with id's rays }
   Timeout: Integer;           { seconds; 0 = never }
   TimeoutPlays: Boolean;
 
@@ -88,12 +94,18 @@ begin
   Intr($10, r);
 end;
 
+function Prog: string;
+begin
+  if UseBsp and HaveBsp then Prog := 'WOLF3DB' else Prog := 'WOLF3DV';
+end;
+
 function Args: string;
 var i: Integer; s, t: string;
 begin
   s := '';
   for i := 1 to NSW do
     if SwOn[i] then s := s + ' ' + SwName[i];
+  if UseBsp and HaveBsp and BspWalk then s := s + ' WALK';
   if ViewSz > 0 then
   begin
     Str(ViewSz, t);
@@ -107,6 +119,9 @@ var f: Text; s: string; i, code: Integer;
 begin
   for i := 1 to NSW do SwOn[i] := False;
   ViewSz := 0;
+  UseBsp := False;
+  BspWalk := False;
+  HaveBsp := FSearch('WOLF3DB.EXE', '') <> '';
   Assign(f, CfgName);
   {$I-} Reset(f); {$I+}
   if IOResult <> 0 then Exit;
@@ -116,9 +131,13 @@ begin
     SwOn[i] := (i <= Length(s)) and (s[i] = '1');
   s := '';
   if not Eof(f) then ReadLn(f, s);    { the window size, if one was picked }
-  Close(f);
   Val(s, i, code);
   if (code = 0) and (i >= 4) and (i <= 19) then ViewSz := i;
+  s := '';
+  if not Eof(f) then ReadLn(f, s);    { the version, and WALK: '00' to '11' }
+  Close(f);
+  UseBsp := (Length(s) >= 1) and (s[1] = '1');
+  BspWalk := (Length(s) >= 2) and (s[2] = '1');
 end;
 
 procedure SaveCfg;
@@ -131,6 +150,8 @@ begin
     if SwOn[i] then Write(f, '1') else Write(f, '0');
   WriteLn(f);
   WriteLn(f, ViewSz);
+  if UseBsp then Write(f, '1') else Write(f, '0');
+  if BspWalk then WriteLn(f, '1') else WriteLn(f, '0');
   Close(f);
 end;
 
@@ -143,11 +164,11 @@ begin
   WriteLn(f, 'REM Written by W3MENU (StevenC & Claude) for PLAY.BAT');
   if bench then
   begin
-    WriteLn(f, 'WOLF3DV TIMEDEMO QUICK PRELOAD', Args);
+    WriteLn(f, Prog, ' TIMEDEMO QUICK PRELOAD', Args);
     WriteLn(f, 'PAUSE');
   end
   else
-    WriteLn(f, 'WOLF3DV', Args);
+    WriteLn(f, Prog, Args);
   Close(f);
 end;
 
@@ -174,6 +195,19 @@ begin
     if SwOn[i] then Write('X') else Write(' ');
     WriteLn('] ', Pad(SwName[i], 10), '  ', SwText[i]);
   end;
+  if HaveBsp then
+  begin
+    Write('    T  version:   ');
+    if UseBsp then
+    begin
+      WriteLn('WOLF3DB, the BSP tree draws the walls');
+      Write('    K  [');
+      if BspWalk then Write('X') else Write(' ');
+      WriteLn('] ', Pad('WALK', 10), '  the BSP version with id''s rays instead');
+    end
+    else
+      WriteLn('WOLF3DV, id''s rays: id''s picture exactly');
+  end;
   Write('   +/-  window size:  ');
   if ViewSz = 0 then
     WriteLn('the game''s own (its Change View)')
@@ -184,7 +218,7 @@ begin
   WriteLn;
   WriteLn('    P  play     B  benchmark these switches     Q  quit');
   WriteLn;
-  WriteLn('  WOLF3DV', Args);
+  WriteLn('  ', Prog, Args);
   WriteLn;
 end;
 
@@ -317,6 +351,8 @@ begin
           if ViewSz = 0 then ViewSz := 15
           else if ViewSz > 4 then Dec(ViewSz);
         '0': ViewSz := 0;               { back to the game's own setting }
+        'T': if HaveBsp then UseBsp := not UseBsp;
+        'K': if UseBsp then BspWalk := not BspWalk;
         'P', #13:
           begin
             SaveCfg;
