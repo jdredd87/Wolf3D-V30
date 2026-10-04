@@ -61,8 +61,16 @@ edit("WL_PLAY.C", """		DoActors ();			// NEC V30 build: the same loop in WL_DR_A
 # parses them; id's never sets them, so they are defined here, all off
 p = os.path.join(OUT, "WL_MAIN.C")
 open(p, "ab").write(b"\r\n// refsrc.py: the switches' variables, which our WL_DRAW.C defines -- all off\r\n"
-                    b"int\t\tpixstep = 1, lowsprites, flatwalls, solidart, lowvert;\r\n"
-                    b"memptr\tflatbuf;\r\n")
+                    b"int\t\tpixstep = 1, lowsprites, flatwalls, solidart, lowvert, farblobs;\r\n"
+                    b"memptr\tflatbuf, blobfill;\r\n")
+# step 98: a pushwall on the move is 0C0h+tile, and id's CheckLine took it
+# for a door and read doorposition[64+], past the array -- what it found there
+# depended on the memory layout.  Both builds treat it as solid.
+p = os.path.join(OUT, "WL_STATE.C")
+t = open(p, "rb").read().decode("latin-1")
+assert t.count("if (value<128 || value>256)") == 2
+open(p, "wb").write(t.replace("if (value<128 || value>256)",
+                              "if (value<128 || value>=0xc0)").encode("latin-1"))
 # no WL_SC_A: id's ScaleShape is C
 edit("BUILD86.BAT", " ID_VH_A WL_SC_A ID_PM_A)", " ID_VH_A ID_PM_A)")
 edit("LINK86.RSP", " WL_SCALE.OBJ WL_SC_A.OBJ+", " WL_SCALE.OBJ+")
