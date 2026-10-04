@@ -358,3 +358,18 @@ to the C version's to the pixel count, 158 generated demos played through,
 and the C helpers they replaced (Ends, StepInit, ColHeight, SideClip,
 MulDivFloor and the rest) deleted -- 3 KB, which the 486's start-up memory
 check needed.  86% of the walk now, on the V30.
+
+## Tried and dropped: the tree's tests from tables (2026-10-04)
+
+BoxClass (up to twelve products a box, against the three planes) and
+ApproxCol (four a column estimate) multiply camera-relative tile coordinates
+by the planes' normals.  Every coordinate is a whole tile, so each product
+can be a table entry: eight tables of 68 tiles built once a frame in
+BSPSetPlanes by repeated addition (t to t+1 adds 256 times the normal, the
+same integer exactly).  The 486 drew the attract loop with the same
+checksums (5E770848 / B65CE968) but 3% slower (86.4 against 88.9 fps in
+play, repeated), and the V30 2.7% slower (862.7 against 840.0 ticks, three
+rounds each) -- and on the V30 its demo 0 picture did not even match, which
+was not chased.  A frame visits some thirty nodes, so building 544 entries
+costs more than the multiplies it replaces, on both machines.  Reverted.
+StevenC & Claude.
