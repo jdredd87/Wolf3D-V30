@@ -1492,6 +1492,116 @@ PUBLIC	PlaceActors
 	retf
 ENDP
 
+;============================
+;
+; LDivS (step 98, StevenC & Claude): DX:AX / CX:BX, signed by unsigned, the
+; quotient truncated toward zero as C's long division gives it -- for
+; TransformActorA and TransformTile's ny*scale/nx.  Borland's LDIV@ divides
+; a bit at a time whenever the divisor passes 16 bits, which nx nearly
+; always does.  Here: the divisor shifted to 16 bits (and the dividend with
+; it), one DIV for an estimate, then the estimate corrected exactly --
+; q*D is never more than the dividend, and the remainder is less than D.
+; A quotient of 64K or more goes to LDIV@ as before (an object far off to
+; the side; never in the attract loop).  Python checked the method against
+; exact division over 2,000,000 random cases.  Keeps BP, DS, ES.
+;
+;============================
+
+PROC	LDivS NEAR
+	xor	si,si
+	or	dx,dx
+	jns	@@npos
+	neg	dx
+	neg	ax
+	sbb	dx,0
+	inc	si							; the quotient negated at the end
+@@npos:
+	or	cx,cx
+	jnz	@@wide
+	mov	di,ax						; a 16-bit divisor: two DIVs, exact
+	mov	ax,dx
+	xor	dx,dx
+	div	bx
+	mov	cx,ax
+	mov	ax,di
+	div	bx
+	mov	dx,cx
+	jmp	@@sign
+@@wide:
+	mov	[cs:ld_nlo],ax
+	mov	[cs:ld_nhi],dx
+	mov	[cs:ld_dlo],bx
+	mov	[cs:ld_dhi],cx
+@@norm:
+	shr	cx,1
+	rcr	bx,1
+	shr	dx,1
+	rcr	ax,1
+	or	cx,cx
+	jnz	@@norm
+	cmp	dx,bx
+	jae	@@slow						; the quotient would pass 16 bits
+	div	bx
+	mov	di,ax						; the estimate
+@@check:
+	mov	ax,di						; P = q*D, 48 bits
+	mul	[cs:ld_dlo]
+	mov	bx,ax
+	mov	cx,dx
+	mov	ax,di
+	mul	[cs:ld_dhi]
+	add	cx,ax
+	adc	dx,0
+	or	dx,dx						; P > N: one less
+	jnz	@@less
+	cmp	cx,[cs:ld_nhi]
+	ja	@@less
+	jb	@@notmore
+	cmp	bx,[cs:ld_nlo]
+	ja	@@less
+@@notmore:
+	mov	ax,[cs:ld_nlo]				; N - P >= D: one more
+	mov	dx,[cs:ld_nhi]
+	sub	ax,bx
+	sbb	dx,cx
+	cmp	dx,[cs:ld_dhi]
+	jb	@@exact
+	ja	@@more
+	cmp	ax,[cs:ld_dlo]
+	jb	@@exact
+@@more:
+	cmp	di,0FFFFh
+	je	@@slow
+	inc	di
+	jmp	@@check
+@@less:
+	dec	di
+	jmp	@@check
+@@exact:
+	mov	ax,di
+	xor	dx,dx
+@@sign:
+	or	si,si
+	jz	@@ret
+	neg	dx
+	neg	ax
+	sbb	dx,0
+@@ret:
+	ret
+@@slow:
+	push	[cs:ld_dhi]					; LDIV@ (dividend, divisor), as before:
+	push	[cs:ld_dlo]					; the dividend made positive, so the sign
+	push	[cs:ld_nhi]					; is ours to put back
+	push	[cs:ld_nlo]
+	call	F_LDIV@						; pops its own arguments
+	jmp	@@sign
+ENDP
+
+ld_nlo	dw	0
+ld_nhi	dw	0
+ld_dlo	dw	0
+ld_dhi	dw	0
+
 
 ;============================
 ;
@@ -1589,11 +1699,11 @@ PUBLIC	TransformActorA				; public only so profiles can name it
 	mov	ax,[WORD ttny]
 	mul	[WORD scale+2]
 	add	di,ax						; DI:SI = ny*scale
-	push	[WORD ttnx+2]				; LDIV@ (dividend, divisor): divisor first
-	push	[WORD ttnx]
-	push	di
-	push	si
-	call	F_LDIV@						; pops its own arguments
+	mov	ax,si						; DI:SI / nx (step 98: LDivS, not
+	mov	dx,di						; Borland's LDIV@)
+	mov	bx,[WORD ttnx]
+	mov	cx,[WORD ttnx+2]
+	call	LDivS
 	add	ax,[centerx]
 	mov	[bp+OB_VIEWX],ax			; ob->viewx
 
@@ -1702,11 +1812,11 @@ PUBLIC	TransformTile
 	mov	ax,[WORD ttny]
 	mul	[WORD scale+2]
 	add	di,ax						; DI:SI = ny*scale
-	push	[WORD ttnx+2]				; LDIV@ (dividend, divisor): divisor first
-	push	[WORD ttnx]
-	push	di
-	push	si
-	call	F_LDIV@						; pops its own arguments
+	mov	ax,si						; DI:SI / nx (step 98: LDivS, not
+	mov	dx,di						; Borland's LDIV@)
+	mov	bx,[WORD ttnx]
+	mov	cx,[WORD ttnx+2]
+	call	LDivS
 	add	ax,[centerx]
 	mov	bx,[bp+10]
 	mov	[bx],ax						; *dispx
@@ -3650,6 +3760,8 @@ PUBLIC	CheckLine
 @@xhit:
 	cmp	al,128
 	jb	@@false						; a wall
+	cmp	al,0C0h						; step 98: a pushwall on the move (0C0h+tile)
+	jae	@@false						; blocks: id read doorposition[64+]
 	xor	ah,ah
 	and	al,7fh						; a door: open far enough?
 	mov	si,ax
@@ -3731,6 +3843,8 @@ PUBLIC	CheckLine
 @@yhit:
 	cmp	al,128
 	jb	@@false
+	cmp	al,0C0h
+	jae	@@false
 	xor	ah,ah
 	and	al,7fh
 	mov	si,ax

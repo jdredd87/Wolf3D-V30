@@ -1072,8 +1072,9 @@ void Cmd_Use (void)
 	else if (!buttonheld[bt_use] && doornum & 0x80)
 	{
 		buttonheld[bt_use] = true;
-		OperateDoor (doornum & ~0x80);
-	}
+		if (!(doornum & 0x40))		// NEC V30 build (step 98): a pushwall on the
+			OperateDoor (doornum & ~0x80);	// move is 0C0h+tile, no door: id's code
+	}								// operated "door" 64+, past doorobjlist
 	else
 		SD_PlaySound (DONOTHINGSND);
 
