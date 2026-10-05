@@ -479,3 +479,5 @@ and the walk's are near the same.  The start-up memory check is id's 235000
 less 20 KB here: the automap's 4 KB put the 486 (549 KB free) just under the
 old 225000.  V30, demo 0: the default (rays, far walls coarser) 5.25 fps,
 7.28 with the map up; BSP 4.47 and 6.90.  StevenC & Claude.
+
+**Measured 2026-10-05, every mode on both machines: [BENCHMARKS.md](BENCHMARKS.md).**  V30, demo 0: the default 5.26 fps in play, NOLOD 4.89, BSP 4.45, BSP NOLOD 4.27, the map up 7.24; the whole attract loop 6.15 (the exact version 5.57).  The 486: 105.5 over the loop.  StevenC & Claude.
