@@ -903,7 +903,8 @@ void CheckKeys (void)
 	if (Paused)
 	{
 		bufferofs = displayofs;
-		LatchDrawPic (20-4,80-2*8,PAUSEDPIC);
+		if (!AutomapOn (demoplayback))	// the map up (2026-10-05): it stays in full
+			LatchDrawPic (20-4,80-2*8,PAUSEDPIC);	// view while the game is paused
 		SD_MusicOff();
 		IN_Ack();
 		IN_ClearKeysDown ();
