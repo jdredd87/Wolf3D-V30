@@ -1248,6 +1248,12 @@ void InitGame (void)
 			bspmode = 1;
 		if ((a[0]|32)=='w' && (a[1]|32)=='a' && (a[2]|32)=='l' && (a[3]|32)=='k' && !a[4])
 			bspmode = 0;
+		if ((a[0]|32)=='n' && (a[1]|32)=='o' && (a[2]|32)=='l' && (a[3]|32)=='o'
+			&& (a[4]|32)=='d' && !a[5])
+		{								// NOLOD: far walls at full detail too
+			void BSPNoLod (void);		// (WL_DR_A.ASM; by default a wall under
+			BSPNoLod ();				// 64 pixels is textured every second
+		}								// column, under 32 every fourth)
 	}
 	if (flatwalls)						// NEC V30 build (step 84): the columns and the
 	{									// colours' averages, before the page cache

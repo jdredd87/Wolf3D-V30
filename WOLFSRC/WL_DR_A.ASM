@@ -1068,6 +1068,10 @@ PUBLIC	BSPCols
 	mov	[cs:bcv_ptr],bx
 	mov	ax,[bx+BC_END]
 	mov	[WORD cs:bk_end-2],ax
+	mov	ax,[cs:bc_lod1]
+	mov	[WORD cs:bk_lod1-2],ax
+	mov	ax,[cs:bc_lod2]
+	mov	[WORD cs:bk_lod2-2],ax
 	mov	ax,[bx+BC_UMAX]
 	mov	[WORD cs:bk_umax1-2],ax
 	mov	[WORD cs:bk_umax2-2],ax
@@ -1108,6 +1112,30 @@ bk_end:
 	jge	@@done
 	jcxz	@@h0					; under a pixel: at least 1
 @@hok:
+	cmp	cx,1234h				; (2026-10-04) level of detail: a wall
+bk_lod1:							; shorter than this is far, and only
+	jae	@@sample				; every second column of it is textured
+	cmp	[postwidth],0			; -- every fourth under bk_lod2 -- the
+	je	@@sample				; post widened over the rest, as LOWWALLS
+	mov	ax,di					; does, for all walls, in the walk
+	and	ax,1
+	cmp	cx,1234h
+bk_lod2:
+	jae	@@lodm
+	mov	ax,di
+	and	ax,3
+@@lodm:
+	or	ax,ax
+	jz	@@sample
+	cmp	[postwidth],8			; (ScalePostA's widest post)
+	jae	@@sample
+	inc	[postwidth]
+	mov	bx,di
+	shl	bx,1
+	mov	ax,[wallheight+bx-2]
+	mov	[wallheight+bx],ax
+	jmp	@@step
+@@sample:
 	mov	ax,si					; u = uh/h
 	mov	dx,[cs:bcv_uvhi]
 	cmp	dx,cx
@@ -1223,8 +1251,12 @@ bk_umax2:
 ENDP
 
 bcv_ptr		dw	0
+bc_lod1		dw	256						; wallheight under which a wall is far:
+bc_lod2		dw	128						; 64 and 32 pixels high (8 to a pixel row
+										; pair: wallheight>>3 is the scaler)
 bcv_uvhi		dw	0
 bcv_ue		dw	0
+		db	0						; (parity: the cap made BSPCols 7 bytes longer)
 
 
 
@@ -1301,7 +1333,7 @@ hvw_tex:
 	jne	hvw_nwt				; (a short hop: see hvw_nwt)
 	cmp	si,[WORD postsource]
 hvwmrg:									; step 97: JMP with LOWWALLS4 (EB for 75)
-	jne	hvw_newcol
+	jne	SHORT hvw_newcol
 wideadd1:								; step 79: pixstep, patched (83 06 iw ib: at +4)
 	add	[WORD postwidth],1		; wide scale
 	mov	bx,[pixx]
@@ -1442,6 +1474,8 @@ cvp_short:
 	call	ScalePostA				; (it recomputes; postmin is a least value)
 	jmp	cvp_done
 hvw_newwall:
+	cmp	[cs:wl_skip],0			; a skip before this ray: another wall
+	jne	wl_undo
 	mov	[WORD xintercept],0		; step 75: the hit, stored as a post starts
 	mov	[WORD xintercept+2],bp
 	mov	[xtile],bx
@@ -3535,6 +3569,17 @@ ENDP
 ;
 CL_MAX	=	(320/2+4)*4					; MAXSOLID, in bytes
 
+;
+; BSPNoLod: NOLOD -- every column textured, however far the wall
+;
+PROC	BSPNoLod FAR
+PUBLIC	BSPNoLod
+	mov	[cs:bc_lod1],0
+	mov	[cs:bc_lod2],0
+	retf
+ENDP
+		db	0						; (parity)
+
 PROC	BSPNSolid FAR
 PUBLIC	BSPNSolid
 	push	bp
@@ -4583,6 +4628,20 @@ PUBLIC	AsmRefresh
 	mov	[WORD cs:postw3+4],ax
 	mov	[WORD cs:postw4+4],ax
 	mov	[BYTE cs:pxstep+2],al	; step 97: ADD BX,pixstep
+	xor	cx,cx					; (2026-10-04) the walk's level of detail,
+	xor	dx,dx					; at full detail only
+	cmp	ax,1
+	jne	@@nolod
+	mov	cx,[cs:bc_lod1]
+	mov	dx,[cs:bc_lod2]
+@@nolod:
+	mov	[WORD cs:wl_lod1k-2],cx
+	mov	[WORD cs:wl_lod2k-2],dx
+	mov	cx,[viewwidth]
+	dec	cx
+	mov	[WORD cs:wl_vw1k-2],cx
+	mov	[cs:wl_skip],0
+	mov	[cs:wl_until],0
 	mov	bl,75h					; JNE: a ray's post widens the last when the
 	cmp	al,4					; texture column is the same -- but not with
 	jb	@@pxmrg					; LOWWALLS4, where three rays' 12 columns would
@@ -4631,9 +4690,74 @@ done:
 	pop	di
 	pop	si
 	retf
+;
+; wl_undo (2026-10-04): the ray after a skip found another wall, or a door
+; or the pushwall: the skip is taken back -- the post narrowed again -- and
+; the skipped rays cast after all, with no skipping until the ray that
+; found the change comes round again.  Nothing global has changed yet.
+;
+wl_undo:
+	mov	ax,[cs:wl_skip]
+	sub	[postwidth],ax
+	mov	bx,[cs:wl_skipx]
+	add	ax,bx
+	mov	[cs:wl_until],ax
+	mov	[cs:wl_skip],0
+	mov	[pixx],bx
+	jmp	pixxbx
+wl_skip		dw	0
+wl_skipx	dw	0
+wl_until	dw	0
 	EVEN
 nextpix:
 	mov	bx,[pixx]
+;
+; (2026-10-04, the BSP branch) level of detail in the walk: a wall the ray
+; just found shorter than wl_lod1 (64 pixels) skips the next ray, one under
+; wl_lod2 (32) the next three -- the post widened over them and their
+; heights copied, as LOWWALLS does for every column.  Patched per frame; 0
+; (NOLOD, or LOWWALLS's own step) turns it off.
+;
+	mov	[cs:wl_skip],0			; the ray just done kept any skip before it
+	cmp	bx,[cs:wl_until]		; just undone: no skipping until past it
+	jb	pxstep
+	mov	di,bx
+	shl	di,1
+	mov	ax,[wallheight+di]
+	cmp	ax,1234h
+wl_lod1k:
+	jae	pxstep
+	mov	cx,1
+	cmp	ax,1234h
+wl_lod2k:
+	jae	@@lk
+	mov	cx,3
+@@lk:
+	mov	dx,1234h				; viewwidth-1
+wl_vw1k:
+	sub	dx,bx					; the columns after this one
+	cmp	cx,dx
+	jle	@@lc
+	mov	cx,dx
+@@lc:
+	mov	dx,8					; and a post no wider than ScalePostA's 8
+	sub	dx,[postwidth]
+	cmp	cx,dx
+	jle	@@ld
+	mov	cx,dx
+@@ld:
+	or	cx,cx
+	jle	pxstep
+	add	[postwidth],cx
+	mov	[cs:wl_skip],cx			; to be verified by the next ray's wall
+	inc	bx
+	mov	[cs:wl_skipx],bx		; the first column skipped
+	dec	bx
+	add	bx,cx
+@@lf:
+	mov	[wallheight+di+2],ax
+	add	di,2
+	loop	@@lf
 pxstep:
 	add	bx,1					; step 97: pixstep, patched (83 C3 ib: at +2)
 	mov	[pixx],bx
@@ -5224,7 +5348,7 @@ ivyt:
 vertcheck:
 	cmp	si,dx						; yinttile against ytile, via xspot and T
 vertop:								; 0x7e = jle (ytilestep==-1)
-	jle	horizentry					; 0x7d = jge (ytilestep==1)
+	jle	SHORT horizentry					; 0x7d = jge (ytilestep==1)
 	EVEN
 vertentry:
 	cmp	[BYTE tilemap+si],bh		; tilehit = *((byte *)tilemap+xspot);
@@ -5248,7 +5372,7 @@ vyadc:
 	adc	si,1234h					; xspot += ystep's high word + xtilestep<<6 (at +2)
 	cmp	si,dx
 vertop2:							; the inverse of vertop: 0x7f = jg, 0x7c = jl
-	jg	vertentry
+	jg	SHORT vertentry
 
 ;-----------
 ;
@@ -5274,7 +5398,7 @@ hxadc:
 	add	di,dx						; yspot = (xinttile<<6)+ytile, as
 	cmp	cx,bx						; T + ((xinttile-xtile)<<6)
 horizop2:							; the inverse of id's horizop (jle/jge
-	jl	horizentry					; on xtilestep): 0x7f = jg, 0x7c = jl
+	jl	SHORT horizentry					; on xtilestep): 0x7f = jg, 0x7c = jl
 	jmp	vertentry
 
 	EVEN
@@ -5347,7 +5471,7 @@ hhw_tex:
 	jne	hhw_nwt				; (a short hop: see hhw_nwt)
 	cmp	si,[WORD postsource]
 hhwmrg:									; step 97: JMP with LOWWALLS4 (EB for 75)
-	jne	hhw_newcol
+	jne	SHORT hhw_newcol
 wideadd2:								; step 79: pixstep, patched (83 06 iw ib: at +4)
 	add	[WORD postwidth],1		; wide scale
 	mov	bx,[pixx]
@@ -5488,6 +5612,8 @@ hhw_drop:						; step 92: as hvw_drop
 	call	DropFill
 	jmp	hhw_first
 hhw_newwall:
+	cmp	[cs:wl_skip],0			; a skip before this ray: another wall
+	jne	wl_undo
 	mov	[WORD xintercept],bp	; step 75: the hit, stored as a post starts
 	mov	[WORD xintercept+2],dx
 	mov	[xtile],dx
@@ -5608,6 +5734,8 @@ hithmid:
 	add	bp,[tsave]
 	mov	[WORD yintercept+2],bp
 
+	cmp	[cs:wl_skip],0			; (a skip before: cast it after all)
+	jne	wl_undo
 	call	FAR HitHorizDoor
 	jmp	nextpix
 
@@ -5657,6 +5785,8 @@ horizpushwall:
 	mov	[WORD yintercept+2],bp
 	mov	[WORD yintercept],0
 
+	cmp	[cs:wl_skip],0			; (a skip before: cast it after all)
+	jne	wl_undo
 	call	FAR HitHorizPWall
 	jmp	nextpix
 
@@ -5721,6 +5851,8 @@ hitvmid:
 	mov	ax,[xtile]
 	mov	[WORD xintercept+2],ax
 
+	cmp	[cs:wl_skip],0			; (a skip before: cast it after all)
+	jne	wl_undo
 	call	FAR HitVertDoor
 	jmp	nextpix
 
@@ -5768,8 +5900,11 @@ vertpushwall:
 	mov	[WORD xintercept+2],bx
 	mov	[WORD xintercept],0
 
+	cmp	[cs:wl_skip],0			; (a skip before: cast it after all)
+	jne	wl_undo
 	call	FAR HitVertPWall
 	jmp	nextpix
+		db	0						; (parity, after wl_undo's hooks)
 
 
 

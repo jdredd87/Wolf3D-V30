@@ -422,3 +422,46 @@ Also not kept: the same immediates in `BSPFace`'s column loop (doors and
 the moving pushwall) -- 833.8 against 833.0, nothing; a frame has few
 door columns.  And `ApproxCol`/`VisTest` were left as they are: five
 multiplies and a divide each, which immediates do not shorten.
+
+## Level of detail: far walls coarser, in both renderers (2026-10-04)
+
+StevenC: the BSP version may change the picture as well as the game, so it
+can trade detail for speed.  Where the time goes decided which trade: per
+whole attract loop on the V30, the walk spends 3,817 ticks finding walls
+and the tree 6,000 -- the walk is the cheaper finder on a grid -- and both
+spend about as much again on each column's texture and post.  So the BSP
+cannot win by finding walls; what it can do that id's walk does not is know
+a wall's height before texturing a column.
+
+**The BSP's level of detail** (`BSPCols`): a wall under 64 pixels high is
+textured every second column, under 32 every fourth, the post widened over
+the rest as LOWWALLS does everywhere -- only within a run, so every edge is
+where it was.  Same look at a glance (frame dumps compared at 3x); 830.7 ->
+795.7 ticks.  Thresholds tried: 32/16 px 804.3, 48/24 801.0, 64/32 795.7.
+
+**The walk's level of detail** (`nextpix`): after a ray hits a wall under
+64 pixels, the next ray is skipped, three under 32.  Unverified it was
+612.0 ticks against 729.7 -- 16% -- but a nearer wall's edge could move up
+to three columns and a far sprite seen only by a skipped ray went missing
+(frame 60 of demo 0).  Skipping one ray at most: 650.7, edges out by a
+column at most, as LOWWALLS.  **Verified**: the ray after a skip must find
+the same wall (the wall key) -- if it finds another, or a door, or the
+pushwall, the skip is taken back and the skipped rays cast after all
+(`wl_undo`): edges exact, 687.7 against 736.7, 6.7%.  `NOLOD` turns both
+off; with it the walk is id's picture exactly (566BF5D4 / 01922231).
+
+**A trap found on the way, in both branches.**  Step 97 patches the opcode
+of `hvwmrg`'s `JNE hvw_newcol` every frame (75h, or EBh for LOWWALLS4).
+Eleven bytes added between it and its target took the target out of short
+range, TASM's JUMPS silently assembled `JE +3 / JMP NEAR`, and the patch
+then wrote 75h over the JE: the branch inverted, posts merged when their
+texture changed -- a wrong picture, and faster, which is what gave it away
+(an exact `WALK NOLOD` stopped matching).  Every jump whose opcode is
+patched (`vertop`, `vertop2`, `horizop2`, `hvwmrg`, `hhwmrg`) is now
+written `SHORT`, so the assembler refuses instead.
+
+Where it leaves the V30 (demo 0, ticks): the exact build 721; the walk with
+level of detail 687.7; the BSP with it about 800.  The hybrid -- id's walk
+for finding walls, the BSP's idea of detail by distance -- is the fastest.
+
+StevenC & Claude.
