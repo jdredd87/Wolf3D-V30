@@ -11,10 +11,12 @@ On the DOS machine, in C:\\WOLF3D, type SHOWCASE and pick a version:
     T  WOLF3DB with the BSP tree finding the walls
     A  all three, one after another (the long video)
 
-Each starts with id Software's own 1992 code (WOLF3DO.EXE: id's renderer
-and game code, rebuilt for the 8086 -- the original needs a 286 -- with
-the same timing harness), so every speed after it has the original's to
-be measured against.  Then, for each mode: a title screen saying what it
+Two questions follow (each answers itself after 15 seconds): whether to
+start with id Software's own 1992 code (WOLF3DO.EXE: id's renderer and
+game code, rebuilt for the 8086 -- the original needs a 286 -- with the
+same timing harness), so every speed after it has the original's to be
+measured against (Y by default); and whether to show the map, TAB, too
+(N by default: the map's runs come at the end of each reel).  Then, for each mode: a title screen saying what it
 shows and with which switches (8 seconds), SECS seconds of the game's own
 demos with them (TIMEDEMO SECS: the same time each, so a faster mode gets
 further), and its speed report (10 seconds).  At the end, every run's
@@ -24,7 +26,9 @@ a wait, Q quits.
 The files: SHOWCASE.BAT (the menu), SHOWO.BAT (id's code), SHOWV.BAT,
 SHOWB.BAT and SHOWT.BAT (the reels).  Each reel runs straight down, no GOTO
 but to its end -- COMMAND.COM finds a label by reading the file from the
-top.  Q in a reel leaves SHOWQ.FLG, so SHOWCASE stops too.  The game's
+top.  Q in a reel leaves SHOWQ.FLG, so SHOWCASE stops too; SHOWMAP.FLG
+says to run the map, SHOWNOID.FLG to leave out id's code, and SHOWPICK.SEL
+holds the version picked (the questions after it overwrite ERRORLEVEL).  The game's
 report goes to SHOWRES.TXT and is shown from there, and each run's "secs"
 line -- its frames and speed over all its play -- is gathered into
 SHOWSUM.TXT for the summary.
@@ -32,8 +36,9 @@ SHOWSUM.TXT for the summary.
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-INTRO, AFTER = 8, 10                    # seconds
-SECS = 60                               # of play a mode (TIMEDEMO SECS)
+INTRO, AFTER, ASK = 8, 10, 15           # seconds
+SECS = 180                              # of play a mode (TIMEDEMO SECS); 60 left
+                                        # demo 0 near its start on a V30
 TITLE = "Wolfenstein 3-D  --  optimized by StevenC and Claude"
 EVERY = "LOWWALLS4 LOWSPRITES FLATART LOWVERT FARBLOBS FASTOPL"
 
@@ -71,6 +76,9 @@ DETAIL = [                              # (switches, title, what it shows)
     (EVERY, "EVERYTHING",
      ["Four-pixel walls, two-pixel sprites, solid colours, half the rows,",
       "flat far sprites and AdLib with no waits.  The fastest."]),
+]
+
+MAP = [                                 # run only when SHOWCASE is told Y to the map
     ("AUTOMAP", "THE MAP  (TAB in the game)",
      ["The rooms explored, walls, doors in their keys' colours, items,",
       "enemies in sight and the player.  The game goes on under it."]),
@@ -81,14 +89,14 @@ REELS = {
           [("", "FULL DETAIL",
             ["Every pixel as id's renderer draws it -- the same picture, from",
              "faster code: assembly for the 8086, every step checked against id's."])]
-          + DETAIL),
+          + DETAIL, MAP),
     "B": ("WOLF3DB", "WOLF3DB -- the faster version",
           [("", "FAR WALLS IN LESS DETAIL  (the default)",
             ["id's rays, but a wall under 64 pixels tall is textured every second",
              "column, under 32 every fourth.  Near walls and every edge exact."]),
            ("NOLOD", "NOLOD  (full detail)",
             ["The same program with every wall at full detail: id's picture."])]
-          + DETAIL),
+          + DETAIL, MAP),
     "T": ("WOLF3DB", "WOLF3DB with the BSP tree",
           [("BSP", "THE BSP TREE  (as the SNES version)",
             ["The walls found by a tree built from the level, front to back,",
@@ -101,21 +109,26 @@ REELS = {
             ["The tree, half the rows."]),
            ("BSP LOWSPRITES LOWVERT FASTOPL", "BSP, LOWSPRITES, LOWVERT, FASTOPL",
             ["The tree with every option it draws itself.  (The wall options --",
-             "LOWWALLS, FLATWALLS -- go back to id's rays, which are faster.)"]),
-           ("BSP AUTOMAP", "BSP and THE MAP",
+             "LOWWALLS, FLATWALLS -- go back to id's rays, which are faster.)"])],
+          [("BSP AUTOMAP", "BSP and THE MAP",
             ["The tree, with the map up: the walls it drew are what is explored."])]),
 }
 
 
-def reel(fname, label, short, exe, modes):
-    """One reel: straight down, a mode at a time."""
+def reel(fname, label, short, exe, modes, maps=()):
+    """One reel: straight down, a mode at a time; the map's runs come last,
+    and only when SHOWMAP.FLG is there."""
     n = len(modes)
     out = [
         "@ECHO OFF",
         "REM Wolfenstein 3-D: the showcase's %s reel." % short,
         "REM Written by launcher\\mkshow.py (StevenC & Claude): edit that, not this.",
     ]
-    for i, (sw, title, lines) in enumerate(modes, 1):
+    runs = [(sw, title, lines, "%d of %d" % (i, n)) for i, (sw, title, lines) in enumerate(modes, 1)]
+    runs += [(sw, title, lines, "And") for sw, title, lines in maps]
+    for i, (sw, title, lines, count) in enumerate(runs):
+        if i == n:
+            out.append("IF NOT EXIST SHOWMAP.FLG GOTO END")
         cmd = "%s TIMEDEMO PRELOAD SECS %d" % (exe, SECS) + (" " + sw if sw else "")
         out += [
             "CLS",
@@ -125,7 +138,7 @@ def reel(fname, label, short, exe, modes):
             "ECHO   ------------------------------------------------------------------",
             "ECHO   %s" % label,
             "ECHO.",
-            "ECHO   %d of %d:  %s" % (i, n, title),
+            "ECHO   %s:  %s" % (count, title),
             "ECHO.",
         ]
         out += ["ECHO   " + l for l in lines]
@@ -170,16 +183,20 @@ def menu():
         "CD \\WOLF3D",
         "IF EXIST SHOWSUM.TXT DEL SHOWSUM.TXT",
         "IF EXIST SHOWQ.FLG DEL SHOWQ.FLG",
+        "IF EXIST SHOWMAP.FLG DEL SHOWMAP.FLG",
+        "IF EXIST SHOWNOID.FLG DEL SHOWNOID.FLG",
         "IF EXIST SHOWCPU.TXT DEL SHOWCPU.TXT",
-        "IF EXIST W3MENU.EXE W3MENU /CPU > SHOWCPU.TXT",
+        "IF NOT EXIST W3MENU.EXE GOTO NOCPU",     # (a redirect on an IF line
+        "W3MENU /CPU > SHOWCPU.TXT",              # happens either way)
+        ":NOCPU",
         "CLS",
         "ECHO.",
         "ECHO   " + TITLE,
         "IF EXIST SHOWCPU.TXT TYPE SHOWCPU.TXT",
         "ECHO   ------------------------------------------------------------------",
         "ECHO.",
-        "ECHO   The showcase: id Software's original code first, then a version",
-        "ECHO   with every one of its modes, %d seconds of the game's demos each." % SECS,
+        "ECHO   The showcase: a version with every one of its modes, %d seconds" % SECS,
+        "ECHO   of the game's demos each -- after id Software's original code, if wanted.",
         "ECHO.",
         "ECHO     V  WOLF3DV -- id's picture exactly, and every detail option",
         "ECHO     B  WOLF3DB -- far walls in less detail, and every detail option",
@@ -189,26 +206,54 @@ def menu():
         "ECHO.",
         "CHOICE /C:VBTAQ /N    Which? ",
         "IF ERRORLEVEL 5 GOTO END",
-        "IF ERRORLEVEL 4 GOTO ALL",
-        "IF ERRORLEVEL 3 GOTO T",
-        "IF ERRORLEVEL 2 GOTO B",
-        "CALL SHOWO",
+        # the pick is kept in SHOWPICK.SEL, because the two questions after
+        # it overwrite ERRORLEVEL.  Never "IF ... ECHO x > FILE": COMMAND.COM
+        # opens the redirection before it tests the IF, so the file is
+        # created (emptied) whether or not the condition holds
+        "IF ERRORLEVEL 4 GOTO PICKA",
+        "IF ERRORLEVEL 3 GOTO PICKT",
+        "IF ERRORLEVEL 2 GOTO PICKB",
+        "ECHO V > SHOWPICK.SEL",
+        "GOTO ASK",
+        ":PICKB",
+        "ECHO B > SHOWPICK.SEL",
+        "GOTO ASK",
+        ":PICKT",
+        "ECHO T > SHOWPICK.SEL",
+        "GOTO ASK",
+        ":PICKA",
+        "ECHO A > SHOWPICK.SEL",
+        ":ASK",
+        "ECHO.",
+        "ECHO   Start with id's original code, for its speed?  Y or N  (Y in %d seconds)" % ASK,
+        "CHOICE /C:YN /N /T:Y,%02d > NUL" % ASK,
+        "IF ERRORLEVEL 2 GOTO NOID",
+        "GOTO ASKMAP",
+        ":NOID",
+        "ECHO N > SHOWNOID.FLG",
+        ":ASKMAP",
+        "ECHO   Show the map (TAB) too?  Y or N  (N in %d seconds)" % ASK,
+        "CHOICE /C:YN /N /T:N,%02d > NUL" % ASK,
+        "IF ERRORLEVEL 2 GOTO GO",
+        "ECHO Y > SHOWMAP.FLG",
+        ":GO",
+        "IF NOT EXIST SHOWNOID.FLG CALL SHOWO",
         "IF EXIST SHOWQ.FLG GOTO END",
+        'FIND "B" SHOWPICK.SEL > NUL',
+        "IF NOT ERRORLEVEL 1 GOTO B",
+        'FIND "T" SHOWPICK.SEL > NUL',
+        "IF NOT ERRORLEVEL 1 GOTO T",
+        'FIND "A" SHOWPICK.SEL > NUL',
+        "IF NOT ERRORLEVEL 1 GOTO ALL",
         "CALL SHOWV",
         "GOTO END",
         ":B",
-        "CALL SHOWO",
-        "IF EXIST SHOWQ.FLG GOTO END",
         "CALL SHOWB",
         "GOTO END",
         ":T",
-        "CALL SHOWO",
-        "IF EXIST SHOWQ.FLG GOTO END",
         "CALL SHOWT",
         "GOTO END",
         ":ALL",
-        "CALL SHOWO",
-        "IF EXIST SHOWQ.FLG GOTO END",
         "CALL SHOWV",
         "IF EXIST SHOWQ.FLG GOTO END",
         "CALL SHOWB",
@@ -216,6 +261,9 @@ def menu():
         "CALL SHOWT",
         ":END",
         "IF EXIST SHOWQ.FLG DEL SHOWQ.FLG",
+        "IF EXIST SHOWMAP.FLG DEL SHOWMAP.FLG",
+        "IF EXIST SHOWNOID.FLG DEL SHOWNOID.FLG",
+        "IF EXIST SHOWPICK.SEL DEL SHOWPICK.SEL",
         "IF NOT EXIST SHOWSUM.TXT GOTO BYE",
         "CLS",
         "ECHO   " + TITLE,
@@ -234,8 +282,8 @@ def write():
     files = [menu(), reel("SHOWO.BAT", "ID'S ORIGINAL CODE", "ORIGINAL", "WOLF3DO", ORIGINAL)]
     for key, fname, short in (("V", "SHOWV.BAT", "WOLF3DV"), ("B", "SHOWB.BAT", "WOLF3DB"),
                               ("T", "SHOWT.BAT", "BSP")):
-        exe, label, modes = REELS[key]
-        files.append(reel(fname, label, short, exe, modes))
+        exe, label, modes, maps = REELS[key]
+        files.append(reel(fname, label, short, exe, modes, maps))
     paths = []
     for fname, out in files:
         for line in out:
