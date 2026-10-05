@@ -1088,7 +1088,7 @@ hvw_tex:
 	jne	hvw_nwt				; (a short hop: see hvw_nwt)
 	cmp	si,[WORD postsource]
 hvwmrg:									; step 97: JMP with LOWWALLS4 (EB for 75)
-	jne	hvw_newcol
+	jne	SHORT hvw_newcol
 wideadd1:								; step 79: pixstep, patched (83 06 iw ib: at +4)
 	add	[WORD postwidth],1		; wide scale
 	mov	bx,[pixx]
@@ -2611,7 +2611,7 @@ ivyt:
 vertcheck:
 	cmp	si,dx						; yinttile against ytile, via xspot and T
 vertop:								; 0x7e = jle (ytilestep==-1)
-	jle	horizentry					; 0x7d = jge (ytilestep==1)
+	jle	SHORT horizentry					; 0x7d = jge (ytilestep==1)
 	EVEN
 vertentry:
 	cmp	[BYTE tilemap+si],bh		; tilehit = *((byte *)tilemap+xspot);
@@ -2635,7 +2635,7 @@ vyadc:
 	adc	si,1234h					; xspot += ystep's high word + xtilestep<<6 (at +2)
 	cmp	si,dx
 vertop2:							; the inverse of vertop: 0x7f = jg, 0x7c = jl
-	jg	vertentry
+	jg	SHORT vertentry
 
 ;-----------
 ;
@@ -2661,7 +2661,7 @@ hxadc:
 	add	di,dx						; yspot = (xinttile<<6)+ytile, as
 	cmp	cx,bx						; T + ((xinttile-xtile)<<6)
 horizop2:							; the inverse of id's horizop (jle/jge
-	jl	horizentry					; on xtilestep): 0x7f = jg, 0x7c = jl
+	jl	SHORT horizentry					; on xtilestep): 0x7f = jg, 0x7c = jl
 	jmp	vertentry
 
 	EVEN
@@ -2734,7 +2734,7 @@ hhw_tex:
 	jne	hhw_nwt				; (a short hop: see hhw_nwt)
 	cmp	si,[WORD postsource]
 hhwmrg:									; step 97: JMP with LOWWALLS4 (EB for 75)
-	jne	hhw_newcol
+	jne	SHORT hhw_newcol
 wideadd2:								; step 79: pixstep, patched (83 06 iw ib: at +4)
 	add	[WORD postwidth],1		; wide scale
 	mov	bx,[pixx]
