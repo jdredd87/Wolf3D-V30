@@ -1291,9 +1291,10 @@ void InitGame (void)
 
 
 #ifndef SPEAR
-	if (mminfo.mainmem < 225000L)	// the BSP version (StevenC & Claude): id's
-									// 235000 less 10 KB -- the renderer's code
-									// put the 486 (549 KB free) just under it
+	if (mminfo.mainmem < 215000L)	// the BSP version (StevenC & Claude): id's
+									// 235000 less 20 KB -- the renderer's code
+									// and the automap put the 486 (549 KB free)
+									// just under it
 #else
 	if (mminfo.mainmem < 257000L && !MS_CheckParm("debugmode"))
 #endif

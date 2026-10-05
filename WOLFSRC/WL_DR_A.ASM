@@ -2456,6 +2456,8 @@ PROC	WalkNode NEAR
 @@draw:
 	inc	[WORD cs:wk_cnt+6]
 	mov	ax,[bp+WL_R]
+	call	MarkRun						; the automap: its tiles explored
+	nop									; (keeps what follows at its parity)
 	call	DrawRunA					; keeps BP
 @@skiprun:
 	add	[WORD bp+WL_R],4
@@ -8005,6 +8007,90 @@ PROC	AmDot NEAR
 	mov	[es:di+80],bl
 	mov	[es:di+160],bl
 @@no:
+	ret
+ENDP
+
+;
+; MarkRun (2026-10-05, the automap in BSP mode): the run at AX in wk_runs is
+; being drawn: both tiles beside its line, along it, get this frame's mark in
+; spotvis, as the rays mark what they cross.  Keeps every register.
+;
+mr_a	dw	0
+mr_b	dw	0
+
+PROC	MarkRun NEAR
+	push	ax
+	push	bx
+	push	cx
+	push	dx
+	push	si
+	push	di
+	push	es
+	les	si,[cs:wk_runs]
+	mov	si,ax
+	mov	dl,[BYTE vismark]
+	mov	al,[es:si+3]
+	xor	ah,ah
+	mov	di,ax						; a2
+	mov	cl,[es:si+2]
+	xor	ch,ch						; a1
+	mov	bl,[es:si+1]
+	xor	bh,bh						; the line
+	mov	al,[es:si]					; of: bit 0, along x
+	mov	[cs:mr_a],0					; the tile before the line, and after
+	mov	[cs:mr_b],0
+	or	bx,bx
+	jz	@@na
+	inc	[cs:mr_a]
+@@na:
+	cmp	bx,63
+	ja	@@nb
+	inc	[cs:mr_b]
+@@nb:
+	test	al,1
+	jnz	@@h
+	mov	si,bx						; along y: x = line
+	shl	si,6
+@@v:
+	cmp	cx,di
+	jae	@@done
+	mov	bx,si
+	add	bx,cx
+	cmp	[cs:mr_a],0
+	je	@@v1
+	mov	[spotvis+bx-64],dl
+@@v1:
+	cmp	[cs:mr_b],0
+	je	@@v2
+	mov	[spotvis+bx],dl
+@@v2:
+	inc	cx
+	jmp	@@v
+@@h:								; along x: y = line
+@@hl:
+	cmp	cx,di
+	jae	@@done
+	mov	si,cx
+	shl	si,6
+	add	si,bx
+	cmp	[cs:mr_a],0
+	je	@@h1
+	mov	[spotvis+si-1],dl
+@@h1:
+	cmp	[cs:mr_b],0
+	je	@@h2
+	mov	[spotvis+si],dl
+@@h2:
+	inc	cx
+	jmp	@@hl
+@@done:
+	pop	es
+	pop	di
+	pop	si
+	pop	dx
+	pop	cx
+	pop	bx
+	pop	ax
 	ret
 ENDP
 
