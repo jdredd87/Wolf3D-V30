@@ -5,9 +5,10 @@
   with a key that turns it on or off, and remembers them in W3MENU.CFG.
   + and - pick the game's window size, id's own Change View sizes 4-19
   (VIEW n; "the game's own" passes nothing, so CONFIG.WL6 decides).
-  T picks the version when WOLF3DB.EXE is here too: WOLF3DV (id's rays,
-  id's picture exactly) or WOLF3DB (the BSP tree), whose own switch WALK
-  (K) gives it id's rays.  Every other switch works with either.
+  T picks the version when WOLF3DB.EXE is here too: WOLF3DV (id's picture
+  exactly) or WOLF3DB, the faster one -- far walls in less detail -- whose
+  own switches are BSP (K: the BSP tree finds the walls, not id's rays) and
+  NOLOD (L: far walls at full detail).  Every other switch works with either.
   P (or Enter) writes W3RUN.BAT -- the version and the switches -- and exits
   0, and PLAY.BAT runs that and comes back here; B does the same for the
   200-frame benchmark; Q or Esc exits 1, which ends PLAY.BAT.  So nothing
@@ -54,7 +55,8 @@ var
   ViewSz: Integer;            { 4..19, or 0: the game's own setting }
   HaveBsp: Boolean;           { WOLF3DB.EXE is here }
   UseBsp: Boolean;            { T: run it rather than WOLF3DV }
-  BspWalk: Boolean;           { K: WALK, the BSP version with id's rays }
+  BspTree: Boolean;           { K: BSP, the tree rather than id's rays }
+  BspNoLod: Boolean;          { L: NOLOD, far walls at full detail }
   Timeout: Integer;           { seconds; 0 = never }
   TimeoutPlays: Boolean;
 
@@ -105,7 +107,8 @@ begin
   s := '';
   for i := 1 to NSW do
     if SwOn[i] then s := s + ' ' + SwName[i];
-  if UseBsp and HaveBsp and BspWalk then s := s + ' WALK';
+  if UseBsp and HaveBsp and BspTree then s := s + ' BSP';
+  if UseBsp and HaveBsp and BspNoLod then s := s + ' NOLOD';
   if ViewSz > 0 then
   begin
     Str(ViewSz, t);
@@ -120,7 +123,8 @@ begin
   for i := 1 to NSW do SwOn[i] := False;
   ViewSz := 0;
   UseBsp := False;
-  BspWalk := False;
+  BspTree := False;
+  BspNoLod := False;
   HaveBsp := FSearch('WOLF3DB.EXE', '') <> '';
   Assign(f, CfgName);
   {$I-} Reset(f); {$I+}
@@ -134,10 +138,11 @@ begin
   Val(s, i, code);
   if (code = 0) and (i >= 4) and (i <= 19) then ViewSz := i;
   s := '';
-  if not Eof(f) then ReadLn(f, s);    { the version, and WALK: '00' to '11' }
+  if not Eof(f) then ReadLn(f, s);    { the version, BSP and NOLOD: '000' to '111' }
   Close(f);
   UseBsp := (Length(s) >= 1) and (s[1] = '1');
-  BspWalk := (Length(s) >= 2) and (s[2] = '1');
+  BspTree := (Length(s) >= 2) and (s[2] = '1');
+  BspNoLod := (Length(s) >= 3) and (s[3] = '1');
 end;
 
 procedure SaveCfg;
@@ -151,7 +156,8 @@ begin
   WriteLn(f);
   WriteLn(f, ViewSz);
   if UseBsp then Write(f, '1') else Write(f, '0');
-  if BspWalk then WriteLn(f, '1') else WriteLn(f, '0');
+  if BspTree then Write(f, '1') else Write(f, '0');
+  if BspNoLod then WriteLn(f, '1') else WriteLn(f, '0');
   Close(f);
 end;
 
@@ -200,10 +206,13 @@ begin
     Write('    T  version:   ');
     if UseBsp then
     begin
-      WriteLn('WOLF3DB, the BSP tree draws the walls');
+      WriteLn('WOLF3DB, far walls in less detail (faster)');
       Write('    K  [');
-      if BspWalk then Write('X') else Write(' ');
-      WriteLn('] ', Pad('WALK', 10), '  the BSP version with id''s rays instead');
+      if BspTree then Write('X') else Write(' ');
+      WriteLn('] ', Pad('BSP', 10), '  the BSP tree finds the walls (slower here)');
+      Write('    L  [');
+      if BspNoLod then Write('X') else Write(' ');
+      WriteLn('] ', Pad('NOLOD', 10), '  far walls at full detail');
     end
     else
       WriteLn('WOLF3DV, id''s rays: id''s picture exactly');
@@ -352,7 +361,8 @@ begin
           else if ViewSz > 4 then Dec(ViewSz);
         '0': ViewSz := 0;               { back to the game's own setting }
         'T': if HaveBsp then UseBsp := not UseBsp;
-        'K': if UseBsp then BspWalk := not BspWalk;
+        'K': if UseBsp then BspTree := not BspTree;
+        'L': if UseBsp then BspNoLod := not BspNoLod;
         'P', #13:
           begin
             SaveCfg;
