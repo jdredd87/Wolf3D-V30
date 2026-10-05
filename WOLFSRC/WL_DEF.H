@@ -886,6 +886,15 @@ extern	byte		*nearmapylookup[MAPSIZE];
 
 extern	byte		tilemap[MAPSIZE][MAPSIZE];	// wall values only
 extern	byte		spotvis[MAPSIZE][MAPSIZE];
+void	AutomapReset (byte far *seen);	// WL_DR_A.ASM: the automap (TAB)
+void	AutomapCollect (void);
+int		AutomapKey (int down);
+int		AutomapOn (int demo);
+void	AutomapForce (void);
+int		AutomapSkip (int demo);
+void	AutomapPickup (void);
+void	AutomapDraw (void);
+extern	byte	far amseen[];
 extern	unsigned	vismark;		// NEC V30 build: this frame's mark in spotvis (1-255)
 extern	objtype		*actorat[MAPSIZE][MAPSIZE];
 

@@ -226,6 +226,7 @@ begin
   WriteLn('    A  all on (the fastest)     N  all off (id''s own picture)');
   WriteLn;
   WriteLn('    P  play     B  benchmark these switches     Q  quit');
+  WriteLn('       (in the game, TAB shows the map of what you have seen)');
   WriteLn;
   WriteLn('  ', Prog, Args);
   WriteLn;

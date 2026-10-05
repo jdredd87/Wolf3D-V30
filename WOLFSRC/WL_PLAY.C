@@ -39,6 +39,7 @@ int			extravbls;
 
 byte		tilemap[MAPSIZE][MAPSIZE];	// wall values only
 byte		spotvis[MAPSIZE][MAPSIZE];
+byte		far amseen[MAPSIZE*MAPSIZE];	// the automap's explored tiles (far)
 unsigned	vismark;	// NEC V30 build (StevenC & Claude): spotvis[x][y] == vismark
 					// means seen this frame; only ever counts up, and
 					// spotvis is cleared when it passes 255 (ThreeDRefresh).
@@ -1593,6 +1594,8 @@ void PlayLoop (void)
 			VW_FadeIn ();
 
 		CheckKeys();
+		if (!demoplayback)
+			AutomapKey (Keyboard[sc_Tab]);	// the automap (TAB): on or off
 
 //
 // debug aids

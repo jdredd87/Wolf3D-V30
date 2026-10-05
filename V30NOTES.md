@@ -504,3 +504,37 @@ normalised by steps 4 and 42).
 Measured and set aside: coherent rays (step 85, 27% slower) and a BSP (step 86 -- in the default mode it cannot replace the walk, because the walk's spotvis is game logic).
 
 The scalers after step 87: what is left in them is the stores, one per screen pixel, and they are at the encoding's floor. `mov [di+disp16],al` is 4 bytes; the rows are 80 bytes apart, so an 8-bit displacement reaches only the three rows around DI -- pointing DI at the view's middle row, which every wall crosses, would save 3 bytes a post, well under 0.1% of a frame. A store cannot cover two rows, and `STOSB` needs an `ADD DI,79` beside it (4 bytes again, in two instructions). Not built.
+
+## The automap: TAB (2026-10-05)
+
+StevenC asked for a map like DOOM's (and the SNES Wolf's): TAB shows a map of
+what has been explored, with the doors, the items and the enemies, and the
+game goes on under it -- move and fire as ever.  In both versions.
+
+- **What is explored** is what the rays have seen: `spotvis` holds each
+  tile's last frame mark and is cleared every 255 frames, so the map reads it
+  directly and `AutomapCollect` folds it into the level's own 4 KB map (a far
+  array, `amseen`) just before each clear -- nothing per frame while the map
+  is down.  Walls are never marked (a ray stops at one), so a wall is drawn
+  where it touches explored floor.  Doors in cyan, the gold key's orange, the
+  silver key's silver, the elevator brown; items yellow; enemies red when the
+  player has a line of sight to them (`CheckLine`, after a cheap test of the
+  window and the player's areas); the player green, a white dot on the side
+  he faces.
+- **Drawn over the 3D view**, which is still rendered under it: `GunAttack`
+  aims with `FL_VISABLE` and each actor's `viewx`, set while drawing, so a
+  map that replaced the view would have shot at stale data.  But with the map
+  up the view is rendered one frame in four (`AutomapSkip`), and items are
+  picked up on the others as `DrawScaleds` would (`AutomapPickup`).
+- **Four pixels to a tile**: with the map mask on all four planes, a byte is
+  a tile's row, so a row of the map is a run of bytes, built in a buffer and
+  copied to its four scan lines with `REP MOVSB`.  60 x 30 tiles at the
+  240 x 120 view, the player in the middle, north up.
+- **Never in a demo**: TAB is read only in play, and the map draws in a demo
+  only after the `AUTOMAP` switch, which starts with it on -- for showing and
+  timing it (`TIMEDEMO QUICK AUTOMAP`).
+- **Measured** (V30, demo 0): 5.03 fps without the map, 7.14 with it up.
+  The attract loop is still id's picture exactly (0707C966 / F2A10CEB), and
+  the benchmark unchanged (720).
+- No DGROUP: the state is in the code segment, the map far.  StevenC &
+  Claude.

@@ -1206,6 +1206,13 @@ void InitGame (void)
 		lowvert = 1;					// NEC V30 build (step 82): even rows only
 	if (MS_CheckParm ("flatart"))
 		solidart = flatwalls = 1;		// NEC V30 build (step 84): artwork solid too
+	for (i = 1;i < _argc;i++)			// the automap (2026-10-05): AUTOMAP starts
+	{									// with it on, shown in demos too -- for
+		char far *a = _argv[i];			// showing it; TAB is the game's key
+		if ((a[0]|32)=='a' && (a[1]|32)=='u' && (a[2]|32)=='t' && (a[3]|32)=='o'
+			&& (a[4]|32)=='m' && (a[5]|32)=='a' && (a[6]|32)=='p' && !a[7])
+			AutomapForce ();
+	}
 	for (i = 1;i < _argc;i++)			// NEC V30 build (step 93): FARBLOBS [n], sprites
 	{									// under n pixels (16) as silhouettes
 		extern int farblobs;
