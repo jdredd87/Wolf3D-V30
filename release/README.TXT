@@ -110,11 +110,13 @@ THE SHOWCASE
 ------------
     SHOWCASE    a demo reel for recording a video.  Pick V (WOLF3DV),
                 B (WOLF3DB), T (WOLF3DB with the BSP tree) or A (all
-                three, about 50 minutes).  Each starts with id's own
-                code, then shows every mode of the version: a title
-                screen saying what it shows, a minute of the game's
-                demos, and its speed; at the end, every run's speed
-                together.  S skips a wait, Q quits.
+                three, about an hour and a half on a V30).  Then two
+                questions, answered for you after 15 seconds: start
+                with id's own code, for its speed (Y), and show the
+                map too (N).  Every mode of the version follows: a
+                title screen saying what it shows, three minutes of
+                the game's demos, and its speed; at the end, every
+                run's speed together.  S skips a wait, Q quits.
 
 
 MEASURING

@@ -13,15 +13,15 @@ ECHO.
 ECHO   id's own renderer and game code, rebuilt for the 8086 (the original
 ECHO   needs a 286).  The speed everything after this is measured against.
 ECHO.
-ECHO   60 seconds of the game's own demos, then the speed: the faster
+ECHO   180 seconds of the game's own demos, then the speed: the faster
 ECHO   the mode, the further it gets.
 ECHO.
-ECHO   WOLF3DO TIMEDEMO PRELOAD SECS 60
+ECHO   WOLF3DO TIMEDEMO PRELOAD SECS 180
 ECHO.
 ECHO   Starting in 8 seconds  (S starts it now, Q quits)
 CHOICE /C:SQ /N /T:S,08 > NUL
 IF ERRORLEVEL 2 GOTO QUIT
-WOLF3DO TIMEDEMO PRELOAD SECS 60 > SHOWRES.TXT
+WOLF3DO TIMEDEMO PRELOAD SECS 180 > SHOWRES.TXT
 CLS
 ECHO.
 ECHO   ID'S ORIGINAL CODE -- ID SOFTWARE'S ORIGINAL CODE  (1992)
