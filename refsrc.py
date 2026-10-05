@@ -62,7 +62,17 @@ edit("WL_PLAY.C", """		DoActors ();			// NEC V30 build: the same loop in WL_DR_A
 p = os.path.join(OUT, "WL_MAIN.C")
 open(p, "ab").write(b"\r\n// refsrc.py: the switches' variables, which our WL_DRAW.C defines -- all off\r\n"
                     b"int\t\tpixstep = 1, lowsprites, flatwalls, solidart, lowvert, farblobs;\r\n"
-                    b"memptr\tflatbuf, blobfill;\r\n")
+                    b"memptr\tflatbuf, blobfill;\r\n"
+                    # the automap (2026-10-05) is in our WL_DR_A.ASM; id's has
+                    # none, so HEAD's WL_PLAY.C, WL_GAME.C and WL_MAIN.C find these
+                    b"void AutomapReset (byte far *seen) { seen = seen; }\r\n"
+                    b"void AutomapCollect (void) {}\r\n"
+                    b"int AutomapKey (int down) { return down = 0; }\r\n"
+                    b"int AutomapOn (int demo) { return demo = 0; }\r\n"
+                    b"void AutomapDraw (void) {}\r\n"
+                    b"void AutomapForce (void) {}\r\n"
+                    b"int AutomapSkip (int demo) { return demo = 0; }\r\n"
+                    b"void AutomapPickup (void) {}\r\n")
 # step 98: a pushwall on the move is 0C0h+tile, and id's CheckLine took it
 # for a door and read doorposition[64+], past the array -- what it found there
 # depended on the memory layout.  Both builds treat it as solid.

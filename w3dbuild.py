@@ -149,9 +149,10 @@ def cmd_deploy():
     # and the switches menu: PLAY.BAT runs W3MENU.EXE, built here with FPC
     dosctl("deploy", build_launcher(), r"C:\WOLF3D", "--box", RUN_BOX)
     dosctl("deploy", os.path.join(LAUNCHER, "PLAY.BAT"), r"C:\WOLF3D", "--box", RUN_BOX)
-    sys.path.insert(0, LAUNCHER)        # and the demo reel, SHOWCASE.BAT, fresh
-    import mkshow
-    dosctl("deploy", mkshow.write(), r"C:\WOLF3D", "--box", RUN_BOX)
+    sys.path.insert(0, LAUNCHER)        # and the demo reel: SHOWCASE.BAT and its
+    import mkshow                       # reels, fresh (WOLF3DO.EXE, id's code, is
+    for path in mkshow.write():         # refsrc.py's build: deployed by hand)
+        dosctl("deploy", path, r"C:\WOLF3D", "--box", RUN_BOX)
 
 
 def build_launcher():

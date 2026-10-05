@@ -16,6 +16,7 @@ out the first frame (it carries the fizzle-in).  View 240 x 120 (size 15).
 
 | program | switches | what it does | V30 fps | 486 fps |
 |---|---|---|---|---|
+| WOLF3DO | (none) | **id Software's own 1992 code**, rebuilt for the 8086 -- the base | 2.80 | 59.39 |
 | WOLF3DV | (none) | id's game and picture, exactly | 5.02 | 82.34 |
 | WOLF3DV | `LOWWALLS` | walls in 2-pixel columns | 6.67 | 95.34 |
 | WOLF3DV | `LOWWALLS4` | walls in 4-pixel columns | 8.36 | 113.22 |
@@ -41,6 +42,16 @@ tick.
 
 ## The whole attract loop: all four demos (`TIMEDEMO PRELOAD`)
 
+**WOLF3DO**, id Software's own code:
+
+| | frames | V30 fps in play | 486 fps in play |
+|---|---|---|---|
+| demo 0 | 691 | -- | 67.90 |
+| demo 1 | 1899 | -- | 79.62 |
+| demo 2 | 1140 | -- | 68.89 |
+| demo 3 | 1656 | -- | 78.67 |
+| **all four** | 5386 | -- | 75.20 |
+
 **WOLF3DV**, the exact version:
 
 | | frames | V30 fps in play | 486 fps in play |
@@ -61,5 +72,7 @@ tick.
 | demo 3 | 1656 | 6.46 | 110.77 |
 | **all four** | 5386 | 6.15 | 105.47 |
 
-id's own WOLF3D.EXE plays demo 0 at about 2.7 fps on the V30 (V30NOTES.md).
+WOLF3DO is id's own renderer and game code (id's WOLF3D.EXE needs a 286), built
+by `refsrc.py` with the same timing harness: the speed everything here is
+measured against.  It draws the same picture as WOLF3DV, checksum for checksum.
 
