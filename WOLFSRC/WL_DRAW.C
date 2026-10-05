@@ -1277,6 +1277,7 @@ void	ThreeDRefresh (void)
 	}
 	if (++vismark > 255)
 	{
+		AutomapCollect ();				// the automap's explored tiles, first
 asm	mov	ax,ds
 asm	mov	es,ax
 asm	mov	di,OFFSET spotvis
@@ -1291,6 +1292,10 @@ asm	rep stosw
 //
 // follow the walls from there to the right, drawwing as we go
 //
+	if (AutomapSkip (demoplayback))		// the automap is up: the view under it
+		AutomapPickup ();				// is drawn one frame in four, and items
+	else								// are picked up on the others
+	{
 	VGAClearScreen ();
 
 	WallRefresh ();
@@ -1300,6 +1305,9 @@ asm	rep stosw
 //
 	DrawScaleds();			// draw scaled stuff
 	DrawPlayerWeapon ();	// draw player's hands
+	}
+	if (AutomapOn (demoplayback))		// the automap (TAB), over the view
+		AutomapDraw ();
 
 //
 // show screen and time last cycle

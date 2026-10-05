@@ -7477,6 +7477,535 @@ fr_groups	dw	0
 FMAX		=	80
 FBODY		=	640+128*3		; step 84: the body's place in the buffer
 
+;============================
+;
+; The automap (2026-10-05, StevenC & Claude): TAB shows a map of what has
+; been seen, drawn over the 3D view, which is still rendered underneath --
+; aiming, FL_VISABLE and the rays' exploring all go on as ever, and the map
+; only reads the game.  Never during a demo (WL_DRAW.C and WL_PLAY.C).
+;
+; A tile is explored when its spotvis byte is set (the rays mark it with
+; the frame's vismark; the array is cleared every 255 frames, and
+; AutomapCollect folds it into the level's own map, am_seen, first).
+;
+; Drawn four pixels to a tile: with the map mask on all four planes one
+; byte is a tile's row, so a row of the map is a run of bytes, built in
+; am_row and copied to each of its four scan lines with REP MOVSB.  Items
+; and enemies are a 2x2 dot in their tile; the player a green tile with a
+; white dot on the side it faces.  Enemies show when the player has a line
+; of sight to them (CheckLine) -- seen or not, the way a map would.
+;
+;============================
+
+CODESEG
+
+AM_FLOOR	=	237						; dark grey
+AM_WALL		=	22						; grey
+AM_DOOR		=	123						; cyan
+AM_GOLD		=	59						; orange: the gold key's doors
+AM_SILVER	=	18						; silver
+AM_LIFT		=	212						; brown: the elevator
+AM_ITEM		=	71						; yellow
+AM_ENEMY	=	32						; red
+AM_PLAYER	=	95						; green
+AM_FACE		=	15						; white
+OB_ANGLE	=	42
+
+am_on		dw	0
+am_prev		dw	0
+am_demo		dw	0
+am_skip		dw	0
+am_seen		dd	0						; the level's explored tiles, 64x64
+am_cols		dw	0
+am_rows		dw	0
+am_x0		dw	0
+am_y0		dw	0
+am_scr		dw	0
+am_cy		dw	0
+am_row		db	80 DUP (0)
+am_dx		db	1,1,0,-1,-1,-1,0,1		; the eight directions, east first,
+am_dy		db	0,-1,-1,-1,0,1,1,1		; counterclockwise (north is -y)
+am_doorc	db	AM_DOOR,AM_GOLD,AM_SILVER,AM_DOOR,AM_DOOR,AM_LIFT,AM_DOOR,AM_DOOR
+
+;
+; void AutomapReset (byte far *seen) -- a level's start: nothing explored
+;
+PROC	AutomapReset FAR
+PUBLIC	AutomapReset
+	push	bp
+	mov	bp,sp
+	push	di
+	les	di,[bp+6]
+	mov	[WORD cs:am_seen],di
+	mov	[WORD cs:am_seen+2],es
+	xor	ax,ax
+	mov	cx,2048
+	cld
+	rep	stosw
+	pop	di
+	pop	bp
+	retf
+ENDP
+
+;
+; void AutomapCollect (void) -- spotvis folded into am_seen (before it is
+; cleared)
+;
+PROC	AutomapCollect FAR
+PUBLIC	AutomapCollect
+	push	si
+	push	di
+	les	di,[cs:am_seen]
+	mov	ax,es
+	or	ax,ax
+	jz	@@none
+	mov	si,OFFSET spotvis
+	mov	cx,2048
+	cld
+@@w:
+	lodsw
+	or	[es:di],ax
+	add	di,2
+	loop	@@w
+@@none:
+	pop	di
+	pop	si
+	retf
+ENDP
+
+;
+; int AutomapKey (int down) -- TAB, edge-triggered: toggles the map
+;
+PROC	AutomapKey FAR
+PUBLIC	AutomapKey
+	push	bp
+	mov	bp,sp
+	mov	ax,[bp+6]
+	or	ax,ax
+	jz	@@up
+	cmp	[cs:am_prev],0
+	jne	@@held
+	xor	[cs:am_on],1
+@@held:
+	mov	[cs:am_prev],1
+	jmp	@@ret
+@@up:
+	mov	[cs:am_prev],0
+@@ret:
+	mov	ax,[cs:am_on]
+	pop	bp
+	retf
+ENDP
+
+;
+; int AutomapOn (int demo) -- the map is on (and in a demo only after the
+; AUTOMAP switch, which is for showing it: a demo never sees TAB)
+;
+PROC	AutomapOn FAR
+PUBLIC	AutomapOn
+	push	bp
+	mov	bp,sp
+	mov	ax,[cs:am_on]
+	cmp	[WORD bp+6],0
+	je	@@r
+	and	ax,[cs:am_demo]
+@@r:
+	pop	bp
+	retf
+ENDP
+
+;
+; int AutomapSkip (int demo) -- with the map up (and not in a demo), the 3D
+; view under it is rendered one frame in four: 1 on the other three
+;
+PROC	AutomapSkip FAR
+PUBLIC	AutomapSkip
+	push	bp
+	mov	bp,sp
+	xor	ax,ax
+	cmp	[WORD bp+6],0
+	je	@@play
+	cmp	[cs:am_demo],0				; a demo: only with AUTOMAP, for showing
+	je	@@r							; and timing it
+@@play:
+	cmp	[cs:am_on],0
+	je	@@r
+	inc	[cs:am_skip]
+	and	[cs:am_skip],3
+	jz	@@r
+	inc	ax
+@@r:
+	pop	bp
+	retf
+ENDP
+
+;
+; void AutomapPickup (void) -- on a frame not rendered, what DrawScaleds would
+; have done for items: GetBonus for one the player stands on
+;
+PROC	AutomapPickup FAR
+PUBLIC	AutomapPickup
+	push	si
+	mov	bx,[player]
+	mov	dl,[BYTE bx+OB_TILEX]
+	mov	dh,[BYTE bx+OB_TILEY]
+	mov	si,OFFSET statobjlist
+@@s:
+	cmp	si,[laststatobj]
+	jae	@@done
+	cmp	[WORD si+ST_SHAPENUM],-1
+	je	@@n
+	test	[BYTE si+ST_FLAGS],FL_BONUS
+	jz	@@n
+	cmp	[si+ST_TILEX],dl
+	jne	@@n
+	cmp	[si+ST_TILEY],dh
+	jne	@@n
+	push	dx
+	push	si
+	call	GetBonus
+	pop	si
+	pop	dx
+@@n:
+	add	si,ST_SIZE
+	jmp	@@s
+@@done:
+	pop	si
+	retf
+ENDP
+
+;
+; void AutomapForce (void) -- the AUTOMAP switch: on from the start, demos too
+;
+PROC	AutomapForce FAR
+PUBLIC	AutomapForce
+	mov	[cs:am_on],1
+	mov	[cs:am_demo],1
+	retf
+ENDP
+
+;
+; void AutomapDraw (void) -- over the view at bufferofs (already moved to
+; the view's corner by ThreeDRefresh), viewwidth x viewheight
+;
+PROC	AutomapDraw FAR
+PUBLIC	AutomapDraw
+	push	bp
+	push	si
+	push	di
+	push	es
+	mov	ax,[WORD cs:am_seen+2]
+	or	ax,ax
+	jnz	@@go
+	jmp	@@out
+@@go:
+	mov	ax,[viewwidth]
+	shr	ax,2
+	mov	[cs:am_cols],ax
+	mov	ax,[viewheight]
+	shr	ax,2
+	mov	[cs:am_rows],ax
+	mov	bx,[player]
+	mov	ax,[bx+OB_TILEX]			; the player in the middle
+	mov	cx,[cs:am_cols]
+	shr	cx,1
+	sub	ax,cx
+	mov	[cs:am_x0],ax
+	mov	ax,[bx+OB_TILEY]
+	mov	cx,[cs:am_rows]
+	shr	cx,1
+	sub	ax,cx
+	mov	[cs:am_y0],ax
+	mov	dx,SC_INDEX					; all four planes: a byte is a tile's row
+	mov	ax,0F02h
+	out	dx,ax
+	mov	ax,[bufferofs]
+	mov	[cs:am_scr],ax
+	mov	[cs:am_cy],0
+
+@@row:
+	les	bx,[cs:am_seen]				; ES:BX the explored map
+	mov	ax,[cs:am_y0]
+	add	ax,[cs:am_cy]				; y
+	mov	di,OFFSET am_row
+	mov	cx,[cs:am_cols]
+	cmp	ax,63
+	jbe	@@yok
+@@blank:							; a row off the map
+	mov	[BYTE cs:di],0
+	inc	di
+	loop	@@blank
+	jmp	@@blit
+@@yok:
+	mov	dx,[cs:am_x0]				; x
+	mov	si,dx
+	shl	si,6
+	add	si,ax						; x*64+y: spotvis' and tilemap's order
+@@col:
+	cmp	dx,63
+	ja	@@black
+	mov	al,[spotvis+si]
+	or	al,[es:bx+si]
+	jz	@@unseen
+@@seenok:
+	mov	al,[BYTE tilemap+si]
+	or	al,al
+	jz	@@floor
+	test	al,80h
+	jz	@@wall
+	test	al,40h
+	jnz	@@wall						; the pushwall on the move
+	push	bx							; a door: its lock's colour
+	and	ax,3Fh
+	mov	bx,ax
+	shl	bx,3
+	add	bx,ax						; *9
+	mov	bl,[doorobjlist+bx+4]
+	and	bx,7
+	mov	al,[cs:am_doorc+bx]
+	pop	bx
+	jmp	@@put
+@@wall:
+	mov	al,AM_WALL
+	jmp	@@put
+@@floor:
+	mov	al,AM_FLOOR
+	jmp	@@put
+@@unseen:							; a wall nobody has stood by: is it
+	mov	al,[BYTE tilemap+si]		; beside explored floor?  (The rays stop
+	or	al,al						; at walls, so walls are never marked
+	jz	@@black						; themselves.)
+	test	al,80h
+	jz	@@nb
+	test	al,40h
+	jz	@@black						; an unseen door stays unseen
+@@nb:
+	or	dx,dx						; west (x-1)
+	jz	@@n2
+	mov	al,[spotvis+si-64]
+	or	al,[es:bx+si-64]
+	jnz	@@wall
+@@n2:
+	cmp	dx,63						; east
+	jae	@@n3
+	mov	al,[spotvis+si+64]
+	or	al,[es:bx+si+64]
+	jnz	@@wall
+@@n3:
+	mov	ax,si						; north and south: y is si's low 6 bits
+	and	ax,63
+	jz	@@n4
+	mov	al,[spotvis+si-1]
+	or	al,[es:bx+si-1]
+	jnz	@@wall
+	mov	ax,si
+	and	ax,63
+@@n4:
+	cmp	ax,63
+	jae	@@black
+	mov	al,[spotvis+si+1]
+	or	al,[es:bx+si+1]
+	jnz	@@wall
+@@black:
+	xor	al,al
+@@put:
+	mov	[cs:di],al
+	inc	di
+	inc	dx
+	add	si,64
+	loop	@@col
+
+@@blit:								; the row's four scan lines
+	push	ds
+	mov	ax,cs
+	mov	ds,ax
+	mov	ax,SCREENSEG
+	mov	es,ax
+	mov	di,[cs:am_scr]
+	mov	dx,4
+	cld
+@@scan:
+	mov	si,OFFSET am_row
+	mov	cx,[cs:am_cols]
+	push	di
+	rep	movsb
+	pop	di
+	add	di,80
+	dec	dx
+	jnz	@@scan
+	pop	ds
+	add	[cs:am_scr],320
+	inc	[cs:am_cy]
+	mov	ax,[cs:am_cy]
+	cmp	ax,[cs:am_rows]
+	jae	@@things
+	jmp	@@row
+
+@@things:							; the dots: pixels 1 and 2 of a tile,
+	mov	dx,SC_INDEX					; rows 1 and 2
+	mov	ax,0602h
+	out	dx,ax
+	mov	si,OFFSET statobjlist		; items: what can be picked up, seen
+@@stat:
+	cmp	si,[laststatobj]
+	jae	@@actors
+	cmp	[WORD si+ST_SHAPENUM],-1
+	je	@@snext
+	test	[BYTE si+ST_FLAGS],FL_BONUS
+	jz	@@snext
+	mov	al,[si+ST_TILEX]
+	xor	ah,ah
+	mov	cl,[si+ST_TILEY]
+	xor	ch,ch
+	call	AmSeen
+	jz	@@snext
+	mov	al,[si+ST_TILEX]
+	xor	ah,ah
+	mov	cl,[si+ST_TILEY]
+	xor	ch,ch
+	mov	bl,AM_ITEM
+	call	AmDot
+@@snext:
+	add	si,ST_SIZE
+	jmp	@@stat
+
+@@actors:							; enemies the player has a line of sight to
+	mov	si,[player]
+	mov	si,[si+OB_NEXT]
+@@act:
+	or	si,si
+	jz	@@me
+	test	[BYTE si+OB_FLAGS],FL_SHOOTABLE
+	jz	@@anext
+	mov	ax,[si+OB_TILEX]			; off the map's window: not worth asking
+	sub	ax,[cs:am_x0]
+	cmp	ax,[cs:am_cols]
+	jae	@@anext
+	mov	ax,[si+OB_TILEY]
+	sub	ax,[cs:am_y0]
+	cmp	ax,[cs:am_rows]
+	jae	@@anext
+	mov	bl,[si+OB_AREANUMBER]		; shut off from the player's area
+	xor	bh,bh
+	shl	bx,1
+	cmp	[areabyplayer+bx],0
+	je	@@anext
+	push	si
+	call	CheckLine
+	pop	si
+	or	ax,ax
+	jz	@@anext
+	mov	ax,[si+OB_TILEX]
+	mov	cx,[si+OB_TILEY]
+	mov	bl,AM_ENEMY
+	call	AmDot
+@@anext:
+	mov	si,[si+OB_NEXT]
+	jmp	@@act
+
+@@me:								; the player, and the way it faces
+	mov	dx,SC_INDEX
+	mov	ax,0F02h
+	out	dx,ax
+	mov	si,[player]
+	mov	ax,[si+OB_TILEX]
+	mov	cx,[si+OB_TILEY]
+	call	AmCell
+	jc	@@out
+	mov	al,AM_PLAYER
+	mov	[es:di],al
+	mov	[es:di+80],al
+	mov	[es:di+160],al
+	mov	[es:di+240],al
+	mov	dx,SC_INDEX
+	mov	ax,0602h
+	out	dx,ax
+	mov	ax,[si+OB_ANGLE]			; 0-359, 0 east, counterclockwise
+	add	ax,22
+	cmp	ax,360
+	jb	@@a
+	sub	ax,360
+@@a:
+	xor	dx,dx
+	mov	cx,45
+	div	cx							; 0-7
+	mov	bx,ax
+	mov	al,[cs:am_dx+bx]
+	cbw
+	add	ax,[si+OB_TILEX]
+	push	ax
+	mov	al,[cs:am_dy+bx]
+	cbw
+	add	ax,[si+OB_TILEY]
+	mov	cx,ax
+	pop	ax
+	mov	bl,AM_FACE
+	call	AmDot
+@@out:
+	mov	dx,SC_INDEX
+	mov	ax,0F02h
+	out	dx,ax
+	pop	es
+	pop	di
+	pop	si
+	pop	bp
+	retf
+ENDP
+
+;
+; AmSeen: AX, CX a tile -> ZF clear if explored.  Keeps SI.
+;
+PROC	AmSeen NEAR
+	push	si
+	mov	si,ax
+	shl	si,6
+	add	si,cx
+	les	bx,[cs:am_seen]
+	mov	al,[spotvis+si]
+	or	al,[es:bx+si]
+	pop	si
+	ret
+ENDP
+
+;
+; AmCell: AX, CX a tile -> ES:DI its top-left byte on the page, CF if it is
+; off the map's window.  Keeps SI, BX.
+;
+PROC	AmCell NEAR
+	sub	ax,[cs:am_x0]
+	cmp	ax,[cs:am_cols]
+	jae	@@off
+	sub	cx,[cs:am_y0]
+	cmp	cx,[cs:am_rows]
+	jae	@@off
+	mov	di,cx
+	shl	di,2
+	add	di,cx						; *5
+	shl	di,6						; *320: four scan lines a tile
+	add	di,ax
+	add	di,[bufferofs]
+	mov	ax,SCREENSEG
+	mov	es,ax
+	clc
+	ret
+@@off:
+	stc
+	ret
+ENDP
+
+;
+; AmDot: AX, CX a tile, BL a colour: its 2x2 dot (the map mask set to 06h)
+; Keeps SI.
+;
+PROC	AmDot NEAR
+	push	bx
+	call	AmCell
+	pop	bx
+	jc	@@no
+	mov	[es:di+80],bl
+	mov	[es:di+160],bl
+@@no:
+	ret
+ENDP
+
 END
-
-

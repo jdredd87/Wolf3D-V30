@@ -627,6 +627,7 @@ void SetupGameLevel (void)
 	int	x,y,i;
 	unsigned	far *map,tile,spot;
 
+	AutomapReset (amseen);			// the automap: nothing explored yet
 
 	if (!loadedgame)
 	{
