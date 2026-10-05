@@ -7517,6 +7517,7 @@ am_on		dw	0
 am_prev		dw	0
 am_demo		dw	0
 am_skip		dw	0
+am_area		db	64 DUP (0)				; the rooms (areas) the player has entered
 am_seen		dd	0						; the level's explored tiles, 64x64
 am_cols		dw	0
 am_rows		dw	0
@@ -7543,6 +7544,12 @@ PUBLIC	AutomapReset
 	xor	ax,ax
 	mov	cx,2048
 	cld
+	rep	stosw
+	mov	ax,cs						; no room entered yet
+	mov	es,ax
+	mov	di,OFFSET am_area
+	xor	ax,ax
+	mov	cx,32
 	rep	stosw
 	pop	di
 	pop	bp
@@ -7624,6 +7631,7 @@ PROC	AutomapSkip FAR
 PUBLIC	AutomapSkip
 	push	bp
 	mov	bp,sp
+	call	AmRoom
 	xor	ax,ax
 	cmp	[WORD bp+6],0
 	je	@@play
@@ -7777,29 +7785,25 @@ PUBLIC	AutomapDraw
 	mov	al,[BYTE tilemap+si]		; beside explored floor?  (The rays stop
 	or	al,al						; at walls, so walls are never marked
 	jz	@@black						; themselves.)
-	test	al,80h
-	jz	@@nb
-	test	al,40h
-	jz	@@black						; an unseen door stays unseen
 @@nb:
 	or	dx,dx						; west (x-1)
 	jz	@@n2
 	mov	al,[spotvis+si-64]
 	or	al,[es:bx+si-64]
-	jnz	@@wall
+	jnz	@@seenok
 @@n2:
 	cmp	dx,63						; east
 	jae	@@n3
 	mov	al,[spotvis+si+64]
 	or	al,[es:bx+si+64]
-	jnz	@@wall
+	jnz	@@seenok
 @@n3:
 	mov	ax,si						; north and south: y is si's low 6 bits
 	and	ax,63
 	jz	@@n4
 	mov	al,[spotvis+si-1]
 	or	al,[es:bx+si-1]
-	jnz	@@wall
+	jnz	@@seenok
 	mov	ax,si
 	and	ax,63
 @@n4:
@@ -7807,7 +7811,7 @@ PUBLIC	AutomapDraw
 	jae	@@black
 	mov	al,[spotvis+si+1]
 	or	al,[es:bx+si+1]
-	jnz	@@wall
+	jnz	@@seenok
 @@black:
 	xor	al,al
 @@put:
@@ -7952,6 +7956,57 @@ PUBLIC	AutomapDraw
 	pop	si
 	pop	bp
 	retf
+ENDP
+
+;
+; AmRoom (2026-10-05): the room (area) the player stands in, the first time:
+; every floor tile of it marked explored in am_seen, from the map's plane 0
+; (AREATILE + the area on each of its tiles).  A room once entered is on the
+; map whole, the way the SNES version drew it.  Keeps BP.
+;
+PROC	AmRoom NEAR
+	mov	bx,[player]
+	or	bx,bx
+	jz	@@ret
+	mov	bl,[bx+OB_AREANUMBER]
+	xor	bh,bh
+	cmp	bx,37						; NUMAREAS
+	jae	@@ret
+	cmp	[cs:am_area+bx],0
+	jne	@@ret
+	cmp	[WORD cs:am_seen+2],0
+	je	@@ret
+	mov	[cs:am_area+bx],1
+	push	si
+	push	di
+	push	ds
+	push	es
+	mov	dx,bx
+	add	dx,107						; AREATILE
+	mov	es,[mapsegs]				; plane 0, row by row (y*64+x words)
+	lds	bx,[cs:am_seen]				; DS:BX the explored map (x*64+y)
+	xor	si,si
+	xor	ax,ax						; y
+@@y:
+	mov	di,ax						; x*64+y, x = 0
+	mov	cx,64
+@@x:
+	cmp	[es:si],dx
+	jne	@@n
+	mov	[BYTE bx+di],1
+@@n:
+	add	si,2
+	add	di,64
+	loop	@@x
+	inc	ax
+	cmp	ax,64
+	jb	@@y
+	pop	es
+	pop	ds
+	pop	di
+	pop	si
+@@ret:
+	ret
 ENDP
 
 ;
