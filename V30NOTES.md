@@ -540,3 +540,5 @@ game goes on under it -- move and fire as ever.  In both versions.
   Claude.
 
 **The elevator switch, findable (2026-10-05).**  StevenC: in the lowest settings the button that ends a level could not be seen.  FLATART paints every wall in its texture's average, so the switch (tile 21, pages 40 and 41; pressed, 22) became a plain wall like the elevator's others.  Under FLATART those pages are now magenta (`FlatColour`), so the exit stands out in every combination -- FLATART with LOWWALLS4 and LOWVERT included, checked by frame dumps standing in front of map 0's switch (a generated demo).  FLATWALLS alone keeps the switch's own texture, as before.  And the automap draws switch walls in magenta too.  Nothing changes without those switches: the attract loop is still id's picture exactly.  StevenC & Claude.
+
+**Every option measured on both machines (2026-10-05): [BENCHMARKS.md](BENCHMARKS.md).**  The V30's whole attract loop 5.57 fps in play (WOLF3DV) and 6.15 (WOLF3DB); the 486's 99.7 and 105.5; with the map up, 7.1-7.2 on the V30.  StevenC & Claude.
