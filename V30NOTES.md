@@ -538,3 +538,5 @@ game goes on under it -- move and fire as ever.  In both versions.
   the benchmark unchanged (720).
 - No DGROUP: the state is in the code segment, the map far.  StevenC &
   Claude.
+
+**The elevator switch, findable (2026-10-05).**  StevenC: in the lowest settings the button that ends a level could not be seen.  FLATART paints every wall in its texture's average, so the switch (tile 21, pages 40 and 41; pressed, 22) became a plain wall like the elevator's others.  Under FLATART those pages are now magenta (`FlatColour`), so the exit stands out in every combination -- FLATART with LOWWALLS4 and LOWVERT included, checked by frame dumps standing in front of map 0's switch (a generated demo).  FLATWALLS alone keeps the switch's own texture, as before.  And the automap draws switch walls in magenta too.  Nothing changes without those switches: the attract loop is still id's picture exactly.  StevenC & Claude.

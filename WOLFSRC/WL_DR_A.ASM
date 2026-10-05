@@ -6886,6 +6886,15 @@ PUBLIC	FlatColour
 	mov	bx,[bp+6]
 	and	bx,FLATPAGES-1
 	mov	al,[bp+8]
+	cmp	bx,40						; (2026-10-05) with FLATART, the elevator
+	jb	@@st						; switch -- tile 21, pages 40 and 41, and
+	cmp	bx,43						; pressed, 22 -- is magenta: the average of
+	ja	@@st						; its texture made it a plain wall like the
+	cmp	[solidart],0				; elevator's others, and a level's way out
+	je	@@st						; could not be found
+	mov	al,183
+	nop								; (keeps what follows at its parity)
+@@st:
 	mov	[cs:flatcol+bx],al
 	pop	bp
 	retf
@@ -7519,6 +7528,7 @@ AM_ITEM		=	71						; yellow
 AM_ENEMY	=	32						; red
 AM_PLAYER	=	95						; green
 AM_FACE		=	15						; white
+AM_SWITCH	=	183						; magenta: the elevator switch, the way out
 OB_ANGLE	=	42
 
 am_on		dw	0
@@ -7784,6 +7794,14 @@ PUBLIC	AutomapDraw
 	pop	bx
 	jmp	@@put
 @@wall:
+	cmp	al,21						; ELEVATORTILE, and pressed
+	je	@@switch
+	cmp	al,22
+	jne	@@plainw
+@@switch:
+	mov	al,AM_SWITCH
+	jmp	@@put
+@@plainw:
 	mov	al,AM_WALL
 	jmp	@@put
 @@floor:
