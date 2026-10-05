@@ -1,124 +1,254 @@
-"""Write SHOWCASE.BAT, a demo reel of the detail switches for recording --
-StevenC & Claude, 2026.
+"""Write the showcase: a demo reel of every version, mode and ability, for
+recording -- StevenC & Claude, 2026.
 
-    python launcher/mkshow.py      (w3dbuild.py deploy runs it and sends
-                                   SHOWCASE.BAT to the V30's C:\\WOLF3D)
+    python launcher/mkshow.py      (w3dbuild.py deploy runs it and sends the
+                                   files to the V30's C:\\WOLF3D)
 
-On the DOS machine, in C:\\WOLF3D, type SHOWCASE.  For each mode, in order
-from id's own picture to the fastest: a title screen saying what it shows
-and with which switches (8 seconds), SECS seconds of the game's demos with
-them (TIMEDEMO SECS: the same time each, so the faster modes get further,
-and a fast PC plays on into the next demo), and its speed report (10
-seconds); at the end, every run's figures together.  Each screen names
-the processor, from W3MENU /CPU.  S skips a wait, Q quits.
+On the DOS machine, in C:\\WOLF3D, type SHOWCASE and pick a version:
 
-It runs straight down, no GOTO but to the end -- COMMAND.COM finds a label
-by reading the file from the top.  The game's report goes to SHOWRES.TXT
-and is shown from there, and each run's "secs" line -- its frames and speed over all its play, one short line --
-is gathered into SHOWSUM.TXT for the summary (FIND reading its
-input from a redirect prints the matching lines and nothing else).
+    V  WOLF3DV -- id's picture exactly, and every detail option
+    B  WOLF3DB -- id's rays with far walls in less detail, and every option
+    T  WOLF3DB with the BSP tree finding the walls
+    A  all three, one after another (the long video)
+
+Each starts with id Software's own 1992 code (WOLF3DO.EXE: id's renderer
+and game code, rebuilt for the 8086 -- the original needs a 286 -- with
+the same timing harness), so every speed after it has the original's to
+be measured against.  Then, for each mode: a title screen saying what it
+shows and with which switches (8 seconds), SECS seconds of the game's own
+demos with them (TIMEDEMO SECS: the same time each, so a faster mode gets
+further), and its speed report (10 seconds).  At the end, every run's
+figures together.  Each screen names the processor (W3MENU /CPU).  S skips
+a wait, Q quits.
+
+The files: SHOWCASE.BAT (the menu), SHOWO.BAT (id's code), SHOWV.BAT,
+SHOWB.BAT and SHOWT.BAT (the reels).  Each reel runs straight down, no GOTO
+but to its end -- COMMAND.COM finds a label by reading the file from the
+top.  Q in a reel leaves SHOWQ.FLG, so SHOWCASE stops too.  The game's
+report goes to SHOWRES.TXT and is shown from there, and each run's "secs"
+line -- its frames and speed over all its play -- is gathered into
+SHOWSUM.TXT for the summary.
 """
 import os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+INTRO, AFTER = 8, 10                    # seconds
+SECS = 60                               # of play a mode (TIMEDEMO SECS)
+TITLE = "Wolfenstein 3-D  --  optimized by StevenC and Claude"
+EVERY = "LOWWALLS4 LOWSPRITES FLATART LOWVERT FARBLOBS FASTOPL"
 
-# switches, title, what it shows (two lines at most)
-MODES = [
-    ("", "FULL DETAIL -- id's own picture",
-     ["None of our options: every pixel as id Software's 1992 renderer",
-      "draws it.  The starting point -- every run after this is faster."]),
+ORIGINAL = [
+    ("", "ID SOFTWARE'S ORIGINAL CODE  (1992)",
+     ["id's own renderer and game code, rebuilt for the 8086 (the original",
+      "needs a 286).  The speed everything after this is measured against."]),
+]
+
+DETAIL = [                              # (switches, title, what it shows)
     ("LOWSPRITES", "LOWSPRITES",
      ["Enemies and items in two-pixel-wide columns.",
       "The walls stay as they are.  A small gain."]),
+    ("FARBLOBS", "FARBLOBS",
+     ["Distant enemies and items as flat shapes, each run of pixels",
+      "in its middle colour.  For faster machines."]),
     ("FLATWALLS", "FLATWALLS",
-     ["Every wall one solid colour, the texture's own, kept apart from",
+     ["Every wall one solid colour, its texture's own, kept apart from",
       "floor and ceiling.  The artwork -- portraits, banners -- stays."]),
+    ("FLATART", "FLATART",
+     ["The artwork solid too.  The elevator switch, the way out,",
+      "turns magenta so it can still be found."]),
     ("LOWVERT", "LOWVERT",
      ["Half the vertical resolution: the VGA shows every other row,",
-      "each twice as tall.  Walls, enemies and the gun lose half their rows."]),
+      "each twice as tall."]),
     ("LOWWALLS", "LOWWALLS",
-     ["One ray for every two screen columns: walls in two-pixel columns.",
-      "The biggest single option."]),
+     ["One ray for every two screen columns: walls in two-pixel columns."]),
+    ("LOWWALLS4", "LOWWALLS4",
+     ["One ray in four: walls in four-pixel columns.",
+      "The biggest single option on a V30."]),
     ("LOWDETAIL", "LOWDETAIL  (LOWWALLS and LOWSPRITES)",
      ["Walls, enemies and items all in two-pixel columns."]),
-    ("LOWDETAIL FLATWALLS", "LOWDETAIL and FLATWALLS",
-     ["Two-pixel columns, and solid-colour walls."]),
     ("LOWDETAIL LOWVERT", "LOWDETAIL and LOWVERT",
      ["Two-pixel columns and half the rows: a quarter of the view's pixels."]),
-    ("LOWDETAIL FLATART LOWVERT", "EVERYTHING  (LOWDETAIL, FLATART, LOWVERT)",
-     ["All of it at once, artwork walls solid too.  The fastest."]),
+    (EVERY, "EVERYTHING",
+     ["Four-pixel walls, two-pixel sprites, solid colours, half the rows,",
+      "flat far sprites and AdLib with no waits.  The fastest."]),
+    ("AUTOMAP", "THE MAP  (TAB in the game)",
+     ["The rooms explored, walls, doors in their keys' colours, items,",
+      "enemies in sight and the player.  The game goes on under it."]),
 ]
-INTRO, AFTER, SUMMARY = 8, 10, 15       # seconds
-SECS = 60                               # of play a mode (TIMEDEMO SECS)
-TITLE = "Wolfenstein 3-D  --  optimized by StevenC and Claude"
+
+REELS = {
+    "V": ("WOLF3DV", "WOLF3DV -- id's picture exactly",
+          [("", "FULL DETAIL",
+            ["Every pixel as id's renderer draws it -- the same picture, from",
+             "faster code: assembly for the 8086, every step checked against id's."])]
+          + DETAIL),
+    "B": ("WOLF3DB", "WOLF3DB -- the faster version",
+          [("", "FAR WALLS IN LESS DETAIL  (the default)",
+            ["id's rays, but a wall under 64 pixels tall is textured every second",
+             "column, under 32 every fourth.  Near walls and every edge exact."]),
+           ("NOLOD", "NOLOD  (full detail)",
+            ["The same program with every wall at full detail: id's picture."])]
+          + DETAIL),
+    "T": ("WOLF3DB", "WOLF3DB with the BSP tree",
+          [("BSP", "THE BSP TREE  (as the SNES version)",
+            ["The walls found by a tree built from the level, front to back,",
+             "instead of id's rays.  Far walls in less detail."]),
+           ("BSP NOLOD", "THE BSP TREE, full detail",
+            ["The tree, every wall at full detail."]),
+           ("BSP LOWSPRITES", "BSP and LOWSPRITES",
+            ["The tree, enemies and items in two-pixel columns."]),
+           ("BSP LOWVERT", "BSP and LOWVERT",
+            ["The tree, half the rows."]),
+           ("BSP LOWSPRITES LOWVERT FASTOPL", "BSP, LOWSPRITES, LOWVERT, FASTOPL",
+            ["The tree with every option it draws itself.  (The wall options --",
+             "LOWWALLS, FLATWALLS -- go back to id's rays, which are faster.)"]),
+           ("BSP AUTOMAP", "BSP and THE MAP",
+            ["The tree, with the map up: the walls it drew are what is explored."])]),
+}
 
 
-def write():
-    n = len(MODES)
+def reel(fname, label, short, exe, modes):
+    """One reel: straight down, a mode at a time."""
+    n = len(modes)
     out = [
         "@ECHO OFF",
-        "REM Wolfenstein 3-D (the NEC V30 build): a demo reel of the detail switches.",
+        "REM Wolfenstein 3-D: the showcase's %s reel." % short,
         "REM Written by launcher\\mkshow.py (StevenC & Claude): edit that, not this.",
-        "C:",
-        "CD \\WOLF3D",
-        "IF EXIST SHOWSUM.TXT DEL SHOWSUM.TXT",
-        "IF EXIST SHOWCPU.TXT DEL SHOWCPU.TXT",
-        "IF EXIST W3MENU.EXE W3MENU /CPU > SHOWCPU.TXT",   # this PC's processor, one line
     ]
-    for i, (sw, title, lines) in enumerate(MODES, 1):
-        cmd = "WOLF3DV TIMEDEMO PRELOAD SECS %d" % SECS + (" " + sw if sw else "")
+    for i, (sw, title, lines) in enumerate(modes, 1):
+        cmd = "%s TIMEDEMO PRELOAD SECS %d" % (exe, SECS) + (" " + sw if sw else "")
         out += [
             "CLS",
             "ECHO.",
             "ECHO   " + TITLE,
             "IF EXIST SHOWCPU.TXT TYPE SHOWCPU.TXT",
             "ECHO   ------------------------------------------------------------------",
+            "ECHO   %s" % label,
             "ECHO.",
-            "ECHO   Demo %d of %d:  %s" % (i, n, title),
+            "ECHO   %d of %d:  %s" % (i, n, title),
             "ECHO.",
         ]
         out += ["ECHO   " + l for l in lines]
         out += [
             "ECHO.",
             "ECHO   %d seconds of the game's own demos, then the speed: the faster" % SECS,
-            "ECHO   the mode, the further it gets (a fast PC plays on into the next).",
+            "ECHO   the mode, the further it gets.",
             "ECHO.",
             "ECHO   %s" % cmd,
             "ECHO.",
             "ECHO   Starting in %d seconds  (S starts it now, Q quits)" % INTRO,
             "CHOICE /C:SQ /N /T:S,%02d > NUL" % INTRO,
-            "IF ERRORLEVEL 2 GOTO END",
+            "IF ERRORLEVEL 2 GOTO QUIT",
             cmd + " > SHOWRES.TXT",
             "CLS",
             "ECHO.",
-            "ECHO   Demo %d of %d:  %s" % (i, n, title),
+            "ECHO   %s -- %s" % (label, title),
             "ECHO.",
             "TYPE SHOWRES.TXT",
-            "ECHO %d. %s >> SHOWSUM.TXT" % (i, title),
+            "ECHO %s: %s >> SHOWSUM.TXT" % (short, title),
             'FIND "secs " < SHOWRES.TXT >> SHOWSUM.TXT',
             "ECHO.",
             "ECHO   Next in %d seconds  (S goes on now, Q quits)" % AFTER,
             "CHOICE /C:SQ /N /T:S,%02d > NUL" % AFTER,
-            "IF ERRORLEVEL 2 GOTO END",
+            "IF ERRORLEVEL 2 GOTO QUIT",
         ]
     out += [
+        "GOTO END",
+        ":QUIT",
+        "ECHO Q > SHOWQ.FLG",
         ":END",
+    ]
+    return fname, out
+
+
+def menu():
+    out = [
+        "@ECHO OFF",
+        "REM Wolfenstein 3-D: the showcase -- a demo reel of every version, mode and",
+        "REM ability, for recording.  Written by launcher\\mkshow.py (StevenC & Claude).",
+        "C:",
+        "CD \\WOLF3D",
+        "IF EXIST SHOWSUM.TXT DEL SHOWSUM.TXT",
+        "IF EXIST SHOWQ.FLG DEL SHOWQ.FLG",
+        "IF EXIST SHOWCPU.TXT DEL SHOWCPU.TXT",
+        "IF EXIST W3MENU.EXE W3MENU /CPU > SHOWCPU.TXT",
+        "CLS",
+        "ECHO.",
+        "ECHO   " + TITLE,
+        "IF EXIST SHOWCPU.TXT TYPE SHOWCPU.TXT",
+        "ECHO   ------------------------------------------------------------------",
+        "ECHO.",
+        "ECHO   The showcase: id Software's original code first, then a version",
+        "ECHO   with every one of its modes, %d seconds of the game's demos each." % SECS,
+        "ECHO.",
+        "ECHO     V  WOLF3DV -- id's picture exactly, and every detail option",
+        "ECHO     B  WOLF3DB -- far walls in less detail, and every detail option",
+        "ECHO     T  WOLF3DB with the BSP tree finding the walls",
+        "ECHO     A  all three, one after another",
+        "ECHO     Q  quit",
+        "ECHO.",
+        "CHOICE /C:VBTAQ /N    Which? ",
+        "IF ERRORLEVEL 5 GOTO END",
+        "IF ERRORLEVEL 4 GOTO ALL",
+        "IF ERRORLEVEL 3 GOTO T",
+        "IF ERRORLEVEL 2 GOTO B",
+        "CALL SHOWO",
+        "IF EXIST SHOWQ.FLG GOTO END",
+        "CALL SHOWV",
+        "GOTO END",
+        ":B",
+        "CALL SHOWO",
+        "IF EXIST SHOWQ.FLG GOTO END",
+        "CALL SHOWB",
+        "GOTO END",
+        ":T",
+        "CALL SHOWO",
+        "IF EXIST SHOWQ.FLG GOTO END",
+        "CALL SHOWT",
+        "GOTO END",
+        ":ALL",
+        "CALL SHOWO",
+        "IF EXIST SHOWQ.FLG GOTO END",
+        "CALL SHOWV",
+        "IF EXIST SHOWQ.FLG GOTO END",
+        "CALL SHOWB",
+        "IF EXIST SHOWQ.FLG GOTO END",
+        "CALL SHOWT",
+        ":END",
+        "IF EXIST SHOWQ.FLG DEL SHOWQ.FLG",
+        "IF NOT EXIST SHOWSUM.TXT GOTO BYE",
         "CLS",
         "ECHO   " + TITLE,
         "IF EXIST SHOWCPU.TXT TYPE SHOWCPU.TXT",
         "ECHO   -- every run, its frames and speed over %d seconds of play:" % SECS,
         "ECHO.",
-        "IF EXIST SHOWSUM.TXT TYPE SHOWSUM.TXT",
-        "ECHO   Full detail is id's picture exactly; every switch is optional.",
+        "TYPE SHOWSUM.TXT",
+        "ECHO.",
+        "ECHO   ORIGINAL is id's own code; WOLF3DV's full detail is its picture exactly.",
+        ":BYE",
     ]
-    for line in out:
-        assert "|" not in line and ">=" not in line, line
-        assert len(line) <= 127, line
-    path = os.path.join(HERE, "SHOWCASE.BAT")
-    with open(path, "w", newline="\r\n") as f:
-        f.write("\n".join(out) + "\n")
-    return path
+    return "SHOWCASE.BAT", out
+
+
+def write():
+    files = [menu(), reel("SHOWO.BAT", "ID'S ORIGINAL CODE", "ORIGINAL", "WOLF3DO", ORIGINAL)]
+    for key, fname, short in (("V", "SHOWV.BAT", "WOLF3DV"), ("B", "SHOWB.BAT", "WOLF3DB"),
+                              ("T", "SHOWT.BAT", "BSP")):
+        exe, label, modes = REELS[key]
+        files.append(reel(fname, label, short, exe, modes))
+    paths = []
+    for fname, out in files:
+        for line in out:
+            assert "|" not in line and ">=" not in line, line
+            assert "%" not in line, line
+            assert len(line) <= 127, line
+        path = os.path.join(HERE, fname)
+        with open(path, "w", newline="\r\n") as f:
+            f.write("\n".join(out) + "\n")
+        paths.append(path)
+    return paths
 
 
 if __name__ == "__main__":
-    print("wrote", write())
+    for p in write():
+        print("wrote", p)
