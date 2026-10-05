@@ -2455,10 +2455,17 @@ PROC	WalkNode NEAR
 	je	@@skiprun
 @@draw:
 	inc	[WORD cs:wk_cnt+6]
+	call	LeftNow						; the columns unclaimed before it
+	push	ax
 	mov	ax,[bp+WL_R]
-	call	MarkRun						; the automap: its tiles explored
-	nop									; (keeps what follows at its parity)
 	call	DrawRunA					; keeps BP
+	call	LeftNow						; the automap: a run that claimed any
+	pop	dx							; column was seen -- its tiles explored
+	cmp	ax,dx
+	je	SHORT @@unseen
+	mov	ax,[bp+WL_R]
+	call	MarkRun
+@@unseen:
 @@skiprun:
 	add	[WORD bp+WL_R],4
 	dec	[WORD bp+WL_K]
@@ -2472,6 +2479,7 @@ PROC	WalkNode NEAR
 	pop	bp
 	ret
 ENDP
+		db	0						; (parity, after the automap's marking above)
 
 ;
 ; BoxClass: the box in bx_box (tiles) against the view's planes -- AX 1 if

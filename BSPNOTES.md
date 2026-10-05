@@ -467,3 +467,15 @@ for finding walls, the BSP's idea of detail by distance -- is the fastest.
 StevenC & Claude.
 
 **Every map, with the default** (2026-10-04): WOLF3DB -- id's rays and the level of detail, skips verified -- played all 240 generated demos on the 486 to the end, none lost or hung (the verify's recast rewinds the ray loop, so this was the test it most needed).
+
+## The automap in the BSP version (2026-10-05)
+
+The automap (V30NOTES.md has it) reads what the rays mark in `spotvis`; the
+tree casts none, so in BSP mode a run marks the two tiles beside its line
+(`MarkRun`) -- but only a run that claimed a column when it was drawn (the
+count of unclaimed columns changed), or walls hidden behind nearer ones left
+fragments all over the map.  With rooms mapped whole on entry, BSP mode's map
+and the walk's are near the same.  The start-up memory check is id's 235000
+less 20 KB here: the automap's 4 KB put the 486 (549 KB free) just under the
+old 225000.  V30, demo 0: the default (rays, far walls coarser) 5.25 fps,
+7.28 with the map up; BSP 4.47 and 6.90.  StevenC & Claude.
