@@ -839,7 +839,8 @@ extern unsigned	postx, postwidth, postmin;
 void	ScalePostF (void);
 void	DropFillF (void);
 
-int		far bspmode = 1;			// the tree draws the walls (WALK: the rays)
+int		far bspmode = 0;			// BSP: the tree draws the walls; by default
+										// id's rays, faster on a V30 (2026-10-04)
 byte	far bspclaim[MAXVIEWWIDTH];	// columns drawn this frame
 int		far bspleft;				// and how many are not
 

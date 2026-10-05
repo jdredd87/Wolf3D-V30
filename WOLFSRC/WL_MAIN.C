@@ -1241,9 +1241,9 @@ void InitGame (void)
 			}
 		}
 	}
-	for (i = 1;i < _argc;i++)			// the BSP version: the tree draws the walls;
-	{									// WALK for id's rays instead (BSP is still
-		char far *a = _argv[i];			// taken, and means the default)
+	for (i = 1;i < _argc;i++)			// the BSP version: BSP for the tree to draw
+	{									// the walls; id's rays by default (WALK is
+		char far *a = _argv[i];			// still taken, and means the default)
 		if ((a[0]|32)=='b' && (a[1]|32)=='s' && (a[2]|32)=='p' && !a[3])
 			bspmode = 1;
 		if ((a[0]|32)=='w' && (a[1]|32)=='a' && (a[2]|32)=='l' && (a[3]|32)=='k' && !a[4])
