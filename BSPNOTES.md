@@ -465,3 +465,5 @@ level of detail 687.7; the BSP with it about 800.  The hybrid -- id's walk
 for finding walls, the BSP's idea of detail by distance -- is the fastest.
 
 StevenC & Claude.
+
+**Every map, with the default** (2026-10-04): WOLF3DB -- id's rays and the level of detail, skips verified -- played all 240 generated demos on the 486 to the end, none lost or hung (the verify's recast rewinds the ray loop, so this was the test it most needed).
