@@ -56,6 +56,16 @@ is.  Two things learned on the way:
   lazily, and only `ParamCount` starts it).  Every tool checks
   `ParamCount` first.
 
+**Phase 3 -- the Python server -- works, 2026-10-06.**  `mp/mpserver.py`
+speaks "Protocol, version 1" below (`mp/mpproto.py` packs it);
+`mp/mpfake.py` plays fake players against it.  Four fakes at 5, 30, 70
+and 17 frames a second, dropping 5% of packets each way at both ends:
+the server held 17.53 steps a second, waited for the slowest to load,
+and all four ended with the same 600 steps -- the same as the match it
+recorded (`--record`, an `Mn.DEM`).  With one fake altering its copy of
+step 100, the next SYNC (step 150) raised a DESYNC naming that player.
+Chat relayed.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
@@ -277,25 +287,52 @@ characters, nothing measurable even on the V30.
   ports simply never meet, so the server prints its port on screen and
   the game says which port it is looking on while it waits.
 
-## Protocol (draft)
+## Protocol, version 1 (2026-10-06)
 
-Little-endian, one UDP datagram each, every one carrying a version byte.
+One UDP datagram a packet, port 31992 by default (changeable everywhere).
+Every packet starts `'W' 'M' version type` -- 4 bytes -- and every number
+after it is little-endian.  `mp/mpserver.py` is the reference; a client or
+server that disagrees with it is wrong.
 
-| packet | from | carries |
-|---|---|---|
-| `HELLO` | client | name, build CRC, wanted player slot |
-| `WELCOME` | server | slot, players, map, skill, rules, start step |
-| `INPUT` | client | slot, the steps it covers, controls for the last N steps (redundant) |
-| `STEPS` | server | first step number, the merged controls of every player for the last N steps |
-| `RESEND` | client | the first step it is missing |
-| `SYNC` | client | step number, game-state checksum (actors, doors, player states) |
-| `DESYNC` | server | the step at which two checksums differed, to every client |
-| `CHAT` | client | sender slot, message number (for the acknowledgement), up to 60 characters |
-| `CHATMSG` | server | the sender's name and colour, the text -- to every player; acknowledges the sender |
-| `BYE` | either | leaving |
+| type | packet | from | after the header |
+|---|---|---|---|
+| 1 | `HELLO` | client | name (16 bytes, NUL-padded), build (u32: the EXE's CRC-32, so two builds never play together), wanted slot (u8, FFh = any) |
+| 2 | `WELCOME` | server | slot (u8), players expected (u8), map (u8), skill (u8), rules (u8), pad, frag limit (u16), time limit (u16, minutes) |
+| 3 | `START` | server | players (u8), map, skill, rules (u8 each), then for each player a start: x, y, direction, 0 -- x 0 means "the map's own start" for P1 and "beside P1" for the others, found by the game itself (the same search on every machine) |
+| 4 | `INPUT` | client | slot (u8), buttons (u8), turn (s8), move (s8), seq (u16), have (u32) |
+| 5 | `STEPS` | server | first (u32), count (u8), players (u8), then count steps of players x 3 bytes -- buttons, turn, move, P1 first: a step exactly as `Mn.DEM` holds it |
+| 6 | `SYNC` | client | slot (u8), pad, step (u32), sum (u32) |
+| 7 | `DESYNC` | server | step (u32), the slots whose sum differed from the first slot's (u8 bit mask) |
+| 8 | `BYE` | either | slot (u8) |
+| 9 | `CHAT` | client | slot (u8), message number (u8), length (u8), text |
+| 10 | `CHATMSG` | server | slot (u8), message number (u8), length (u8), text -- to every player; the sender's own copy is its acknowledgement |
 
-The server keeps every `STEPS` it sent: the match is a multiplayer demo,
-replayable and checkable afterwards.
+**Joining.**  A client sends `HELLO` every half second until it has a
+`WELCOME`.  When the expected number have joined, the server sends `START`
+every half second; a client sets up the level, then starts sending `INPUT`.
+The server's clock starts when every player has sent an `INPUT` after
+`START` -- a V30 takes seconds to load a level, and nobody plays until all
+can.
+
+**Playing.**  The server steps every 4/70 s (17.5 a second, `DEMOTICS`).
+Each step it takes every player's newest controls -- the highest `seq` it
+has (a lost `INPUT` costs nothing: the next one replaces it, and a player
+whose controls are late keeps the last ones for that step) -- and sends each
+client a `STEPS` with every step after that client's `have`, up to 64 (a
+lost `STEPS` is covered by the next one, and a slow machine catches up).  It
+never waits.  A client plays the steps in order, as many as it has, and
+draws the last.  `have` is the highest step it holds with none missing.
+
+**Checking.**  Every 50 steps each client sends `SYNC` with the game
+state's checksum (`MPStep`'s); when every slot has reported a step the
+server compares, and a `DESYNC` tells everyone the step where the games
+parted.
+
+**Ending.**  `BYE` from a client takes it out (its controls stay at
+nothing); the server ends on Ctrl-C, a step limit, or every player gone,
+and writes the match as `Mn.DEM`, so `TIMEDEMO MGEN n` replays it on any
+machine (a demo holds 65535 bytes: 5,400 steps -- five minutes -- of four
+players, more of fewer).
 
 ## Two servers, one protocol
 
