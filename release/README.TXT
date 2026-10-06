@@ -109,8 +109,9 @@ quits by itself after 30 seconds with no key (PLAY /T:60 changes that,
 THE SHOWCASE
 ------------
     SHOWCASE    a demo reel for recording a video.  Pick V (WOLF3DV),
-                B (WOLF3DB), T (WOLF3DB with the BSP tree) or A (all
-                three, about an hour and a half on a V30).  Then two
+                B (WOLF3DB), T (WOLF3DB with the BSP tree), A (all
+                three, about an hour and a half on a V30) or C, to
+                choose any of the three one by one.  Then two
                 questions, answered for you after 15 seconds: start
                 with id's own code, for its speed (Y), and show the
                 map too (N).  Every mode of the version follows: a
