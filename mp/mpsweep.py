@@ -2,7 +2,7 @@
 -- StevenC & Claude, 2026.
 
     python mp/mpsweep.py [--box dx486] [--demos 0-19] [--locals 1,2] [--deploy]
-                         [--against FILE]
+                         [--against FILE] [--mortal]
 
 Multiplayer runs on lockstep: every machine plays the same controls, so
 every machine must play the same game -- whoever's eyes it is drawing, and
@@ -70,6 +70,7 @@ def main():
     box = arg("--box", "dx486")
     lo, hi = (int(x) for x in arg("--demos", "0-19").split("-"))
     cams = [int(x) for x in arg("--locals", "1,2").split(",")]
+    mortal = " MORTAL" if "--mortal" in sys.argv else ""   # players die and respawn
     if "--deploy" in sys.argv:
         import shutil
         shutil.copy(os.path.join(ROOT, "WOLFSRC", "WOLF3DV.EXE"), os.path.join(STAGE, "WOLF3DM.EXE"))
@@ -78,7 +79,7 @@ def main():
              "C:", "CD \\WOLF3D", "IF EXIST MPSWEEP.TXT DEL MPSWEEP.TXT"]
     for n in range(lo, hi + 1):
         for k in cams:
-            lines += ["WOLF3DM TIMEDEMO MGEN %d LOCAL %d > MPS.TXT" % (n, k),
+            lines += ["WOLF3DM TIMEDEMO MGEN %d LOCAL %d%s > MPS.TXT" % (n, k, mortal),
                       "ECHO M%d L%d >> MPSWEEP.TXT" % (n, k),
                       'FIND "mp" MPS.TXT >> MPSWEEP.TXT',
                       'FIND " at " MPS.TXT >> MPSWEEP.TXT']

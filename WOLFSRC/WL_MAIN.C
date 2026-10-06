@@ -1598,12 +1598,9 @@ void TimeDemo (void)
 			godmode = true;
 		}
 	}
-	MPArgs ();						// MGEN n: multiplayer demo Mn.DEM; LOCAL n
-	if (tdmgen)
-	{
+	MPArgs ();						// MGEN n: multiplayer demo Mn.DEM; LOCAL n;
+	if (tdmgen)						// MORTAL: god mode off (WL_MP.C)
 		ndemos = 1;
-		godmode = true;
-	}
 	for (i = 1;i < _argc-1;i++)		// SECS n: the demos for n seconds of play, the
 		if (!_fstricmp (_argv[i],"secs"))	// same time every run (SHOWCASE.BAT)
 		{

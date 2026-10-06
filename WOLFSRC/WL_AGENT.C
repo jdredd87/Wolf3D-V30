@@ -395,7 +395,11 @@ void	TakeDamage (int points,objtype *attacker)
 {
 	LastAttacker = attacker;
 	if (mpplayers)
+	{
 		MPTook (points);			// multiplayer: counted for the report
+		if (MPDead ())
+			return;					// a body takes nothing more
+	}
 
 	if (gamestate.victoryflag)
 		return;
@@ -408,8 +412,13 @@ void	TakeDamage (int points,objtype *attacker)
 	if (gamestate.health<=0)
 	{
 		gamestate.health = 0;
+		if (mpplayers)
+			MPDie (attacker);		// multiplayer: no lives -- respawn on use
+		else
+		{
 		playstate = ex_died;
 		killerobj = attacker;
+		}
 	}
 
 	StartDamageFlash (points);

@@ -45,6 +45,9 @@ typedef struct
 	long		playerxmove,playerymove;
 	int			walkframe;					// the sprite's walk, by distance
 	long		walkdist;
+	int			dead,deaths;				// dead: waiting to respawn
+	long		deadtime;
+	byte		sx,sy,sdir;					// where the player (re)spawns
 } mpctx_t;
 
 mpctx_t	far	mpctx[MAXPLAYERS];
@@ -63,10 +66,12 @@ long	far	mptook[MAXPLAYERS];	// damage each player has been dealt (the
 
 void	T_MPPlayer (objtype *ob);
 void	T_MPAttack (objtype *ob);
+void	T_MPDead (objtype *ob);
 
 // shapenum -1: the shape is ob->temp1 (PlaceActors), set from the walk below
 statetype s_mpplayer = {true,-1,0,T_MPPlayer,NULL,NULL};
 statetype s_mpattack = {false,-1,0,T_MPAttack,NULL,NULL};
+statetype s_mpdead = {false,-1,0,T_MPDead,NULL,NULL};
 
 /*
 =============================================================================
@@ -375,6 +380,18 @@ static int Target (objtype *ob)
 			t = 0;
 		ob->flagspad = t;
 	}
+	if (mpctx[t].dead)				// dead: on to the next one alive
+	{
+		int	k;
+
+		for (k=1;k<mpplayers;k++)
+			if (!mpctx[(t+k)%mpplayers].dead)
+			{
+				t = (t+k)%mpplayers;
+				ob->flagspad = t;
+				break;
+			}
+	}
 	return t;
 }
 
@@ -389,6 +406,77 @@ void MPHurt (objtype *ob)
 {
 	ob->flagspad = mpcur;
 	mpnoise = mpcur;
+}
+
+/*
+=============================================================================
+
+						DYING AND RESPAWNING -- as DOOM
+
+No lives.  A player at 0 health falls (the death frames, then a body on the
+floor) and enemies leave them for someone alive; after a second, "use"
+brings them back at their own start with 100 health, a pistol and 50 bullets
+(StevenC: DOOM's 50).  Keys stay: one player's keys are everyone's.
+
+=============================================================================
+*/
+
+// TakeDamage, health gone: the player in the globals
+void MPDie (objtype *attacker)
+{
+	mpctx_t	far *c = &mpctx[mpcur];
+
+	c->dead = 1;
+	c->deadtime = 0;
+	c->deaths++;
+	player->state = &s_mpdead;
+	player->temp1 = SPR_SS_DIE_1;
+	attacker = attacker;
+}
+
+// TakeDamage: already dead, nothing more to take
+boolean MPDead (void)
+{
+	return mpctx[mpcur].dead;
+}
+
+static void Respawn (objtype *ob, int i)
+{
+	mpctx_t	far *c = &mpctx[i];
+
+	c->dead = 0;
+	gamestate.health = 100;
+	gamestate.ammo = 50;
+	gamestate.weapon = gamestate.bestweapon = gamestate.chosenweapon = wp_pistol;
+	gamestate.attackframe = gamestate.attackcount = gamestate.weaponframe = 0;
+	gamestate.faceframe = 0;
+	SpawnPlayer (c->sx,c->sy,c->sdir);
+	ConnectAreas ();				// SpawnPlayer's InitAreas left only the
+	ob->state = &s_mpplayer;		// players' own areas
+	ob->temp1 = SPR_SS_S_1;
+	ob->flags = FL_NEVERMARK;
+	if (MPLocal ())
+	{
+		DrawHealth ();
+		DrawAmmo ();
+		DrawWeapon ();
+		DrawFace ();
+		DrawKeys ();
+	}
+}
+
+void T_MPDead (objtype *ob)
+{
+	int		i = Index (ob);
+	mpctx_t	far *c = &mpctx[i];
+
+	MPUse (i);
+	c->deadtime += tics;
+	ob->temp1 = c->deadtime < 15 ? SPR_SS_DIE_1 : c->deadtime < 30 ? SPR_SS_DIE_2
+		: c->deadtime < 45 ? SPR_SS_DIE_3 : SPR_SS_DEAD;
+	if (c->deadtime > 70 && buttonstate[bt_use] && !buttonheld[bt_use])
+		Respawn (ob,i);
+	MPUse (0);
 }
 
 // PlayLoop's actor loop in multiplayer: id's DoActor (WL_PLAY.C) for each,
@@ -422,7 +510,7 @@ void MPDoActors (void)
 //
 void MPArgs (void)
 {
-	int		i;
+	int		i,mortal = 0;
 
 	for (i = 1;i < _argc-1;i++)
 	{
@@ -439,6 +527,16 @@ void MPArgs (void)
 		&& (a[3]|32) == 'a' && (a[4]|32) == 'l' && !a[5] && n)
 			mplocal = n-1;
 	}
+	for (i = 1;i < _argc;i++)		// MORTAL: no god mode -- players die
+	{
+		char	far *a = _argv[i];
+
+		if ((a[0]|32) == 'm' && (a[1]|32) == 'o' && (a[2]|32) == 'r'
+		&& (a[3]|32) == 't' && (a[4]|32) == 'a' && (a[5]|32) == 'l' && !a[6])
+			mortal = 1;
+	}
+	if (tdmgen)
+		godmode = !mortal;
 }
 
 //
@@ -488,6 +586,9 @@ void MPSpawn (void)
 		SpawnPlayer (b[0],b[1],b[2]);
 	mpcur = 0;
 	Save (0);
+	mpctx[0].sx = player->tilex;	// P1: the map's own start, or the demo's
+	mpctx[0].sy = player->tiley;
+	mpctx[0].sdir = (1 - player->angle/90) & 3;	// SpawnPlayer: angle = (1-dir)*90
 	for (i=1;i<mpplayers;i++)
 	{
 		_fmemcpy (&mpctx[i],&mpctx[0],sizeof(mpctx_t));
@@ -508,6 +609,10 @@ void MPSpawn (void)
 		}
 		Load (i);
 		mpcur = i;
+		mpctx[i].sx = b[0];
+		mpctx[i].sy = b[1];
+		mpctx[i].sdir = b[2];
+		mpctx[i].dead = mpctx[i].deaths = 0;
 		SpawnPlayer (b[0],b[1],b[2]);	// sets player's place and Thrust's globals
 		player->state = &s_mpplayer;
 		player->temp1 = SPR_SS_S_1;
@@ -643,6 +748,7 @@ void MPStep (void)
 		Sum (mpctx[i].gs.keys);
 		Sum (mpctx[i].gs.weapon);
 		Sum (mpctx[i].gs.score);
+		Sum (mpctx[i].deaths);
 	}
 	mpsteps++;
 	if (!(mpsteps % 50) && mpsteps/50 <= MAXCHECKS)
@@ -675,7 +781,7 @@ void MPReport (void)
 {
 	static char far r1[] = "mp: %d players, camera P%d, %ld steps, state sum %08lX\n";
 	static char far r2[] = "mp step %4d: %08lX\n";
-	static char far r3[] = "  P%d at %d,%d  health %d  ammo %d  keys %d  score %ld  took %ld\n";
+	static char far r3[] = "  P%d at %d,%d  health %d  ammo %d  keys %d  score %ld  took %ld  died %d\n";
 	int	i;
 
 	MPUse (0);
@@ -688,6 +794,6 @@ void MPReport (void)
 		objtype	*ob = mpctx[i].ob;
 
 		mprintf (r3,i+1,ob->tilex,ob->tiley,mpctx[i].gs.health,mpctx[i].gs.ammo,
-			mpctx[i].gs.keys,mpctx[i].gs.score,mptook[i]);
+			mpctx[i].gs.keys,mpctx[i].gs.score,mptook[i],mpctx[i].deaths);
 	}
 }

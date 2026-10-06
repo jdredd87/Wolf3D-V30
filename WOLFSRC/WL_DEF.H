@@ -1249,6 +1249,8 @@ void	MPGunHit (objtype *ob);
 void	MPKnifeHit (objtype *ob);
 void	MPHurt (objtype *ob);
 void	MPTook (int points);
+void	MPDie (objtype *attacker);
+boolean	MPDead (void);
 void	MPDoActors (void);
 void	DoActor (objtype *ob);
 
