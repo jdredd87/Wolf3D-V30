@@ -27,9 +27,34 @@ other, projectiles that hit any player (bosses, episodes 2-6), the BJ
 sprites in place of the SS stand-ins, colours, a local camera that dies
 properly, and everything network.
 
-**Phase 2 -- the wire -- has its tool**: `mp/mpping.pas` (`MPPING ECHO` on
-one box, `MPPING PING` on the other) times 48-byte round trips on port
-31992 through the PicoMEMs' WiFi.
+Since then: **players are solid and shootable**, as DOOM's -- a live
+player is in `actorat`, so players and enemies block each other, and a
+shot that finds a player hurts that player (friendly fire, as DOOM's
+co-op); a kill counts as a frag, a suicide as -1; a body is neither.
+id's `TryMove` skipped `objlist[0]` (always the player); in multiplayer
+P1 blocks too.
+
+**Phase 2 -- the wire -- measured, 2026-10-06.**  `mp/mpping.pas`
+(`MPPING ECHO peer` on one box, `MPPING PING peer` on the other) times
+48-byte round trips on port 31992 between the V30 and the 486, both on
+their PicoMEMs' WiFi in the same room:
+
+| | packets | lost | average round trip | slowest |
+|---|---|---|---|---|
+| V30 -> 486 -> V30 | 200 | 0 | ~11 ms | 3 ticks or less |
+| 486 -> V30 -> 486 | 1000 | 0 | ~8.6 ms | 1 tick or less |
+
+(BIOS-tick timing: the average is the total over all of them.)  A game
+step is 57 ms, so the network is far from the limit -- the V30's frame
+is.  Two things learned on the way:
+
+* **A DOS box answers ARP only while a program has the network open** --
+  between bridge polls nothing does -- so each side keeps trying to open
+  the link until the other is up.  The game will have to do the same.
+* **Free Pascal 3.2.2's i8086-msdos runtime returns '' for `ParamStr(n)`
+  until `ParamCount` has been called once** (the command line is parsed
+  lazily, and only `ParamCount` starts it).  Every tool checks
+  `ParamCount` first.
 
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is

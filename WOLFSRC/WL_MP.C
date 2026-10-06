@@ -45,7 +45,7 @@ typedef struct
 	long		playerxmove,playerymove;
 	int			walkframe;					// the sprite's walk, by distance
 	long		walkdist;
-	int			dead,deaths;				// dead: waiting to respawn
+	int			dead,deaths,frags;			// dead: waiting to respawn
 	long		deadtime;
 	byte		sx,sy,sdir;					// where the player (re)spawns
 } mpctx_t;
@@ -278,6 +278,25 @@ static boolean InAim (objtype *from, objtype *to, long *dist)
 	return nx >= MINDIST && (labs (ny) >> 3) * 875 < (nx >> 3) * 128;	// 5*0xAF00/0x8000
 }
 
+// A shot or a stab that found its target: an enemy takes it as id's code
+// gives it; a player -- friendly fire, as DOOM's co-op -- takes it in its
+// own context, from `by`
+static void Hit (objtype *target, unsigned damage, objtype *by)
+{
+	int	a = mpcur;
+
+	if (target->obclass != playerobj)
+	{
+		DamageActor (target,damage);
+		return;
+	}
+	MPUse (Index (target));
+	TakeDamage (damage,by);
+	MPUse (a);
+	madenoise = true;
+	mpnoise = a;
+}
+
 // T_Shoot: can the player (the context) see ob, to dodge?
 boolean MPSees (objtype *ob)
 {
@@ -326,7 +345,7 @@ void MPGunHit (objtype *ob)
 			return;
 		damage = US_RndT() / 6;
 	}
-	DamageActor (closest,damage);
+	Hit (closest,damage,ob);
 }
 
 // KnifeAttack after its sound, the same way
@@ -346,7 +365,7 @@ void MPKnifeHit (objtype *ob)
 		}
 	if (!closest || dist> 0x18000l)
 		return;							// missed
-	DamageActor (closest,US_RndT() >> 4);
+	Hit (closest,US_RndT() >> 4,ob);
 }
 
 /*
@@ -429,9 +448,20 @@ void MPDie (objtype *attacker)
 	c->dead = 1;
 	c->deadtime = 0;
 	c->deaths++;
+	if (attacker && attacker->obclass == playerobj)
+	{
+		int	k = Index (attacker);
+
+		if (k == mpcur)
+			mpctx[k].frags--;		// by one's own hand
+		else
+			mpctx[k].frags++;
+	}
 	player->state = &s_mpdead;
 	player->temp1 = SPR_SS_DIE_1;
-	attacker = attacker;
+	if (actorat[player->tilex][player->tiley] == player)
+		actorat[player->tilex][player->tiley] = NULL;
+	player->flags = FL_NEVERMARK;	// a body: not solid, not shootable
 }
 
 // TakeDamage: already dead, nothing more to take
@@ -454,7 +484,7 @@ static void Respawn (objtype *ob, int i)
 	ConnectAreas ();				// SpawnPlayer's InitAreas left only the
 	ob->state = &s_mpplayer;		// players' own areas
 	ob->temp1 = SPR_SS_S_1;
-	ob->flags = FL_NEVERMARK;
+	ob->flags = FL_SHOOTABLE;		// solid (DoActor marks it) and shootable
 	if (MPLocal ())
 	{
 		DrawHealth ();
@@ -616,13 +646,14 @@ void MPSpawn (void)
 		SpawnPlayer (b[0],b[1],b[2]);	// sets player's place and Thrust's globals
 		player->state = &s_mpplayer;
 		player->temp1 = SPR_SS_S_1;
-		player->flags = FL_NEVERMARK;
+		player->flags = FL_SHOOTABLE;	// solid (DoActor marks it) and shootable
 		Save (i);
 		Load (0);
 		mpcur = 0;
 	}
 	player->state = &s_mpplayer;
 	player->temp1 = SPR_SS_S_1;
+	player->flags = FL_SHOOTABLE;
 	MPAsm (1,&objlist[0]);			// the renderer: no pickups or waking, and
 									// PlaceActors from the list's head
 	InitAreas ();					// every player's area, now they all exist
@@ -749,6 +780,7 @@ void MPStep (void)
 		Sum (mpctx[i].gs.weapon);
 		Sum (mpctx[i].gs.score);
 		Sum (mpctx[i].deaths);
+		Sum (mpctx[i].frags);
 	}
 	mpsteps++;
 	if (!(mpsteps % 50) && mpsteps/50 <= MAXCHECKS)
@@ -781,7 +813,7 @@ void MPReport (void)
 {
 	static char far r1[] = "mp: %d players, camera P%d, %ld steps, state sum %08lX\n";
 	static char far r2[] = "mp step %4d: %08lX\n";
-	static char far r3[] = "  P%d at %d,%d  health %d  ammo %d  keys %d  score %ld  took %ld  died %d\n";
+	static char far r3[] = "  P%d at %d,%d  health %d  ammo %d  keys %d  score %ld  took %ld  died %d  frags %d\n";
 	int	i;
 
 	MPUse (0);
@@ -794,6 +826,6 @@ void MPReport (void)
 		objtype	*ob = mpctx[i].ob;
 
 		mprintf (r3,i+1,ob->tilex,ob->tiley,mpctx[i].gs.health,mpctx[i].gs.ammo,
-			mpctx[i].gs.keys,mpctx[i].gs.score,mptook[i],mpctx[i].deaths);
+			mpctx[i].gs.keys,mpctx[i].gs.score,mptook[i],mpctx[i].deaths,mpctx[i].frags);
 	}
 }

@@ -34,7 +34,6 @@ var
   Buf: array[0..NET_MAXUDP-1] of Byte;
   Got: Word;
   LastSpin: LongInt;
-  ErrOut: Text;
 
 procedure Heartbeat;
 var
@@ -44,8 +43,8 @@ begin
   if T <> LastSpin then
   begin
     LastSpin := T;
-    Write(ErrOut, SPIN[T and 3], #8);
-    Flush(ErrOut);
+    Write(StdErr, SPIN[T and 3], #8);
+    Flush(StdErr);
   end;
 end;
 
@@ -130,16 +129,20 @@ begin
 end;
 
 var
-  Mode: ShortString;
+  Verb: ShortString;
   I: Integer;
+  Tries: Integer;
 begin
-  Assign(ErrOut, '');
-  Rewrite(ErrOut);
-  Mode := ParamStr(1);
-  for I := 1 to Length(Mode) do Mode[I] := UpCase(Mode[I]);
-  if ((Mode <> 'ECHO') and (Mode <> 'PING')) or not ParseIP(ParamStr(2), Peer) then
+  { FPC 3.2.2's i8086-msdos runtime parses the command line lazily, and
+    only ParamCount starts it: ParamStr(n) before any ParamCount is ''. }
+  if ParamCount < 2 then Verb := '' else Verb := ParamStr(1);
+  for I := 1 to Length(Verb) do Verb[I] := UpCase(Verb[I]);
+  if ((Verb <> 'ECHO') and (Verb <> 'PING')) or not ParseIP(ParamStr(2), Peer) then
   begin
     WriteLn('MPPING ECHO peer [port] [secs]  |  MPPING PING peer [port] [n]');
+    Write('given ', ParamCount, ':');
+    for I := 1 to ParamCount do Write(' [', ParamStr(I), ']');
+    WriteLn;
     Halt(2);
   end;
   Port := Num(ParamStr(3), 31992);
@@ -148,15 +151,25 @@ begin
     WriteLn('no network config: ', NetErr);
     Halt(3);
   end;
-  if not NetOpen(Peer) then
+  { The peer answers ARP only while its own program has the network open
+    (between bridge polls nothing on a DOS box holds it), so keep asking
+    until it is up: a minute at most. }
+  Tries := 0;
+  while not NetOpen(Peer) do
   begin
-    WriteLn('cannot open the network to ', IPStr(Peer), ': ', NetErr);
-    Halt(4);
+    Inc(Tries);
+    Heartbeat;
+    if Tries >= 40 then
+    begin
+      WriteLn('cannot open the network to ', IPStr(Peer), ': ', NetErr);
+      Halt(4);
+    end;
   end;
-  if Mode = 'ECHO' then
+  WriteLn('peer ', IPStr(Peer), ' answered after ', Tries, ' retries');
+  if Verb = 'ECHO' then
     DoEcho(Num(ParamStr(4), 60))
   else
     DoPing(Num(ParamStr(4), 200));
   NetClose;
-  Write(ErrOut, ' ', #8);
+  Write(StdErr, ' ', #8);
 end.

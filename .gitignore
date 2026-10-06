@@ -9,3 +9,4 @@ bsp/build/
 bsp/*.DAT
 bsp/*.WL6
 release/*.ZIP
+mp/build/
