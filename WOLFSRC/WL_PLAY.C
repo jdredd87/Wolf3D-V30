@@ -612,7 +612,7 @@ void PollControls (void)
 //
 	if (demoplayback)
 	{
-		while (TimeCount<lasttimecount+DEMOTICS && !timedemo)
+		while (TimeCount<lasttimecount+DEMOTICS && (!timedemo || tdrealtime))
 		;			// TIMEDEMO renders as fast as it can; the game still steps 4 tics
 		TimeCount = lasttimecount + DEMOTICS;
 		lasttimecount += DEMOTICS;

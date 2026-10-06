@@ -1622,6 +1622,7 @@ void TimeDemo (void)
 		SD_SetMusicMode (smm_Off);
 	if (MS_CheckParm ("nosound"))
 		SD_SetSoundMode (sdm_Off);
+	MPSoundOn ();					// SOUND: every device there is (WL_MP.C)
 	// CRC: sound effects off, AdLib and digitised.  The game is not
 	// deterministic with them on: UpdateFace skips its US_RndT calls while
 	// the gatling pickup sound plays, and a sound lasts real time while an

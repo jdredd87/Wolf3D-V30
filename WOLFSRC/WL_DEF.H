@@ -1256,6 +1256,8 @@ void	MPKnifeHit (objtype *ob);
 void	MPHurt (objtype *ob);
 void	MPTook (int points);
 void	MPDie (objtype *attacker);
+void	MPSoundOn (void);
+extern	int far	tdrealtime;
 boolean	MPDead (void);
 void	MPDoActors (void);
 void	DoActor (objtype *ob);

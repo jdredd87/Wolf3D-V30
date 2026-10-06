@@ -541,6 +541,8 @@ void MPDoActors (void)
 // The command line: MGEN n (Mn.DEM, a multiplayer demo) and LOCAL n (whose
 // eyes, 1-4).  Called from WL_MAIN.C's TIMEDEMO setup
 //
+int		far	tdsound, far tdrealtime;	// TIMEDEMO SOUND, REALTIME
+
 void MPArgs (void)
 {
 	int		i,mortal = 0;
@@ -563,6 +565,16 @@ void MPArgs (void)
 	for (i = 1;i < _argc;i++)		// MORTAL: no god mode -- players die
 	{
 		char	far *a = _argv[i];
+
+		// SOUND: AdLib effects and music and Sound Blaster digitized sound for
+		// this run, whatever CONFIG.WL6 says (TIMEDEMO never saves it).
+		// REALTIME: demo steps at the game's own pace, to be listened to
+		if ((a[0]|32) == 's' && (a[1]|32) == 'o' && (a[2]|32) == 'u'
+		&& (a[3]|32) == 'n' && (a[4]|32) == 'd' && !a[5])
+			tdsound = 1;
+		if ((a[0]|32) == 'r' && (a[1]|32) == 'e' && (a[2]|32) == 'a' && (a[3]|32) == 'l'
+		&& (a[4]|32) == 't' && (a[5]|32) == 'i' && (a[6]|32) == 'm' && (a[7]|32) == 'e' && !a[8])
+			tdrealtime = 1;
 
 		if ((a[0]|32) == 'm' && (a[1]|32) == 'o' && (a[2]|32) == 'r'
 		&& (a[3]|32) == 't' && (a[4]|32) == 'a' && (a[5]|32) == 'l' && !a[6])
@@ -1331,6 +1343,22 @@ void MPNetGame (void)
 		printf (s,mpplayed+1,mphave+1,netsentn,netrecvn,mpdesync < 0 ? (char far *)ok : (char far *)bad);
 	}
 	exit (0);
+}
+
+//
+// TIMEDEMO SOUND: every sound device there is, for this run only
+//
+void MPSoundOn (void)
+{
+	if (!tdsound)
+		return;
+	if (AdLibPresent)
+	{
+		SD_SetSoundMode (sdm_AdLib);
+		SD_SetMusicMode (smm_AdLib);
+	}
+	if (SoundBlasterPresent)
+		SD_SetDigiDevice (sds_SoundBlaster);
 }
 
 void MPReport (void)
