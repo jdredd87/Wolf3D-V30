@@ -66,6 +66,14 @@ recorded (`--record`, an `Mn.DEM`).  With one fake altering its copy of
 step 100, the next SYNC (step 150) raised a DESYNC naming that player.
 Chat relayed.
 
+**DOS machines on the server, 2026-10-06.**  `mp/mpcli.pas` is the wire
+half of a client with no game (FPC, the bridge's `Net` unit).  The server
+on the Windows PC (firewall rule for UDP 31992 in place), the 486 and the
+V30 running MPCLI and a fake player as the third: 400 steps at 17.54 a
+second, every player holding all 400, and the V30 and the 486 printing the
+same CRC (`99C042E3`); the server compared their SYNCs with the fake's --
+the same sums -- and found no desync.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
