@@ -394,6 +394,8 @@ void	DrawHealth (void)
 void	TakeDamage (int points,objtype *attacker)
 {
 	LastAttacker = attacker;
+	if (mpplayers)
+		MPTook (points);			// multiplayer: counted for the report
 
 	if (gamestate.victoryflag)
 		return;

@@ -725,6 +725,8 @@ void KillActor (objtype *ob)
 void DamageActor (objtype *ob, unsigned damage)
 {
 	madenoise = true;
+	if (mpplayers)
+		MPHurt (ob);				// multiplayer: it turns on whoever hurt it
 
 //
 // do double damage if shooting a non attack mode actor

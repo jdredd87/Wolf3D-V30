@@ -1568,6 +1568,9 @@ void PlayLoop (void)
 		MoveDoors ();
 		MovePWalls ();
 
+		if (mpplayers)
+			MPDoActors ();		// multiplayer: each enemy with its target (WL_MP.C)
+		else
 		DoActors ();			// NEC V30 build: the same loop in WL_DR_A.ASM,
 								// idle actors skipped without a call
 

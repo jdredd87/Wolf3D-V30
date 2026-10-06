@@ -1247,6 +1247,10 @@ void	MPAsm (int on, objtype *first);
 boolean	MPSees (objtype *ob);
 void	MPGunHit (objtype *ob);
 void	MPKnifeHit (objtype *ob);
+void	MPHurt (objtype *ob);
+void	MPTook (int points);
+void	MPDoActors (void);
+void	DoActor (objtype *ob);
 
 /*
 =============================================================================

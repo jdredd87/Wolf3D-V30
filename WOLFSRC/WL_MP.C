@@ -57,6 +57,9 @@ long	far	mpsteps;
 #define MAXCHECKS	64
 unsigned long far mpcheck[MAXCHECKS];	// the sum at every 50th step
 unsigned far mprnd;				// the face's own random numbers (see MPFace)
+int		far	mpnoise;			// who made this step's noise (madenoise)
+long	far	mptook[MAXPLAYERS];	// damage each player has been dealt (the
+								// report: god mode hides it from health)
 
 void	T_MPPlayer (objtype *ob);
 void	T_MPAttack (objtype *ob);
@@ -286,6 +289,8 @@ void MPGunHit (objtype *ob)
 	int		damage,dx,dy,dist;
 	long	viewdist,d;
 
+	mpnoise = mpcur;				// GunAttack set madenoise: this player's
+
 	viewdist = 0x7fffffffl;
 	closest = NULL;
 	while (1)
@@ -337,6 +342,70 @@ void MPKnifeHit (objtype *ob)
 	if (!closest || dist> 0x18000l)
 		return;							// missed
 	DamageActor (closest,US_RndT() >> 4);
+}
+
+/*
+=============================================================================
+
+						ENEMIES -- every player is a target
+
+An enemy keeps its target in flagspad, the pad byte after flags (the NEC V30
+build's, there to keep the words after it even): no new memory, and
+GetNewActor clears it.  As DOOM's monsters do: one that is not yet fighting
+looks at each player in turn, and goes for whoever made a noise; one that is
+fighting keeps its target -- and one that is hurt turns on whoever hurt it.
+Its think and action then run with that player's context in the globals, so
+id's sighting, chasing and shooting -- all of which read `player` and
+`gamestate` -- see the target.
+
+=============================================================================
+*/
+
+static int Target (objtype *ob)
+{
+	int	t = ob->flagspad;
+
+	if (t >= mpplayers)
+		t = 0;
+	if (!(ob->flags & FL_ATTACKMODE))
+	{
+		if (madenoise)
+			t = mpnoise;			// heard someone
+		else if (++t == mpplayers)	// look at each player in turn
+			t = 0;
+		ob->flagspad = t;
+	}
+	return t;
+}
+
+// TakeDamage: the player in the globals is hit
+void MPTook (int points)
+{
+	mptook[mpcur] += points;
+}
+
+// DamageActor: the player in the globals hurt ob
+void MPHurt (objtype *ob)
+{
+	ob->flagspad = mpcur;
+	mpnoise = mpcur;
+}
+
+// PlayLoop's actor loop in multiplayer: id's DoActor (WL_PLAY.C) for each,
+// with its target's context in -- the players' own thinking swaps theirs
+void MPDoActors (void)
+{
+	objtype	*ob;
+
+	for (ob = &objlist[0];ob;ob = ob->next)
+	{
+		if (!ob->active && !areabyplayer[ob->areanumber])
+			continue;
+		if (ob->obclass != playerobj)
+			MPUse (Target (ob));
+		DoActor (ob);
+	}
+	MPUse (0);
 }
 
 /*
@@ -400,6 +469,7 @@ char far *MPDemoLoad (int n)
 	b = (byte far *)demobuffer;
 	mpplayers = b[1] < 2 ? 2 : b[1] > MAXPLAYERS ? MAXPLAYERS : b[1];
 	_fmemset (mpctx,0,sizeof(mpctx));
+	_fmemset (mptook,0,sizeof(mptook));
 	if (mplocal >= mpplayers)
 		mplocal = 0;
 	return (char far *)b + 2 + 4*mpplayers;
@@ -425,6 +495,17 @@ void MPSpawn (void)
 		GetNewActor ();
 		player = new;
 		mpctx[i].ob = new;
+		if (mpctx[i-1].ob->next != new)	// move it from the list's end to just
+		{								// after the players before it
+			objtype	*after = mpctx[i-1].ob;
+
+			lastobj = new->prev;
+			lastobj->next = NULL;
+			new->prev = after;
+			new->next = after->next;
+			after->next->prev = new;
+			after->next = new;
+		}
 		Load (i);
 		mpcur = i;
 		SpawnPlayer (b[0],b[1],b[2]);	// sets player's place and Thrust's globals
@@ -594,7 +675,7 @@ void MPReport (void)
 {
 	static char far r1[] = "mp: %d players, camera P%d, %ld steps, state sum %08lX\n";
 	static char far r2[] = "mp step %4d: %08lX\n";
-	static char far r3[] = "  P%d at %d,%d  health %d  ammo %d  keys %d  score %ld\n";
+	static char far r3[] = "  P%d at %d,%d  health %d  ammo %d  keys %d  score %ld  took %ld\n";
 	int	i;
 
 	MPUse (0);
@@ -607,6 +688,6 @@ void MPReport (void)
 		objtype	*ob = mpctx[i].ob;
 
 		mprintf (r3,i+1,ob->tilex,ob->tiley,mpctx[i].gs.health,mpctx[i].gs.ammo,
-			mpctx[i].gs.keys,mpctx[i].gs.score);
+			mpctx[i].gs.keys,mpctx[i].gs.score,mptook[i]);
 	}
 }
