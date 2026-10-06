@@ -140,7 +140,8 @@ views, 4 walking frames in 8 views, 3 firing, 2 pain, 3 dying and a body,
   that one ramp per player at draw time, DOOM's way -- BJ's own grey for
   player 1 (palette 18-30, a shade lighter than his 20-31), and any of
   the palette's other 16-step ramps for the others: green 97-111, red
-  33-47, brown 208-223, purple 166-175 are drafted.  One 256-byte table
+  33-47, brown 208-223.  **Decided (StevenC, 2026-10-06): player 1 grey,
+  2 green, 3 red, 4 brown**, DOOM's order where it overlaps.  One 256-byte table
   a player, a colour-translating path in the asm sprite scaler, no extra
   sprite memory;
 * **kept**: the gun, the face, the near-black blues of boots and shadow
@@ -279,5 +280,3 @@ the 386SX arrives.
   as it is.)
 * Does the 486 smooth the view between steps, or just redraw?
 * Which UDP port?
-* Which four colours?  BJ's grey for player 1; green, red, brown and
-  purple are drafted for the rest.

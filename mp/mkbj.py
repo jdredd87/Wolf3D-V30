@@ -37,12 +37,11 @@ NAVY = (227, 228, 232)              # near-black blues: boots and shadow, as
                                     # on BJ's own sprite -- kept
 # the game palette's ramps, bright to dark
 HAIR = list(range(56, 64))          # orange: BJ's hair (his own is 59, 61)
-RAMPS = {
-    "grey": list(range(18, 31)),    # BJ's own outfit (20-31), a shade lighter
-    "green": list(range(97, 112)),
-    "red": list(range(33, 48)),
-    "brown": list(range(208, 224)),
-    "purple": list(range(166, 176)),
+RAMPS = {                           # the four players, in order (StevenC)
+    "grey": list(range(18, 31)),    # 1: BJ's own outfit (20-31), a shade lighter
+    "green": list(range(97, 112)),  # 2
+    "red": list(range(33, 48)),     # 3
+    "brown": list(range(208, 224)), # 4
 }
 CAPROWS = 8                         # at most, from the head's top
 
