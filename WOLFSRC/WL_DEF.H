@@ -1236,7 +1236,10 @@ void	MPUse (int i);
 boolean	MPLocal (void);
 void	MPArgs (void);
 char far *MPDemoLoad (int n);
-void	MPSpawn (void);
+void	MPSpawn (byte far *starts);
+int		MPNetArgs (void);
+void	MPNetGame (void);
+void	NetStop (void);
 void	MPReadDemo (void);
 void	MPConnectAreas (boolean connect);
 void	MPCamera (boolean on);
@@ -1244,6 +1247,9 @@ void	MPStep (void);
 void	MPReport (void);
 void	MPFace (void);
 void	MPAsm (int on, objtype *first);
+// a boss's death lasts longer with digitized sound: in multiplayer the same
+// on every machine, whatever its sound card -- the longer one
+#define MPDIGI(cond)	(mpplayers ? 1 : (cond))
 boolean	MPSees (objtype *ob);
 void	MPGunHit (objtype *ob);
 void	MPKnifeHit (objtype *ob);

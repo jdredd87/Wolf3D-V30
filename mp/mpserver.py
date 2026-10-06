@@ -213,7 +213,9 @@ class Server:
             frames = min(n, (65535 - 4) // per)
             body = b"".join(self.history[:frames])
             demo = bytes([self.map]) + struct.pack("<H", 4 + per * frames) + b"\0" + body
-            data = b"M" + bytes([self.players]) + bytes(4 * self.players) + demo
+            # P1's start's 4th byte: the skill + 1 (0 = id's demos' own, hard)
+            starts = bytes([0, 0, 0, self.skill + 1]) + bytes(4 * (self.players - 1))
+            data = b"M" + bytes([self.players]) + starts + demo
             open(self.record, "wb").write(data)
             self.log("recorded %d steps as %s" % (frames, self.record))
 

@@ -30,6 +30,9 @@ void	T_Player (objtype *ob);
 void	T_Attack (objtype *ob);
 void	MPAsm (int on, objtype *first);		// WL_DR_A.ASM: the renderer's MP hooks
 void	AutomapPickup (void);				// WL_DR_A.ASM: GetBonus where the player stands
+void	ConnectAreas (void);
+void	ClearPaletteShifts (void);
+void	UpdatePaletteShifts (void);
 
 typedef struct
 {
@@ -569,6 +572,15 @@ void MPArgs (void)
 		godmode = !mortal;
 }
 
+static void Init (int players)
+{
+	mpplayers = players < 1 ? 1 : players > MAXPLAYERS ? MAXPLAYERS : players;
+	_fmemset (mpctx,0,sizeof(mpctx));
+	_fmemset (mptook,0,sizeof(mptook));
+	if (mplocal >= mpplayers)
+		mplocal = 0;
+}
+
 //
 // Mn.DEM: 'M', the number of players, then a start for each (tile x, y,
 // direction, 0; x 0 for P1 = the map's own), then id's demo format -- map,
@@ -595,22 +607,57 @@ char far *MPDemoLoad (int n)
 	CA_LoadFile (name,&demobuffer);
 	MM_SetLock (&demobuffer,true);
 	b = (byte far *)demobuffer;
-	mpplayers = b[1] < 2 ? 2 : b[1] > MAXPLAYERS ? MAXPLAYERS : b[1];
-	_fmemset (mpctx,0,sizeof(mpctx));
-	_fmemset (mptook,0,sizeof(mptook));
-	if (mplocal >= mpplayers)
-		mplocal = 0;
+	Init (b[1]);
 	return (char far *)b + 2 + 4*mpplayers;
 }
 
 //
-// After SetupGameLevel: the other players, each at its start, and every
-// player on the MP states.  P1 is objlist[0], the head of the actor list
+// A start for player i "beside P1": the nearest open floor tile in P1's
+// area -- no wall, no actor, no player already put there -- searching rings
+// outward, each row by row.  The same search on every machine, so a server
+// needs to know nothing of maps
 //
-void MPSpawn (void)
+static void Beside (int i, byte *x, byte *y)
 {
-	byte	far *b = (byte far *)demobuffer + 2;
+	int	r,dx,dy,tx,ty,k,taken;
+	int	px = objlist[0].tilex, py = objlist[0].tiley;
+	int	area = objlist[0].areanumber;
+
+	for (r=1;r<8;r++)
+		for (dy=-r;dy<=r;dy++)
+			for (dx=-r;dx<=r;dx++)
+			{
+				if (abs (dx) != r && abs (dy) != r)
+					continue;
+				tx = px+dx;
+				ty = py+dy;
+				if (tx < 1 || ty < 1 || tx > 62 || ty > 62 || tilemap[tx][ty] || actorat[tx][ty]
+				|| *(mapsegs[0] + farmapylookup[ty]+tx) - AREATILE != area)
+					continue;
+				for (taken = 0,k=1;k<i;k++)
+					if (mpctx[k].sx == tx && mpctx[k].sy == ty)
+						taken = 1;
+				if (!taken)
+				{
+					*x = tx;
+					*y = ty;
+					return;
+				}
+			}
+	*x = px;						// nowhere: on P1
+	*y = py;
+}
+
+//
+// After SetupGameLevel: the other players, each at its start, and every
+// player on the MP states.  P1 is objlist[0], the head of the actor list.
+// starts: a start per player (x, y, direction, 0); x 0 is the map's own for
+// P1, beside P1 (facing the same way) for the others
+//
+void MPSpawn (byte far *b)
+{
 	int		i;
+	byte	sx,sy,sd;
 
 	if (b[0])
 		SpawnPlayer (b[0],b[1],b[2]);
@@ -639,11 +686,22 @@ void MPSpawn (void)
 		}
 		Load (i);
 		mpcur = i;
-		mpctx[i].sx = b[0];
-		mpctx[i].sy = b[1];
-		mpctx[i].sdir = b[2];
+		if (b[0])
+		{
+			sx = b[0];
+			sy = b[1];
+			sd = b[2];
+		}
+		else
+		{
+			Beside (i,&sx,&sy);
+			sd = mpctx[0].sdir;
+		}
+		mpctx[i].sx = sx;
+		mpctx[i].sy = sy;
+		mpctx[i].sdir = sd;
 		mpctx[i].dead = mpctx[i].deaths = 0;
-		SpawnPlayer (b[0],b[1],b[2]);	// sets player's place and Thrust's globals
+		SpawnPlayer (sx,sy,sd);		// sets player's place and Thrust's globals
 		player->state = &s_mpplayer;
 		player->temp1 = SPR_SS_S_1;
 		player->flags = FL_SHOOTABLE;	// solid (DoActor marks it) and shootable
@@ -670,26 +728,56 @@ void MPSpawn (void)
 */
 
 //
+// Player i's controls for this step, from its 3 bytes (a demo's): button
+// bits, turn, move.  P1's go in the globals (its context is home), the
+// others' in their contexts
+//
+static void SetControls (int i, byte far *s)
+{
+	mpctx_t	far *c = &mpctx[i];
+	boolean	far *now, far *held;
+	int		b;
+	byte	bits = s[0];
+
+	if (i)
+	{
+		now = c->buttonstate;
+		held = c->buttonheld;
+	}
+	else
+	{
+		now = (boolean far *)buttonstate;
+		held = (boolean far *)buttonheld;
+	}
+	_fmemcpy (held,now,sizeof(buttonstate));
+	for (b=0;b<NUMBUTTONS;b++)
+	{
+		now[b] = bits&1;
+		bits >>= 1;
+	}
+	if (i)
+	{
+		c->controlx = (signed char)s[1] * (int)tics;
+		c->controly = (signed char)s[2] * (int)tics;
+	}
+	else
+	{
+		controlx = (signed char)s[1] * (int)tics;
+		controly = (signed char)s[2] * (int)tics;
+	}
+}
+
+//
 // PollControls, playing a demo: the other players' 3 bytes each, after P1's
 //
 void MPReadDemo (void)
 {
-	int		i,b;
-	byte	bits;
+	int		i;
 
 	for (i=1;i<mpplayers;i++)
 	{
-		mpctx_t	far *c = &mpctx[i];
-
-		_fmemcpy (c->buttonheld,c->buttonstate,sizeof(c->buttonstate));
-		bits = *demoptr++;
-		for (b=0;b<NUMBUTTONS;b++)
-		{
-			c->buttonstate[b] = bits&1;
-			bits >>= 1;
-		}
-		c->controlx = *demoptr++ * (int)tics;
-		c->controly = *demoptr++ * (int)tics;
+		SetControls (i,(byte far *)demoptr);
+		demoptr += 3;
 	}
 }
 
@@ -754,6 +842,11 @@ void MPStep (void)
 	statobj_t	*st;
 	int			i;
 
+	// the whole state is summed only every 50th step -- when it is compared
+	// -- each sum chained to the one before: summed every step it cost the
+	// V30 most of a frame (32-bit shifts are software on an 8086)
+	if (++mpsteps % 50)
+		return;
 	MPUse (0);
 	Save (0);
 	for (ob = &objlist[0];ob;ob = ob->next)
@@ -782,8 +875,7 @@ void MPStep (void)
 		Sum (mpctx[i].deaths);
 		Sum (mpctx[i].frags);
 	}
-	mpsteps++;
-	if (!(mpsteps % 50) && mpsteps/50 <= MAXCHECKS)
+	if (mpsteps/50 <= MAXCHECKS)
 		mpcheck[mpsteps/50-1] = mpsum;
 }
 
@@ -807,6 +899,438 @@ void MPFace (void)
 		facecount = 0;
 		DrawFace ();
 	}
+}
+
+/*
+=============================================================================
+
+						THE NETWORK GAME
+
+WOLF3DM NET server [PORT n] [NAME x] [NETBOT]: join the server, and play the
+map it names, every step from it.  MULTIPLAYER.md's "Protocol, version 1".
+Each frame: this player's controls (or NETBOT's random ones, for testing
+with nobody at the keyboard) to the server as INPUT; every packet in; every
+step that has arrived played, in order, exactly as a demo's -- a SYNC every
+50; then one picture, if anything was played.  ESC leaves.
+
+=============================================================================
+*/
+
+int		NetStart (byte far *server, unsigned port, char far * far *why);
+void	NetStop (void);
+void	NetAsk (void);
+int		NetReady (void);
+void	NetSend (byte far *data, unsigned len);
+void	NetPump (void (*take) (byte far *data, unsigned len));
+void	NetStatus (char *s);
+void	PollKeyboardButtons (void);
+void	PollMouseButtons (void);
+void	PollJoystickButtons (void);
+void	PollKeyboardMove (void);
+void	PollMouseMove (void);
+void	PollJoystickMove (void);
+extern	long	far netsentn, far netrecvn;
+
+#define RING	128					// steps held, played or not
+
+int		far	mpnet;				// NET given: 1
+byte	far	mpserver[4];
+unsigned far mpport = 31992;
+int		far	mpbot;				// NETBOT: random controls of its own
+char	far	mpname[17];
+int		far	mpstate;			// 0 hello, 1 welcomed, 2 started, 3 over
+byte	far	mpstart[4+4*MAXPLAYERS];	// START's players, map, skill, rules, starts
+byte	far	mpring[RING][3*MAXPLAYERS];
+long	far	mpringstep[RING];
+long	far	mphave = -1;		// the highest step held with none missing
+long	far	mpplayed = -1;		// the highest step played
+unsigned far mpseq;
+long	far	mpdesync = -1;		// the first step a DESYNC named
+byte	far	mppkt[64+3*MAXPLAYERS*8];
+unsigned far mpbotrnd = 1;
+int		far	mpbotleft, far mpbotx, far mpboty, far mpbotb;
+
+static void PutL (byte far *p, unsigned long v)
+{
+	p[0] = v;
+	p[1] = v >> 8;
+	p[2] = v >> 16;
+	p[3] = v >> 24;
+}
+
+static unsigned long GetL (byte far *p)
+{
+	return p[0] | ((unsigned long)p[1] << 8) | ((unsigned long)p[2] << 16)
+		| ((unsigned long)p[3] << 24);
+}
+
+static void Head (int kind)
+{
+	mppkt[0] = 'W';
+	mppkt[1] = 'M';
+	mppkt[2] = 1;
+	mppkt[3] = kind;
+}
+
+//
+// Everything from the server
+//
+static void Take (byte far *d, unsigned len)
+{
+	unsigned long first;
+	int			count,players,i,n;
+	long		s;
+
+	if (len < 4 || d[0] != 'W' || d[1] != 'M' || d[2] != 1)
+		return;
+	switch (d[3])
+	{
+	case 2:							// WELCOME
+		if (mpstate == 0 && len >= 6)
+		{
+			mplocal = d[4];
+			mpstate = 1;
+		}
+		break;
+	case 3:							// START
+		if (mpstate == 1 && len >= 8)
+		{
+			n = d[4] > MAXPLAYERS ? MAXPLAYERS : d[4];
+			_fmemset (mpstart,0,sizeof(mpstart));
+			_fmemcpy (mpstart,d+4,4+4*n);
+			mpstart[0] = n;
+			mpstate = 2;
+		}
+		break;
+	case 5:							// STEPS
+		if (len < 10)
+			break;
+		first = GetL (d+4);
+		count = d[8];
+		players = d[9];
+		if (players != mpplayers || len < 10 + count*3*players)
+			break;
+		for (i=0;i<count;i++)
+		{
+			s = first+i;
+			if (s <= mphave || s > mpplayed + RING)
+				continue;			// had it, or no room yet: it comes again
+			_fmemcpy (mpring[s % RING],d+10+i*3*players,3*players);
+			mpringstep[s % RING] = s;
+		}
+		while (mpringstep[(mphave+1) % RING] == mphave+1)
+			mphave++;
+		break;
+	case 7:							// DESYNC
+		if (mpdesync < 0 && len >= 9)
+			mpdesync = GetL (d+4);
+		break;
+	case 8:							// BYE
+		mpstate = 3;
+		break;
+	}
+}
+
+//
+// This player's controls, as a demo would record them: button bits, turn,
+// move -- PollControls' polling at DEMOTICS, without touching what the
+// game is playing (the home context's globals are put back)
+//
+static void LocalInput (byte *bits, int *x, int *y)
+{
+	boolean	save[NUMBUTTONS],held[NUMBUTTONS];
+	int		sx = controlx, sy = controly, st = tics, i;
+
+	if (mpbot)
+	{
+		if (--mpbotleft <= 0)		// NETBOT: runs, turns and strafes, a few
+		{							// frames each; fire now and then
+			mpbotrnd = mpbotrnd*25173 + 13849;
+			mpbotleft = 4 + (mpbotrnd >> 12);
+			mpbotx = (int)((mpbotrnd >> 4) & 127) - 64;
+			mpboty = (mpbotrnd & 0x100) ? -60 : (int)((mpbotrnd >> 2) & 63) - 32;
+			mpbotb = ((mpbotrnd & 0x600) == 0x600) | ((mpbotrnd & 0x800) ? 4 : 0);
+		}
+		mpbotrnd = mpbotrnd*25173 + 13849;
+		*bits = mpbotb | ((mpbotrnd & 0x700) == 0x700 ? 8 : 0);	// use, now and then
+		*x = mpbotx;
+		*y = mpboty;
+		return;
+	}
+	memcpy (save,buttonstate,sizeof(save));
+	memcpy (held,buttonheld,sizeof(held));
+	tics = DEMOTICS;
+	controlx = controly = 0;
+	memset (buttonstate,0,sizeof(buttonstate));
+	PollKeyboardButtons ();
+	if (mouseenabled)
+		PollMouseButtons ();
+	if (joystickenabled)
+		PollJoystickButtons ();
+	PollKeyboardMove ();
+	if (mouseenabled)
+		PollMouseMove ();
+	if (joystickenabled)
+		PollJoystickMove ();
+	if (controlx > 100*tics)
+		controlx = 100*tics;
+	if (controlx < -100*tics)
+		controlx = -100*tics;
+	if (controly > 100*tics)
+		controly = 100*tics;
+	if (controly < -100*tics)
+		controly = -100*tics;
+	*x = controlx/tics;
+	*y = controly/tics;
+	for (*bits = 0,i=NUMBUTTONS-1;i>=0;i--)
+		*bits = (*bits << 1) | (buttonstate[i] ? 1 : 0);
+	memcpy (buttonstate,save,sizeof(save));
+	memcpy (buttonheld,held,sizeof(held));
+	controlx = sx;
+	controly = sy;
+	tics = st;
+}
+
+static void SendInput (void)
+{
+	byte	bits;
+	int		x,y;
+
+	LocalInput (&bits,&x,&y);
+	Head (4);
+	mppkt[4] = mplocal;
+	mppkt[5] = bits;
+	mppkt[6] = x;
+	mppkt[7] = y;
+	mpseq++;
+	mppkt[8] = mpseq;
+	mppkt[9] = mpseq >> 8;
+	PutL (mppkt+10,mphave < 0 ? 0xffffffffl : mphave);
+	NetSend (mppkt,14);
+}
+
+static void Say (char far *s)
+{
+	char	line[80];
+
+	CenterWindow (28,5);
+	US_CPrint (s);
+	NetStatus (line);				// what the network is doing
+	US_CPrint ((char far *)line);
+	VW_UpdateScreen ();
+}
+
+static void NetQuit (char far *why)
+{
+	char	buf[80];
+
+	NetStop ();
+	_fstrcpy ((char far *)buf,why);
+	Quit (buf);
+}
+
+//
+// The command line: NET a.b.c.d [PORT n] [NAME x] [NETBOT]
+//
+int MPNetArgs (void)
+{
+	int		i,k;
+
+	for (i = 1;i < _argc;i++)
+	{
+		char	far *a = _argv[i];
+		char	far *p = i+1 < _argc ? _argv[i+1] : a;
+		unsigned n = 0;
+
+		if ((a[0]|32) == 'n' && (a[1]|32) == 'e' && (a[2]|32) == 't' && !a[3])
+		{
+			int	v = 0, part = 0, digits = 0;
+
+			for (;;p++)
+				if (*p >= '0' && *p <= '9')
+				{
+					v = v*10 + *p - '0';
+					digits++;
+				}
+				else
+				{
+					if (!digits || part > 3 || v > 255)
+						break;
+					mpserver[part++] = v;
+					v = digits = 0;
+					if (*p != '.')
+						break;
+				}
+			if (part == 4)
+				mpnet = 1;
+		}
+		if ((a[0]|32) == 'p' && (a[1]|32) == 'o' && (a[2]|32) == 'r' && (a[3]|32) == 't' && !a[4])
+		{
+			for (;*p >= '0' && *p <= '9';p++)
+				n = n*10 + *p - '0';
+			if (n)
+				mpport = n;
+		}
+		if ((a[0]|32) == 'n' && (a[1]|32) == 'a' && (a[2]|32) == 'm' && (a[3]|32) == 'e' && !a[4])
+		{
+			for (k=0;k<16 && p[k];k++)
+				mpname[k] = p[k];
+			mpname[k] = 0;
+		}
+		if ((a[0]|32) == 'n' && (a[1]|32) == 'e' && (a[2]|32) == 't' && (a[3]|32) == 'b'
+		&& (a[4]|32) == 'o' && (a[5]|32) == 't' && !a[6])
+			mpbot = 1;
+	}
+	return mpnet;
+}
+
+static void NetLoop (void)
+{
+	long	lastsend = -100;
+	int		n,i;
+
+	playstate = TimeCount = lasttimecount = 0;
+	frameon = 0;
+	running = false;
+	anglefrac = 0;
+	facecount = 0;
+	memset (buttonstate,0,sizeof(buttonstate));
+	ClearPaletteShifts ();
+	if (MousePresent)
+		Mouse(MDelta);
+	tics = DEMOTICS;
+	SendInput ();					// "loaded": the server starts its clock
+	do
+	{
+		NetPump (Take);
+		if (TimeCount - lastsend >= 2)
+		{
+			lastsend = TimeCount;
+			SendInput ();
+		}
+		for (n=0;n < 16 && mpplayed < mphave && !playstate;n++)
+		{
+			byte	far *row = mpring[++mpplayed % RING];
+
+			for (i=0;i<mpplayers;i++)
+				SetControls (i,row+3*i);
+			madenoise = false;
+			MoveDoors ();
+			MovePWalls ();
+			MPDoActors ();
+			MPStep ();
+			if (!(mpsteps % 50))
+			{
+				Head (6);
+				mppkt[4] = mplocal;
+				mppkt[5] = 0;
+				PutL (mppkt+6,mpsteps);
+				PutL (mppkt+10,mpsum);
+				NetSend (mppkt,14);
+			}
+			UpdatePaletteShifts ();
+			gamestate.TimeCount += tics;
+		}
+		if (n || !frameon)
+		{
+			MPCamera (true);
+			ThreeDRefresh ();
+			MPCamera (false);
+		}
+		UpdateSoundLoc ();
+		if (screenfaded)
+			VW_FadeIn ();
+		if (Keyboard[sc_Escape] || mpstate == 3)
+			playstate = ex_abort;
+	} while (!playstate);
+}
+
+void MPNetGame (void)
+{
+	static char far joining[] = "Joining the server...";
+	static char far waiting[] = "Waiting for the others...";
+	static char far defname[] = "Player";
+	static char far noanswer[] = "No answer from the server in 90 seconds";
+	char	far *why;
+	long	last = -100, began;
+	int		i;
+
+	if (!mpname[0])
+		_fstrcpy (mpname,defname);
+	if (!NetStart (mpserver,mpport,&why))
+		NetQuit (why);
+	Say (joining);
+	began = TimeCount;
+	while (mpstate < 2)				// HELLO until WELCOME, then wait for START
+	{
+		NetPump (Take);
+		if (mpstate == 0 && TimeCount - began > 90*70)
+			NetQuit (noanswer);		// nobody may be at this keyboard
+		if (TimeCount - last >= 35)
+		{
+			last = TimeCount;
+			if (mpstate == 0)
+				Say (joining);
+			if (!NetReady ())
+				NetAsk ();
+			else if (mpstate == 0)
+			{
+				Head (1);
+				_fmemset (mppkt+4,0,16);
+				_fstrcpy ((char far *)mppkt+4,mpname);
+				PutL (mppkt+20,0x12345678l);	// the build -- to be the EXE's CRC
+				mppkt[24] = 0xff;
+				NetSend (mppkt,25);
+			}
+			else
+				Say (waiting);
+		}
+		if (Keyboard[sc_Escape])
+		{
+			Head (8);
+			mppkt[4] = mplocal;
+			NetSend (mppkt,5);
+			NetStop ();
+			Quit (NULL);
+		}
+	}
+	for (i=0;i<RING;i++)
+		mpringstep[i] = -1;
+
+	NewGame (mpstart[2],mpstart[1]/10);
+	gamestate.mapon = mpstart[1] % 10;
+	godmode = false;
+	demoplayback = false;
+	Init (mpstart[0]);
+	VW_FadeOut ();
+	SETFONTCOLOR(0,15);
+	DrawPlayScreen ();
+	VW_FadeIn ();
+	startgame = false;
+	SetupGameLevel ();
+	MPSpawn (mpstart+4);
+	StartMusic ();
+	PM_CheckMainMem ();
+	fizzlein = true;
+	DrawLevel ();
+
+	NetLoop ();
+
+	Head (8);						// BYE
+	mppkt[4] = mplocal;
+	NetSend (mppkt,5);
+	NetStop ();
+	ShutdownId ();
+	MPReport ();
+	{
+		static char far r[] = "net: %ld steps played, %ld held; packets sent %ld, received %ld; %Fs\n";
+		static char far ok[] = "no desync", far bad[] = "DESYNC reported";
+		char	s[90];
+
+		_fstrcpy ((char far *)s,r);
+		printf (s,mpplayed+1,mphave+1,netsentn,netrecvn,mpdesync < 0 ? (char far *)ok : (char far *)bad);
+	}
+	exit (0);
 }
 
 void MPReport (void)

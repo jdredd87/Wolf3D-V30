@@ -74,6 +74,38 @@ second, every player holding all 400, and the V30 and the 486 printing the
 same CRC (`99C042E3`); the server compared their SYNCs with the fake's --
 the same sums -- and found no desync.
 
+**Phase 4 -- the game on the network -- works, 2026-10-06.**
+`WOLF3DM NET server [PORT n] [NAME x] [NETBOT]` joins the server and plays
+the map it names: each frame this player's controls go out as `INPUT`
+(`NETBOT`: random ones of its own, for tests with nobody at a keyboard),
+every step that has arrived is played exactly as a demo's step, and the
+picture is drawn once.  `WOLFSRC/WL_NET.C` is the network -- the packet
+driver, ARP (answered, always), IPv4 and UDP -- and `WL_NETA.ASM` the
+driver's receive callback, into a 12 KB ring allocated only for a network
+game.  The first match, the V30 (P2) and the 486 (P1) through the Python
+server on the Windows PC: **600 steps, both machines ending on the same
+game-state checksum (`203A7E11`), no desync** -- and the server's
+recording of it, replayed with `TIMEDEMO MGEN`, ending on that same
+checksum.  Getting there found:
+
+* **the receive ring at 0000:0000**: Wolf3D's memory manager keeps a
+  *near* pointer to a block's owner, and the owner was declared far -- the
+  first frame in wrote over the interrupt vector table.  The owner is near;
+* **the random numbers**: `SetupGameLevel` seeds them from the clock
+  unless a demo is playing or recording -- each machine began its level
+  with different ones.  Multiplayer seeds them as demos do;
+* **the bosses and the sound card**: five bosses' deaths last longer with
+  digitized sound, so machines with different cards would part on any boss
+  level.  In multiplayer every machine takes the longer one (`MPDIGI`);
+* **the checksum every step** cost the V30 most of its frame (32-bit
+  shifts are software on an 8086): it is summed only on the 50th steps,
+  when it is compared;
+* **a recording must carry its skill** (P1's start's 4th byte, skill + 1),
+  or the replay plays at id's demo skill and parts at once;
+* the join waits 90 seconds and then quits, and shows what the network is
+  doing -- frames sent and received, ARP, this machine's MAC -- so a stuck
+  join says why.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any

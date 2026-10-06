@@ -1247,7 +1247,7 @@ void SpawnTrans (int tilex, int tiley)
 {
 	unsigned	far *map,tile;
 
-	if (SoundBlasterPresent && DigiMode != sds_Off)
+	if (MPDIGI (SoundBlasterPresent && DigiMode != sds_Off))
 		s_transdie01.tictime = 105;
 
 	SpawnNewObj (tilex,tiley,&s_transstand);
@@ -1328,7 +1328,7 @@ void SpawnUber (int tilex, int tiley)
 {
 	unsigned	far *map,tile;
 
-	if (SoundBlasterPresent && DigiMode != sds_Off)
+	if (MPDIGI (SoundBlasterPresent && DigiMode != sds_Off))
 		s_uberdie01.tictime = 70;
 
 	SpawnNewObj (tilex,tiley,&s_uberstand);
@@ -1427,7 +1427,7 @@ void SpawnWill (int tilex, int tiley)
 {
 	unsigned	far *map,tile;
 
-	if (SoundBlasterPresent && DigiMode != sds_Off)
+	if (MPDIGI (SoundBlasterPresent && DigiMode != sds_Off))
 		s_willdie2.tictime = 70;
 
 	SpawnNewObj (tilex,tiley,&s_willstand);
@@ -1602,7 +1602,7 @@ void SpawnDeath (int tilex, int tiley)
 {
 	unsigned	far *map,tile;
 
-	if (SoundBlasterPresent && DigiMode != sds_Off)
+	if (MPDIGI (SoundBlasterPresent && DigiMode != sds_Off))
 		s_deathdie2.tictime = 105;
 
 	SpawnNewObj (tilex,tiley,&s_deathstand);
@@ -1796,7 +1796,7 @@ void SpawnAngel (int tilex, int tiley)
 	unsigned	far *map,tile;
 
 
-	if (SoundBlasterPresent && DigiMode != sds_Off)
+	if (MPDIGI (SoundBlasterPresent && DigiMode != sds_Off))
 		s_angeldie11.tictime = 105;
 
 	SpawnNewObj (tilex,tiley,&s_angelstand);
@@ -2213,7 +2213,7 @@ void SpawnSchabbs (int tilex, int tiley)
 {
 	unsigned	far *map,tile;
 
-	if (DigiMode != sds_Off)
+	if (MPDIGI (DigiMode != sds_Off))
 		s_schabbdie2.tictime = 140;
 	else
 		s_schabbdie2.tictime = 5;
@@ -2242,7 +2242,7 @@ void SpawnGift (int tilex, int tiley)
 {
 	unsigned	far *map,tile;
 
-	if (DigiMode != sds_Off)
+	if (MPDIGI (DigiMode != sds_Off))
 	  s_giftdie2.tictime = 140;
 	else
 	  s_giftdie2.tictime = 5;
@@ -2271,7 +2271,7 @@ void SpawnFat (int tilex, int tiley)
 {
 	unsigned	far *map,tile;
 
-	if (DigiMode != sds_Off)
+	if (MPDIGI (DigiMode != sds_Off))
 	  s_fatdie2.tictime = 140;
 	else
 	  s_fatdie2.tictime = 5;
@@ -2828,7 +2828,7 @@ void SpawnFakeHitler (int tilex, int tiley)
 	unsigned	far *map,tile;
 
 
-	if (DigiMode != sds_Off)
+	if (MPDIGI (DigiMode != sds_Off))
 	  s_hitlerdie2.tictime = 140;
 	else
 	  s_hitlerdie2.tictime = 5;
@@ -2857,7 +2857,7 @@ void SpawnHitler (int tilex, int tiley)
 {
 	unsigned	far *map,tile;
 
-	if (DigiMode != sds_Off)
+	if (MPDIGI (DigiMode != sds_Off))
 		s_hitlerdie2.tictime = 140;
 	else
 		s_hitlerdie2.tictime = 5;

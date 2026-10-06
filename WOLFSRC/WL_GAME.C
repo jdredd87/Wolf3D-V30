@@ -640,8 +640,8 @@ void SetupGameLevel (void)
 	 gamestate.treasurecount=0;
 	}
 
-	if (demoplayback || demorecord)
-		US_InitRndT (false);
+	if (demoplayback || demorecord || mpplayers)	// multiplayer: every machine's
+		US_InitRndT (false);							// random numbers the same
 	else
 		US_InitRndT (true);
 
@@ -1112,6 +1112,8 @@ void PlayDemo (int demonumber)
 	NewGame (1,0);
 	gamestate.mapon = *demoptr++;
 	gamestate.difficulty = gd_hard;
+	if (tdmgen && ((byte far *)demobuffer)[5])	// MGEN: a recorded network match
+		gamestate.difficulty = ((byte far *)demobuffer)[5] - 1;	// keeps its skill
 	length = *((unsigned far *)demoptr)++;
 	demoptr++;
 	lastdemoptr = demoptr-4+length;
@@ -1126,8 +1128,8 @@ void PlayDemo (int demonumber)
 	demoplayback = true;
 
 	SetupGameLevel ();
-	if (tdmgen)
-		MPSpawn ();					// MGEN: every player at its start
+	if (tdmgen)						// MGEN: every player at its start
+		MPSpawn ((byte far *)demobuffer + 2);
 	else if (tdgen && ((byte far *)demobuffer)[0])	// GEN: the generated start
 		SpawnPlayer (((byte far *)demobuffer)[0],((byte far *)demobuffer)[1],
 			((byte far *)demobuffer)[2]);

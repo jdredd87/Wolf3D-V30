@@ -556,6 +556,8 @@ boolean LoadTheGame(int file,int x,int y)
 
 void ShutdownId (void)
 {
+	NetStop ();					// multiplayer: the packet driver's handles
+								// back, on every way out (WL_NET.C)
 	US_Shutdown ();
 	SD_Shutdown ();
 	PM_Shutdown ();
@@ -1277,7 +1279,10 @@ void InitGame (void)
 
 
 #ifndef SPEAR
-	if (mminfo.mainmem < 235000L)
+	if (mminfo.mainmem < 215000L)	// multiplayer (StevenC & Claude): id's 235000
+									// less 20 KB, as the BSP version -- the
+									// network code put the 486 (550 KB free)
+									// just under it
 #else
 	if (mminfo.mainmem < 257000L && !MS_CheckParm("debugmode"))
 #endif
@@ -1816,6 +1821,8 @@ void    DemoLoop (void)
 
 	if (timedemo)
 		TimeDemo ();			// never returns
+	if (MPNetArgs ())
+		MPNetGame ();			// NET server: a network game (WL_MP.C); never returns
 
 	StartCPMusic(INTROSONG);
 
@@ -1955,6 +1962,8 @@ void main (void)
 		timedemo = true;
 		NoWait = true;			// no "press a key" at the signon screen
 	}
+	if (MPNetArgs ())				// NET server: no "press a key" either --
+		NoWait = true;			// it may be started with nobody there
 
 	InitGame ();
 
