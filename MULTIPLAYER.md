@@ -1,7 +1,35 @@
-# Multiplayer -- a plan, not yet started
+# Multiplayer
 
-Written by **StevenC** and **Claude** (Anthropic), 2026-10-06.  Parked
-until the 386SX's network card arrives; nothing here is built yet.
+Written by **StevenC** and **Claude** (Anthropic), 2026-10-06.  Started the
+same day on the V30 and the 486 (branch `multiplayer`); the 386SX joins
+when its network card arrives.
+
+## Where it stands
+
+**Phase 1 -- up to four players in one game, no network -- works.**
+`WOLF3DM TIMEDEMO MGEN n [LOCAL k] [MORTAL]` plays `Mn.DEM`, a demo
+holding every player's controls (`mp/mpdemo.py` writes twenty: 2 and 4
+players on each of E1's ten maps), and reports a checksum of the whole game
+state every 50 steps.  `mp/mpsweep.py` plays every demo from several
+players' eyes on a box and compares.
+
+| | |
+|---|---|
+| the players | each extra player's globals (`player`, `gamestate`, controls, weapon timing) kept in a context and swapped in, so id's `T_Player` and `T_Attack` run unchanged for every player (`WOLFSRC/WL_MP.C`) |
+| the renderer out of the game | id's renderer picked up items, woke enemies and decided gun hits -- for the one player it drew.  In multiplayer pickups happen where each player stands, nothing is woken by a screen, and aiming is geometry: the same cone id's screen test made, ~8 degrees, for any window size |
+| enemies | DOOM's: look at each player in turn, go for whoever made a noise, keep a target once fighting, turn on whoever hurt them.  The target is in `flagspad`, the V30 build's pad byte |
+| dying | DOOM's: no lives; a body on the floor; use after a second respawns at the player's own start with 100 health, a pistol and 50 bullets |
+| keys | one player's keys are everyone's |
+| proof | all 20 demos give the same checksums from P1's, P2's, P3's or P4's eyes, mortal or not; the V30 matched the 486 on E1M1 (a 20-demo V30 sweep against the 486's results is the next record); single player still IDENTICAL to id over the attract loop |
+
+Still for later phases: players shootable (deathmatch) and blocking each
+other, projectiles that hit any player (bosses, episodes 2-6), the BJ
+sprites in place of the SS stand-ins, colours, a local camera that dies
+properly, and everything network.
+
+**Phase 2 -- the wire -- has its tool**: `mp/mpping.pas` (`MPPING ECHO` on
+one box, `MPPING PING` on the other) times 48-byte round trips on port
+31992 through the PicoMEMs' WiFi.
 
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
