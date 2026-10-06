@@ -10,6 +10,8 @@ On the DOS machine, in C:\\WOLF3D, type SHOWCASE and pick a version:
     B  WOLF3DB -- id's rays with far walls in less detail, and every option
     T  WOLF3DB with the BSP tree finding the walls
     A  all three, one after another (the long video)
+    C  choose: Y or N for each of V, B and T -- any combination, in that
+       order (StevenC, 2026-10-06: "what if I just want B and T?")
 
 Two questions follow (each answers itself after 15 seconds): whether to
 start with id Software's own 1992 code (WOLF3DO.EXE: id's renderer and
@@ -27,8 +29,9 @@ The files: SHOWCASE.BAT (the menu), SHOWO.BAT (id's code), SHOWV.BAT,
 SHOWB.BAT and SHOWT.BAT (the reels).  Each reel runs straight down, no GOTO
 but to its end -- COMMAND.COM finds a label by reading the file from the
 top.  Q in a reel leaves SHOWQ.FLG, so SHOWCASE stops too; SHOWMAP.FLG
-says to run the map, SHOWNOID.FLG to leave out id's code, and SHOWPICK.SEL
-holds the version picked (the questions after it overwrite ERRORLEVEL).  The game's
+says to run the map, SHOWNOID.FLG to leave out id's code, and SHOWV.RUN,
+SHOWB.RUN and SHOWT.RUN say which reels were picked (the questions after
+the pick overwrite ERRORLEVEL).  The game's
 report goes to SHOWRES.TXT and is shown from there, and each run's "secs"
 line -- its frames and speed over all its play -- is gathered into
 SHOWSUM.TXT for the summary.
@@ -185,6 +188,9 @@ def menu():
         "IF EXIST SHOWQ.FLG DEL SHOWQ.FLG",
         "IF EXIST SHOWMAP.FLG DEL SHOWMAP.FLG",
         "IF EXIST SHOWNOID.FLG DEL SHOWNOID.FLG",
+        "IF EXIST SHOWV.RUN DEL SHOWV.RUN",
+        "IF EXIST SHOWB.RUN DEL SHOWB.RUN",
+        "IF EXIST SHOWT.RUN DEL SHOWT.RUN",
         "IF EXIST SHOWCPU.TXT DEL SHOWCPU.TXT",
         "IF NOT EXIST W3MENU.EXE GOTO NOCPU",     # (a redirect on an IF line
         "W3MENU /CPU > SHOWCPU.TXT",              # happens either way)
@@ -202,27 +208,53 @@ def menu():
         "ECHO     B  WOLF3DB -- far walls in less detail, and every detail option",
         "ECHO     T  WOLF3DB with the BSP tree finding the walls",
         "ECHO     A  all three, one after another",
+        "ECHO     C  choose: any of the three, asked one by one",
         "ECHO     Q  quit",
         "ECHO.",
-        "CHOICE /C:VBTAQ /N    Which? ",
-        "IF ERRORLEVEL 5 GOTO END",
-        # the pick is kept in SHOWPICK.SEL, because the two questions after
-        # it overwrite ERRORLEVEL.  Never "IF ... ECHO x > FILE": COMMAND.COM
-        # opens the redirection before it tests the IF, so the file is
-        # created (emptied) whether or not the condition holds
+        "CHOICE /C:VBTACQ /N    Which? ",
+        "IF ERRORLEVEL 6 GOTO END",
+        # the reels picked are kept as SHOWV.RUN, SHOWB.RUN and SHOWT.RUN,
+        # because the questions after them overwrite ERRORLEVEL.  Never
+        # "IF ... ECHO x > FILE": COMMAND.COM opens the redirection before it
+        # tests the IF, so the file is created whether or not the IF holds
+        "IF ERRORLEVEL 5 GOTO PICKC",
         "IF ERRORLEVEL 4 GOTO PICKA",
         "IF ERRORLEVEL 3 GOTO PICKT",
         "IF ERRORLEVEL 2 GOTO PICKB",
-        "ECHO V > SHOWPICK.SEL",
+        "ECHO V > SHOWV.RUN",
         "GOTO ASK",
         ":PICKB",
-        "ECHO B > SHOWPICK.SEL",
+        "ECHO B > SHOWB.RUN",
         "GOTO ASK",
         ":PICKT",
-        "ECHO T > SHOWPICK.SEL",
+        "ECHO T > SHOWT.RUN",
         "GOTO ASK",
         ":PICKA",
-        "ECHO A > SHOWPICK.SEL",
+        "ECHO V > SHOWV.RUN",
+        "ECHO B > SHOWB.RUN",
+        "ECHO T > SHOWT.RUN",
+        "GOTO ASK",
+        ":PICKC",
+        "ECHO.",
+        "ECHO   V  WOLF3DV?  Y or N",
+        "CHOICE /C:YN /N > NUL",
+        "IF ERRORLEVEL 2 GOTO PICKC2",
+        "ECHO V > SHOWV.RUN",
+        ":PICKC2",
+        "ECHO   B  WOLF3DB?  Y or N",
+        "CHOICE /C:YN /N > NUL",
+        "IF ERRORLEVEL 2 GOTO PICKC3",
+        "ECHO B > SHOWB.RUN",
+        ":PICKC3",
+        "ECHO   T  WOLF3DB with the BSP tree?  Y or N",
+        "CHOICE /C:YN /N > NUL",
+        "IF ERRORLEVEL 2 GOTO PICKED",
+        "ECHO T > SHOWT.RUN",
+        ":PICKED",
+        "IF EXIST SHOWV.RUN GOTO ASK",          # none of the three: nothing to do
+        "IF EXIST SHOWB.RUN GOTO ASK",
+        "IF EXIST SHOWT.RUN GOTO ASK",
+        "GOTO END",
         ":ASK",
         "ECHO.",
         "ECHO   Start with id's original code, for its speed?  Y or N  (Y in %d seconds)" % ASK,
@@ -239,31 +271,19 @@ def menu():
         ":GO",
         "IF NOT EXIST SHOWNOID.FLG CALL SHOWO",
         "IF EXIST SHOWQ.FLG GOTO END",
-        'FIND "B" SHOWPICK.SEL > NUL',
-        "IF NOT ERRORLEVEL 1 GOTO B",
-        'FIND "T" SHOWPICK.SEL > NUL',
-        "IF NOT ERRORLEVEL 1 GOTO T",
-        'FIND "A" SHOWPICK.SEL > NUL',
-        "IF NOT ERRORLEVEL 1 GOTO ALL",
-        "CALL SHOWV",
-        "GOTO END",
-        ":B",
-        "CALL SHOWB",
-        "GOTO END",
-        ":T",
-        "CALL SHOWT",
-        "GOTO END",
-        ":ALL",
-        "CALL SHOWV",
+        "IF EXIST SHOWV.RUN CALL SHOWV",
         "IF EXIST SHOWQ.FLG GOTO END",
-        "CALL SHOWB",
+        "IF EXIST SHOWB.RUN CALL SHOWB",
         "IF EXIST SHOWQ.FLG GOTO END",
-        "CALL SHOWT",
+        "IF EXIST SHOWT.RUN CALL SHOWT",
         ":END",
         "IF EXIST SHOWQ.FLG DEL SHOWQ.FLG",
         "IF EXIST SHOWMAP.FLG DEL SHOWMAP.FLG",
         "IF EXIST SHOWNOID.FLG DEL SHOWNOID.FLG",
-        "IF EXIST SHOWPICK.SEL DEL SHOWPICK.SEL",
+        "IF EXIST SHOWV.RUN DEL SHOWV.RUN",
+        "IF EXIST SHOWB.RUN DEL SHOWB.RUN",
+        "IF EXIST SHOWT.RUN DEL SHOWT.RUN",
+        "IF EXIST SHOWPICK.SEL DEL SHOWPICK.SEL",   # left by the 10-05 version
         "IF NOT EXIST SHOWSUM.TXT GOTO BYE",
         "CLS",
         "ECHO   " + TITLE,
