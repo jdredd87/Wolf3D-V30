@@ -60,8 +60,11 @@ the DOS game cut down to a renderer.
   `US_RndT` calls while the gatling pickup sound plays (why `TIMEDEMO CRC`
   turns effects off).  Anything local -- face, sound, the map -- gets its
   own random numbers.  Audit for others.
-* **No player sprite.**  Recoloured guard sprites; BJ's running frames
-  (the victory sequence) exist but only from behind.
+* **No player sprite in play** -- but BJ himself is in the data, at
+  sprite size: the victory sequence's `SPR_BJ_W1`-`W4` (a four-frame run,
+  **facing the viewer**) and `SPR_BJ_JUMP1`-`4` (a leap, arms up).  See
+  "The players' look" below.  (An earlier draft said they show him from
+  behind; extracting them showed they do not.)
 * **DGROUP has ~12 bytes spare** on `v30-8086`: every new variable and
   buffer goes in a far segment.  Packet buffers and code cost a few KB of
   page cache.
@@ -86,7 +89,7 @@ would catch a mismatch.
 |---|---|---|---|
 | goal | the level, together | frags, to `FRAGLIMIT` / `TIMELIMIT` | the same |
 | the exit | **any** player at the elevator ends the level for everyone | does nothing; a limit ends the level | the same |
-| a player dies | presses use (or fire) to respawn at **their own** player start, with a pistol and starting ammo; the level stays as it was | respawns at a **random deathmatch start**, pistol and starting ammo | the same |
+| a player dies | presses use (or fire) to respawn at **their own** player start, with a pistol and **50 bullets** (DOOM's figure; Wolf3D's own 8 is thin); the level stays as it was | respawns at a **random deathmatch start**, pistol and 50 bullets | the same |
 | lives | none: respawns are unlimited (DOOM has no lives) | none | none |
 | keys | **one player picks a key up, every player has it** (StevenC, 2026-10-06 -- here we part from DOOM, which leaves a netgame's keys in the map for each player to take) | **everyone starts with both keys** (DOOM gives all keys in deathmatch) | the same |
 | weapons | **stay**: each player can take each weapon once | stay | **taken**, and respawn after 30 s |
@@ -116,12 +119,36 @@ other and outside locked areas; a spawn picks one at random from the
 game's own random numbers, and DOOM's rule applies -- never one where
 another player stands.
 
-**The players' look.**  DOOM tells its four players apart by colour
-(green, indigo, brown, red), translating the one sprite's colours.  Wolf3D
-has no player sprite; the guard's, recoloured four ways, is the plan --
-which means the sprite scaler needs a colour-translation path (asm, a
-256-byte table a player), and with enemies on, a recoloured guard must not
-look like an enemy.  To decide when we see it.
+**The players' look: BJ** (StevenC, 2026-10-06: not guards -- "playing
+as Nazis doesn't sit well").  Built from what the game already has:
+
+| in the data | what it gives |
+|---|---|
+| `SPR_BJ_W1`-`W4` (VSWAP) | the run: four frames, front view, guard scale, his grey outfit |
+| `SPR_BJ_JUMP1`-`4` | the leap, arms up -- a pain frame |
+| `L_GUYPIC`, `L_GUY2PIC` (VGAGRAPH, 104x88) | BJ facing out, pistol raised in both hands: the arms and gun for a firing frame, scaled down onto the running body |
+| `L_BJWINSPIC` (88x88) | BJ with the chaingun |
+| `H_BJPIC` (96x88) | crouched with a pistol |
+| `FACE1A`... (24x32) | the status-bar faces: one per player on the frag table and the co-op tally, in their colours |
+
+* **Rotations.**  Wolf3D's bosses (Hans, Gretel, the fake Hitler) have
+  one view and always face you, so a front-only BJ is in the game's own
+  style and is the first version.  Eight views, as a guard has, need new
+  art -- a back (the head repainted as hair) and the sides; drafts to be
+  judged by eye.
+* **Firing**: the run's hands are empty -- arms and pistol from
+  `L_GUYPIC`, composited.  **Death**: no dead BJ exists, and the guards'
+  deaths are out -- a fall and a body on the floor made from his own
+  frames, as DOOM's player corpse is made.
+* **Four colours**: his grey outfit's colours translated four ways, as
+  DOOM translates its green (green, indigo, brown, red) -- through a
+  256-byte table a player, in a colour-translating path of the asm sprite
+  scaler, so no extra sprite memory.
+* **id's art is never committed** -- the repo is public.  A tool builds the
+  player sprites on the player's own machine from their own `VSWAP.WL6`
+  and `VGAGRAPH.WL6` (as the BSP version writes `BSPCACHE.WL6`): id's
+  frames, our edits applied, written to a file `WOLF3DM` loads.  Only the
+  edits and the code are in the repository.
 
 **Between levels**, DOOM's intermission: co-op shows every player's
 kills, items and secrets; deathmatch the frag table (who killed whom).
@@ -244,6 +271,5 @@ the 386SX arrives.
   as it is.)
 * Does the 486 smooth the view between steps, or just redraw?
 * Which UDP port?
-* Starting ammo on a respawn: Wolf3D's 8 bullets, or more (DOOM's 50 is
-  its own pistol's clip)?  8 is thin for deathmatch.
-* The players' colours: a recoloured guard, or something else?
+* BJ front-only for the first version, or the eight views from the start?
+* Which four colours?
