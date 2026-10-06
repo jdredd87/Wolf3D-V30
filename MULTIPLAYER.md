@@ -148,8 +148,8 @@ views, 4 walking frames in 8 views, 3 firing, 2 pain, 3 dying and a body,
 
 The previews (`stage/mp/bj_*.png`, from `python mp/mkbj.py WL6FOLDER`)
 read as BJ at every angle.  Still to do: the built sprites written to a
-file `WOLF3DM` loads (`mp/wl6art.py` reads VSWAP's format and can write
-it), the scaler's translation path, and a look in the game.  BJ's own
+file `WOLF3DM` loads (`mp/wl6art.py` reads VSWAP's sprite format; writing
+it is next), the scaler's translation path, and a look in the game.  BJ's own
 pictures stay for the HUD and tables: the status-bar faces (`FACE1A`...)
 one per player on the frag table and the co-op tally, in their colours.
 
