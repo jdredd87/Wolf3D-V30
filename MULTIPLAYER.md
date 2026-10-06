@@ -164,7 +164,42 @@ kills, items and secrets; deathmatch the frag table (who killed whom).
 Wolf3D's own level-end screen becomes that table.
 
 **Also as DOOM**: the status bar is the local player's; a message line
-says who fragged whom; **chat** (`T` in DOOM) is a maybe, later.
+says who fragged whom; and **chat**, below.
+
+## Chat, as DOOM's (StevenC, 2026-10-06)
+
+* **`T` starts a message to everyone**; the line being typed shows at the
+  top of the view; Enter sends, Escape drops it.  While typing, the
+  player's keys type instead of moving them -- their controls go out as
+  "standing still", as DOOM's do.
+* **Everyone sees it** at the top of the view -- `BJ2: door's over here`
+  -- for a few seconds, with a short sound, the last few lines scrolling.
+  The same line carries the game's own messages: who fragged whom, who
+  joined and left.
+* **Names**: each player's name travels in `HELLO`; W3MENU sets it, and
+  the default is `Player 1`-`4`.  The name shows in the player's colour.
+* Optional, as DOOM: **macros** -- Alt+0-9 send ten preset lines from the
+  config file; and DOOM's colour keys to talk to one player only
+  (`G`, `R`, `B` for green, red, brown -- here `T` then a number would be
+  plainer).
+
+**Not in the lockstep stream.**  DOOM sent chat one character a tic inside
+the controls; a chat message changes nothing in the game, so here it is
+its own packet, `CHAT`, sent to the server, which stamps it, sends it to
+every player and keeps it in the match record.  Resent until the server
+acknowledges it, so WiFi loss cannot drop a line; a whole message arrives
+at once rather than a letter a step.
+
+**The keyboard needs a queue.**  Wolf3D's keyboard handler keeps only the
+*last* key typed (`LastASCII`, `ID_IN.C`).  At the V30's 5 frames a
+second, anyone typing faster than 5 letters a second would lose letters --
+so the INT 9 handler gets a small ring of typed characters (16 is
+plenty), read each frame while a message is being typed.  The same ring
+serves W3MENU-style name entry.
+
+**Drawing** is the automap's trick: text over the finished 3-D view, on
+the page about to be shown, with the game's own font -- a line or two of
+characters, nothing measurable even on the V30.
 
 ## The network layer in the game
 
@@ -191,6 +226,8 @@ Little-endian, one UDP datagram each, every one carrying a version byte.
 | `RESEND` | client | the first step it is missing |
 | `SYNC` | client | step number, game-state checksum (actors, doors, player states) |
 | `DESYNC` | server | the step at which two checksums differed, to every client |
+| `CHAT` | client | sender slot, message number (for the acknowledgement), up to 60 characters |
+| `CHATMSG` | server | the sender's name and colour, the text -- to every player; acknowledges the sender |
 | `BYE` | either | leaving |
 
 The server keeps every `STEPS` it sent: the match is a multiplayer demo,
@@ -268,9 +305,10 @@ the 386SX arrives.
    compared.
 5. **The FPC server**: each DOS machine in turn as the server (trials 2-4
    above), then all three playing with Windows serving (trial 5).
-6. **Modes and rules**: co-op and deathmatch, each with and without
+6. **Modes, rules and chat**: co-op and deathmatch, each with and without
    enemies; `RESPAWNITEMS`, `WEAPONSSTAY`, `RESPAWNENEMIES`, frag and time
-   limits; spawn points; the other player's sprite; W3MENU keys; and
+   limits; spawn points; the other player's sprite; chat and the
+   message line, with the keyboard queue; W3MENU keys; and
    prediction only if phase 2 says so.  Each rule is proven like the rest:
    a recorded match, the same checksums on every machine.
 
