@@ -247,7 +247,12 @@ replayable and checkable afterwards.
 ## Two servers, one protocol
 
 * **Python, on the Windows PC** -- written first, the reference: quick to
-  change, logs everything, saves the match.  ~200-300 lines.
+  change, logs everything, saves the match.  ~200-300 lines.  **It needs an inbound
+  Windows Firewall rule for its UDP port** (31992, or whatever `--port`
+  says), scoped to the LAN -- the bridge's own `dosfirewall.cmd` exists
+  because a missing rule once silenced both boxes and looked nothing like
+  a firewall (`C:\dosbridgeDEV\CLAUDE.md`).  Add the rule the same way,
+  or have the server check for it and say so.
 * **Free Pascal, on a DOS machine** -- the bridge's own network units
   (packet driver, ARP, UDP, the fast checksum), built for the plain 8086,
   so any box can be the server.  ~500-800 lines.  Two DOS details: its
