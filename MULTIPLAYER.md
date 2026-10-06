@@ -3,7 +3,7 @@
 Written by **StevenC** and **Claude** (Anthropic), 2026-10-06.  Parked
 until the 386SX's network card arrives; nothing here is built yet.
 
-id never shipped multiplayer for the DOS game.  The idea: two or more
+id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
 card with a packet driver.  It gets its own branch and its own EXE
@@ -69,45 +69,66 @@ the DOS game cut down to a renderer.
   one -- LOWDETAIL (7) or all switches (9) help.  The others are not held
   back by it.
 
-## Modes and rules -- as DOOM does it (StevenC, 2026-10-06)
+## Modes and rules -- exactly as DOOM does it (StevenC, 2026-10-06)
 
-Two modes, each **with enemies or without**, and DOOM-style options.  The
-server sends the rules in `WELCOME`, so every machine plays the same ones
-(they are part of the game state, and the checksum would catch a
-mismatch).
+**The rule: multiplayer behaves like DOOM's.**  Where DOOM has an answer,
+that is the answer; only what Wolf3D has and DOOM does not (lives,
+treasure, a boss who drops the key, a map with one player start) needs a
+decision of our own, and those follow DOOM's spirit.  **Up to 4 players**,
+DOOM's `MAXPLAYERS`.
 
-| | co-op | deathmatch |
-|---|---|---|
-| goal | the level, together: everybody at the elevator | frags, to a frag limit or time limit |
-| enemies on | they choose a target: nearest player, or the one in sight | the same, and they score as nobody's frag |
-| enemies off | the maps empty of guards, dogs and bosses | pure player against player |
-| a player dies | respawns at the level start (or beside a living player -- to decide), keeping the level's progress | respawns at a deathmatch spawn point, with a pistol and 8 bullets, as Wolf3D starts a life |
-| doors, pushwalls, pickups | shared: one world | shared |
-| keys | picked up for everyone | every locked door opens for anyone (or all players start with both keys -- to decide) |
-| score, treasure, lives | per player | frags instead; treasure meaningless |
+Two modes, each **with enemies or without** (`NOENEMIES`, DOOM's
+`-nomonsters`).  The server sends the rules in `WELCOME`, so every machine
+plays the same ones -- they are part of the game state, and the checksum
+would catch a mismatch.
 
-The options, as switches on the game (or W3MENU keys) and fields in `WELCOME`:
+| | co-op | deathmatch (DOOM's "deathmatch 1.0") | `ALTDEATH` (DOOM's "deathmatch 2.0") |
+|---|---|---|---|
+| goal | the level, together | frags, to `FRAGLIMIT` / `TIMELIMIT` | the same |
+| the exit | **any** player at the elevator ends the level for everyone | does nothing; a limit ends the level | the same |
+| a player dies | presses use (or fire) to respawn at **their own** player start, with a pistol and starting ammo; the level stays as it was | respawns at a **random deathmatch start**, pistol and starting ammo | the same |
+| lives | none: respawns are unlimited (DOOM has no lives) | none | none |
+| keys | **one player picks a key up, every player has it** (StevenC, 2026-10-06 -- here we part from DOOM, which leaves a netgame's keys in the map for each player to take) | **everyone starts with both keys** (DOOM gives all keys in deathmatch) | the same |
+| weapons | **stay**: each player can take each weapon once | stay | **taken**, and respawn after 30 s |
+| other items (ammo, food, first aid, treasure, extra life) | taken, as single player | taken, never back | **respawn after 30 s** (525 steps) |
+| enemies | they look for each player in turn, and turn on whoever hurt them (DOOM's `P_LookForPlayers` and retaliation) | the same, when on | the same, when on |
+| score | per player; treasure and kills counted per player | frags; a suicide is -1 | frags |
 
-* `COOP` / `DEATHMATCH`
-* `NOENEMIES` -- DOOM's `-nomonsters`: no actor is spawned from the map
-  but players.  **Boss levels need care**: Hans, Gretel and the rest drop
-  the key or end the episode, so with no enemies their key has to be
-  placed where the boss stood, or the exit opened.
-* `RESPAWNITEMS` -- DOOM's `-altdeath`: a picked-up item comes back after
-  30 seconds (525 steps).  Deterministic for free: a queue of (type, tile,
-  step due), advanced by the game step on every machine.
-* `WEAPONSSTAY` -- deathmatch 1.0 rules: a weapon is never removed, each
-  player picks it up once.
+Options on top, DOOM's switches:
+
+* `NOENEMIES` -- no actor is spawned from the map but players.  Wolf3D's
+  own problem: **boss levels** -- Hans and Gretel drop the gold key, the
+  last bosses end the episode.  With no enemies, the key is placed where
+  the boss stood, and an episode's last level opens its exit (decided:
+  DOOM would leave such a level unfinishable, and that is no fun).
 * `RESPAWNENEMIES` -- DOOM's `-respawn`: a dead enemy stands up again at
-  its start after a while.
-* `FRAGLIMIT n`, `TIMELIMIT n` (minutes) -- deathmatch end conditions; the
-  elevator does nothing in deathmatch, the level ends on a limit.
-* Skill (Wolf3D's four levels) and the starting map, as now.
+  its start, about 12 seconds later, as DOOM's monsters do.
+* `FASTENEMIES` -- DOOM's `-fast`, if it is cheap: enemies move and fire
+  faster.  Optional.
+* `FRAGLIMIT n`, `TIMELIMIT n` (minutes), skill (Wolf3D's four levels) and
+  the starting map, as now.
 
-Deathmatch needs **spawn points**: `gendemo.py` already finds random open
-tiles away from walls; the deathmatch ones should also be far from each
-other and outside locked areas.  Players are made shootable, and a frag
-is credited by the analytic hit test.
+**Player starts.**  A Wolf3D map has one; DOOM's have four (and
+deathmatch starts besides).  Co-op: the other three are generated beside
+the map's own start, on open tiles facing the same way.  Deathmatch: a set
+of generated starts (`gendemo.py` already finds open tiles), far from each
+other and outside locked areas; a spawn picks one at random from the
+game's own random numbers, and DOOM's rule applies -- never one where
+another player stands.
+
+**The players' look.**  DOOM tells its four players apart by colour
+(green, indigo, brown, red), translating the one sprite's colours.  Wolf3D
+has no player sprite; the guard's, recoloured four ways, is the plan --
+which means the sprite scaler needs a colour-translation path (asm, a
+256-byte table a player), and with enemies on, a recoloured guard must not
+look like an enemy.  To decide when we see it.
+
+**Between levels**, DOOM's intermission: co-op shows every player's
+kills, items and secrets; deathmatch the frag table (who killed whom).
+Wolf3D's own level-end screen becomes that table.
+
+**Also as DOOM**: the status bar is the local player's; a message line
+says who fragged whom; **chat** (`T` in DOOM) is a maybe, later.
 
 ## The network layer in the game
 
@@ -154,7 +175,9 @@ replayable and checkable afterwards.
 
 **Every machine gets a turn as the server** (StevenC, 2026-10-06), to
 prove the FPC server is not tied to one CPU -- and a DOS box serving can
-not also play (one program at a time), so each trial is two players:
+not also play (one program at a time), so trials 2-4 are two machines
+playing -- and the Python fake player (below) can join any trial as a
+third or fourth player, since it plays recorded controls:
 
 | trial | server | players |
 |---|---|---|
@@ -162,7 +185,7 @@ not also play (one program at a time), so each trial is two players:
 | 2 | V30 (FPC) | 486 + 386SX |
 | 3 | 486 (FPC) | V30 + 386SX |
 | 4 | 386SX (FPC) | V30 + 486 |
-| 5 | Windows (Python) | **all three DOS machines at once** |
+| 5 | Windows (Python) | **all three DOS machines at once**, plus a fake player as the fourth |
 
 The V30 as a server is the interesting one: its job is a few small
 packets every 57 ms, which an 8086 can do, but it is the proof that the
@@ -195,9 +218,9 @@ the 386SX arrives.
 
 ## Phases -- each one proven before the next
 
-1. **Two players, no network.**  The game with players[], AI targets,
+1. **Two to four players, no network.**  The game with players[], AI targets,
    analytic hits, local random numbers split off.  A *two-player demo*
-   (both players' controls, recorded or generated) played back on the V30
+   (every player's controls, recorded or generated) played back on the V30
    and the 486 must give the same game-state checksums every step.  This
    settles whether the whole idea holds, and it is the biggest piece.
 2. **The wire.**  A ping-pong of controls between the boxes: real delay
@@ -219,9 +242,8 @@ the 386SX arrives.
 
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)
-* How many players -- at least 3 (three DOS machines); 4?
 * Does the 486 smooth the view between steps, or just redraw?
 * Which UDP port?
-* Co-op respawn: at the level start, or beside a living player?
-* Deathmatch keys: doors open for all, or everyone starts with both keys?
-* No enemies on a boss level: place the boss's key, or open the exit?
+* Starting ammo on a respawn: Wolf3D's 8 bullets, or more (DOOM's 50 is
+  its own pistol's clip)?  8 is thin for deathmatch.
+* The players' colours: a recoloured guard, or something else?
