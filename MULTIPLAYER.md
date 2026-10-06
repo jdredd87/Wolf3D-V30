@@ -69,12 +69,45 @@ the DOS game cut down to a renderer.
   one -- LOWDETAIL (7) or all switches (9) help.  The others are not held
   back by it.
 
-## Rules
+## Modes and rules -- as DOOM does it (StevenC, 2026-10-06)
 
-* **Co-op** works on id's maps as they are: shared doors and pickups,
-  everybody at the elevator to finish.
-* **Deathmatch** needs spawn points (`gendemo.py` already finds random
-  open tiles), respawning, frags, and players made shootable.
+Two modes, each **with enemies or without**, and DOOM-style options.  The
+server sends the rules in `WELCOME`, so every machine plays the same ones
+(they are part of the game state, and the checksum would catch a
+mismatch).
+
+| | co-op | deathmatch |
+|---|---|---|
+| goal | the level, together: everybody at the elevator | frags, to a frag limit or time limit |
+| enemies on | they choose a target: nearest player, or the one in sight | the same, and they score as nobody's frag |
+| enemies off | the maps empty of guards, dogs and bosses | pure player against player |
+| a player dies | respawns at the level start (or beside a living player -- to decide), keeping the level's progress | respawns at a deathmatch spawn point, with a pistol and 8 bullets, as Wolf3D starts a life |
+| doors, pushwalls, pickups | shared: one world | shared |
+| keys | picked up for everyone | every locked door opens for anyone (or all players start with both keys -- to decide) |
+| score, treasure, lives | per player | frags instead; treasure meaningless |
+
+The options, as switches on the game (or W3MENU keys) and fields in `WELCOME`:
+
+* `COOP` / `DEATHMATCH`
+* `NOENEMIES` -- DOOM's `-nomonsters`: no actor is spawned from the map
+  but players.  **Boss levels need care**: Hans, Gretel and the rest drop
+  the key or end the episode, so with no enemies their key has to be
+  placed where the boss stood, or the exit opened.
+* `RESPAWNITEMS` -- DOOM's `-altdeath`: a picked-up item comes back after
+  30 seconds (525 steps).  Deterministic for free: a queue of (type, tile,
+  step due), advanced by the game step on every machine.
+* `WEAPONSSTAY` -- deathmatch 1.0 rules: a weapon is never removed, each
+  player picks it up once.
+* `RESPAWNENEMIES` -- DOOM's `-respawn`: a dead enemy stands up again at
+  its start after a while.
+* `FRAGLIMIT n`, `TIMELIMIT n` (minutes) -- deathmatch end conditions; the
+  elevator does nothing in deathmatch, the level ends on a limit.
+* Skill (Wolf3D's four levels) and the starting map, as now.
+
+Deathmatch needs **spawn points**: `gendemo.py` already finds random open
+tiles away from walls; the deathmatch ones should also be far from each
+other and outside locked areas.  Players are made shootable, and a frag
+is credited by the analytic hit test.
 
 ## The network layer in the game
 
@@ -119,6 +152,23 @@ replayable and checkable afterwards.
   The 386SX/25 is meant to be its box -- the whole thing on real MS-DOS
   machines.
 
+**Every machine gets a turn as the server** (StevenC, 2026-10-06), to
+prove the FPC server is not tied to one CPU -- and a DOS box serving can
+not also play (one program at a time), so each trial is two players:
+
+| trial | server | players |
+|---|---|---|
+| 1 | Windows (Python) | V30 + 486 (+ 386SX when it is back) |
+| 2 | V30 (FPC) | 486 + 386SX |
+| 3 | 486 (FPC) | V30 + 386SX |
+| 4 | 386SX (FPC) | V30 + 486 |
+| 5 | Windows (Python) | **all three DOS machines at once** |
+
+The V30 as a server is the interesting one: its job is a few small
+packets every 57 ms, which an 8086 can do, but it is the proof that the
+server costs nothing.  Each trial uses the same recorded match where it
+can, so the servers' merged lists can be compared byte for byte.
+
 Both are tested by a **fake-player program in Python** (as
 `simulate_dos.py` does for the bridge): recorded controls, with injected
 delay and loss, against either server, checking that every player got the
@@ -131,9 +181,15 @@ the 386SX arrives.
   disk of its own -- a plain network card is not a disk, as the PicoMEM was.
 * A packet driver for the new card; the bridge's client kit; an entry in
   `boxes.json` (`C:\dosbridgeDEV\docs\multibox.md`, Part 1).
-* Old lessons from it still hold: FPC programs need `VidFix` (no 387), and
-  `SHELL=C:\COMMAND.COM C:\ /E:1024 /P` in `CONFIG.SYS` or bridge jobs
-  lose their exit codes.  Its BIOS will not take a year past 2010.
+* **It has a 387 now** (StevenC, 2026-10-06).  The game does not use one
+  (Wolf3D is all integer), but it retires the 386SX's worst old fault:
+  FPC's INT 10h hook only wedged it because there was *no* coprocessor,
+  and `VidFix` steps aside when it sees one.  Run `FPU.EXE` to confirm
+  when it is back.  It is 4-5x the V30 on every `BENCH` row -- between
+  the V30 and the 486.
+* Other old lessons still hold: `SHELL=C:\COMMAND.COM C:\ /E:1024 /P` in
+  `CONFIG.SYS`, or bridge jobs lose their exit codes; and its BIOS will
+  not take a year past 2010.
 * Wired while the others are on WiFi: broadcasts should still cross (one
   home network); the phase 2 test confirms it on day one.
 
@@ -151,14 +207,21 @@ the 386SX arrives.
    checks.  First real test under the bridge: both boxes run the same
    recorded match with nobody at a keyboard, and their checksums are
    compared.
-5. **The FPC server**, tested on the 486, then moved to the 386SX.
-6. **Rules and polish**: the other player's sprite, co-op and deathmatch,
-   spawn points, a menu (W3MENU), and prediction only if phase 2 says so.
+5. **The FPC server**: each DOS machine in turn as the server (trials 2-4
+   above), then all three playing with Windows serving (trial 5).
+6. **Modes and rules**: co-op and deathmatch, each with and without
+   enemies; `RESPAWNITEMS`, `WEAPONSSTAY`, `RESPAWNENEMIES`, frag and time
+   limits; spawn points; the other player's sprite; W3MENU keys; and
+   prediction only if phase 2 says so.  Each rule is proven like the rest:
+   a recorded match, the same checksums on every machine.
 
 ## Open questions
 
-* Co-op first, or deathmatch?
-* How many players -- 2, or 4?
+* Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
+  as it is.)
+* How many players -- at least 3 (three DOS machines); 4?
 * Does the 486 smooth the view between steps, or just redraw?
 * Which UDP port?
-* The exit when one player dies in co-op: respawn at the start, or wait?
+* Co-op respawn: at the level start, or beside a living player?
+* Deathmatch keys: doors open for all, or everyone starts with both keys?
+* No enemies on a boss level: place the boss's key, or open the exit?
