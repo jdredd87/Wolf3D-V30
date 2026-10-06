@@ -245,6 +245,9 @@ void StatusDrawPic (unsigned x, unsigned y, unsigned picnum)
 {
 	unsigned	temp;
 
+	if (!MPLocal ())
+		return;						// multiplayer: another player's status
+
 	temp = bufferofs;
 	bufferofs = 0;
 
@@ -306,6 +309,11 @@ int	facecount;
 
 void	UpdateFace (void)
 {
+	if (mpplayers)
+	{
+		MPFace ();					// its own random numbers (WL_MP.C)
+		return;
+	}
 
 	if (SD_SoundPlaying() == GETGATLINGSND)
 	  return;

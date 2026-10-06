@@ -307,6 +307,11 @@ void RecursiveConnect (int areanumber)
 
 void ConnectAreas (void)
 {
+	if (mpplayers)
+	{
+		MPConnectAreas (true);		// every player's, and all connected to any
+		return;
+	}
 	memset (areabyplayer,0,sizeof(areabyplayer));
 	areabyplayer[player->areanumber] = true;
 	RecursiveConnect (player->areanumber);
@@ -315,6 +320,11 @@ void ConnectAreas (void)
 
 void InitAreas (void)
 {
+	if (mpplayers)
+	{
+		MPConnectAreas (false);
+		return;
+	}
 	memset (areabyplayer,0,sizeof(areabyplayer));
 	areabyplayer[player->areanumber] = true;
 }

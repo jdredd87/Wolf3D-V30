@@ -1221,6 +1221,29 @@ void PlaceItemType (int itemtype, int tilex, int tiley);
 void PushWall (int checkx, int checky, int dir);
 void OperateDoor (int door);
 void InitAreas (void);
+void RecursiveConnect (int areanumber);
+
+/*
+=============================================================================
+
+						 WL_MP DEFINITIONS (multiplayer: StevenC & Claude)
+
+=============================================================================
+*/
+
+extern	int far	mpplayers, far mplocal, far tdmgen;
+void	MPUse (int i);
+boolean	MPLocal (void);
+void	MPArgs (void);
+char far *MPDemoLoad (int n);
+void	MPSpawn (void);
+void	MPReadDemo (void);
+void	MPConnectAreas (boolean connect);
+void	MPCamera (boolean on);
+void	MPStep (void);
+void	MPReport (void);
+void	MPFace (void);
+void	MPAsm (int on, objtype *first);
 
 /*
 =============================================================================

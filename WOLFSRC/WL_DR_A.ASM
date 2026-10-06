@@ -667,6 +667,13 @@ ST_SIZE			=	8
 FL_BONUS		=	2
 MAXVISABLE		=	50
 
+; Multiplayer (WL_MP.C, StevenC & Claude): set by MPAsm.  mp_on -- the game
+; picks up items and wakes actors for every player, so the renderer, which
+; sees for one, does neither; place_first -- PlaceActors walks the actor list
+; from here (its head: the camera may be any player) instead of player->next.
+mp_on		dw	0
+place_first	dw	0
+
 PROC	PlaceStatics
 PUBLIC	PlaceStatics
 	push	si
@@ -762,10 +769,13 @@ PUBLIC	PlaceStatics
 	jz	@@notbonus
 	test	[BYTE si+ST_FLAGS],FL_BONUS
 	jz	@@notbonus
+	cmp	[cs:mp_on],0
+	jne	@@mpnext					; multiplayer: the game picks it up
 	push	si
 	call	GetBonus
 	add	sp,2
 	mov	cx,[laststatobj]
+@@mpnext:
 	jmp	@@next
 
 @@notbonus:
@@ -1358,8 +1368,12 @@ PUBLIC	PlaceActors
 	push	di
 
 	mov	di,[visptr]					; where PlaceStatics left it
+	mov	si,[cs:place_first]			; multiplayer: the list's head
+	or	si,si
+	jnz	@@first
 	mov	bx,[player]
 	mov	si,[bx+OB_NEXT]
+@@first:
 	jmp	@@test
 
 ; Laid out for the V30, where a taken jump flushes the prefetch queue: an
@@ -1452,7 +1466,10 @@ PUBLIC	PlaceActors
 	jmp	@@r7
 
 @@seen:
+	cmp	[cs:mp_on],0
+	jne	@@noact						; multiplayer: not woken by one screen
 	mov	[WORD si+OB_ACTIVE],1
+@@noact:
 	call	TransformActorA			; NEAR, SI = the actor
 	cmp	[WORD si+OB_VIEWHEIGHT],0
 	je	@@next						; too close or far away
@@ -5331,6 +5348,22 @@ PROC	AmDot NEAR
 	mov	[es:di+160],bl
 @@no:
 	ret
+ENDP
+
+;
+; void MPAsm (int on, objtype *first) -- multiplayer (WL_MP.C, StevenC &
+; Claude): sets mp_on and place_first, above
+;
+PROC	MPAsm FAR
+PUBLIC	MPAsm
+	push	bp
+	mov	bp,sp
+	mov	ax,[bp+6]
+	mov	[cs:mp_on],ax
+	mov	ax,[bp+8]
+	mov	[cs:place_first],ax
+	pop	bp
+	retf
 ENDP
 
 END

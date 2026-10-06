@@ -1598,6 +1598,12 @@ void TimeDemo (void)
 			godmode = true;
 		}
 	}
+	MPArgs ();						// MGEN n: multiplayer demo Mn.DEM; LOCAL n
+	if (tdmgen)
+	{
+		ndemos = 1;
+		godmode = true;
+	}
 	for (i = 1;i < _argc-1;i++)		// SECS n: the demos for n seconds of play, the
 		if (!_fstricmp (_argv[i],"secs"))	// same time every run (SHOWCASE.BAT)
 		{
@@ -1672,8 +1678,12 @@ void TimeDemo (void)
 	printf ("pages: %u in VSWAP  EMS %s %u  XMS %s %u  main %d\n",ChunksInFile,
 		EMSPresent ? "yes" : "no",EMSPagesAvail,
 		XMSPresent ? "yes" : "no",XMSPagesAvail,MainPagesAvail);
-	printf ("sound mode %d, music mode %d; OPL waits %u and %u reads, %lu ns each (id: 6 and 35)\n",
-		soundwas,musicwas,alDelayAddr,alDelayData,alReadNs);
+	{
+	static char far f[] = "sound mode %d, music mode %d; OPL waits %u and %u reads, %lu ns each (id: 6 and 35)\n";
+	char	s[96];
+	_fstrcpy ((char far *)s,f);
+	printf (s,soundwas,musicwas,alDelayAddr,alDelayData,alReadNs);
+	}
 	{
 	extern long ALStat (int which);
 	static char far f[] = "OPL writes to 20h and up: %ld, skipped as unchanged: %ld\n";
@@ -1695,14 +1705,21 @@ void TimeDemo (void)
 		printf ("demo %d  floor %2d  %5ld frames  %5ld ticks  %s",
 			i,maps[i]+1,frames[i],ticks[i],FpsString(frames[i],ticks[i]));
 		printf ("  | play %5ld ticks %s\n",later[i],FpsString(frames[i]-1,later[i]));
-		printf ("   page misses in play: EMS remaps %lu  from XMS %lu  to XMS %lu  LRU evictions %lu  disk reads %lu\n",
+		{
+		static char far f[] = "   page misses in play: EMS remaps %lu  from XMS %lu  to XMS %lu  LRU evictions %lu  disk reads %lu\n";
+		char	s[112];
+		_fstrcpy ((char far *)s,f);
+		printf (s,
 			miss[i][PMC_EMSMAP],miss[i][PMC_XMSIN],miss[i][PMC_XMSOUT],miss[i][PMC_LRU],miss[i][PMC_DISK]);
+		}
 		tf += frames[i];
 		tt += ticks[i];
 		tl += later[i];
 	}
 	if (tdmaxticks)					// SECS: the run's play in one line
 		printf ("secs %6ld frames %6ld ticks %s\n",tf-played,tl,FpsString(tf-played,tl));
+	if (mpplayers)					// multiplayer: every player, and the state's
+		MPReport ();				// checksums (WL_MP.C)
 	if (played > 1)
 	{
 		printf ("total              %5ld frames  %5ld ticks  %s",tf,tt,FpsString(tf,tt));

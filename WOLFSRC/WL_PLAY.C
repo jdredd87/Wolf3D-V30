@@ -651,6 +651,8 @@ void PollControls (void)
 
 		controlx = *demoptr++;
 		controly = *demoptr++;
+		if (mpplayers)
+			MPReadDemo ();				// the other players' 3 bytes each
 
 		if (demoptr == lastdemoptr)
 			playstate = ex_completed;		// demo is done
@@ -1293,6 +1295,8 @@ void ClearPaletteShifts (void)
 
 void StartBonusFlash (void)
 {
+	if (!MPLocal ())
+		return;
 	bonuscount = NUMWHITESHIFTS*WHITETICS;		// white shift palette
 }
 
@@ -1307,6 +1311,8 @@ void StartBonusFlash (void)
 
 void StartDamageFlash (int damage)
 {
+	if (!MPLocal ())
+		return;
 	damagecount += damage;
 }
 
@@ -1565,9 +1571,16 @@ void PlayLoop (void)
 		DoActors ();			// NEC V30 build: the same loop in WL_DR_A.ASM,
 								// idle actors skipped without a call
 
+		if (mpplayers)
+			MPStep ();					// the game state's checksum
+
 		UpdatePaletteShifts ();
 
+		if (mpplayers)
+			MPCamera (true);			// the local player's eyes
 		ThreeDRefresh ();
+		if (mpplayers)
+			MPCamera (false);
 		if (frameon == 1)
 			tdlater = BiosTicks ();	// TIMEDEMO: frame 1 carries the fizzle-in
 		if (tdcrc && !((unsigned)frameon % 50))

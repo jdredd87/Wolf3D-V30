@@ -1074,7 +1074,9 @@ void PlayDemo (int demonumber)
 	int dems[1]={T_DEMO0};
 #endif
 
-	if (tdgen)						// TIMEDEMO GEN n: Gn.DEM -- a 4-byte start
+	if (tdmgen)						// TIMEDEMO MGEN n: Mn.DEM, a multiplayer
+		demoptr = MPDemoLoad (tdmgen-1);	// demo (WL_MP.C)
+	else if (tdgen)					// TIMEDEMO GEN n: Gn.DEM -- a 4-byte start
 	{								// (tile x, y, direction, 0) and a demo
 		char	name[10];
 		int		n = tdgen-1, k = 0;
@@ -1124,7 +1126,9 @@ void PlayDemo (int demonumber)
 	demoplayback = true;
 
 	SetupGameLevel ();
-	if (tdgen && ((byte far *)demobuffer)[0])	// GEN: the generated start
+	if (tdmgen)
+		MPSpawn ();					// MGEN: every player at its start
+	else if (tdgen && ((byte far *)demobuffer)[0])	// GEN: the generated start
 		SpawnPlayer (((byte far *)demobuffer)[0],((byte far *)demobuffer)[1],
 			((byte far *)demobuffer)[2]);
 	StartMusic ();
@@ -1141,7 +1145,7 @@ void PlayDemo (int demonumber)
 	PlayLoop ();
 
 #ifdef DEMOSEXTERN
-	if (tdgen)
+	if (tdgen || tdmgen)
 		MM_FreePtr (&demobuffer);
 	else
 		UNCACHEGRCHUNK(dems[demonumber]);
