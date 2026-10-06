@@ -16,6 +16,8 @@
 #include "WL_DEF.H"
 #pragma hdrstop
 #include <stdarg.h>
+#include <io.h>
+#include <fcntl.h>
 
 #define MAXPLAYERS	4
 
@@ -177,6 +179,48 @@ static int Index (objtype *ob)
 /*
 =============================================================================
 
+						BJ -- the players' sprites
+
+mp/mkbj.py writes VSWAPM.WL6: the player's own VSWAP.WL6 with BJ added at
+the end of the sprite range, 49 frames in each player's colour (P1 grey,
+P2 green, P3 red, P4 brown), each block in the SS's own frame order.  When
+it is there WOLF3DM opens it instead (MPPageFile, before the page manager
+starts), and a player's frame is the BJ sprite at the SS frame's place.
+
+=============================================================================
+*/
+
+int		far	mpbjfile;			// VSWAPM.WL6 is the page file
+int		far	mpbjbase = -1;		// its first BJ sprite, or -1: the SS
+
+void MPPageFile (void)
+{
+	static char far stem[] = "VSWAPM.";
+	char	name[13];
+	int		h;
+
+	_fstrcpy ((char far *)name,stem);
+	strcat (name,extension);
+	h = open (name,O_RDONLY | O_BINARY);
+	if (h == -1)
+		return;
+	close (h);
+	strcpy (PageFileName,name);
+	mpbjfile = 1;
+}
+
+static int Spr (int i, int ss)
+{
+	if (mpbjbase < 0 && mpbjfile)
+		mpbjbase = PMSoundStart - PMSpriteStart - 4*49;
+	if (mpbjbase < 0)
+		return ss;
+	return mpbjbase + (i & 3)*49 + (ss - SPR_SS_S_1);
+}
+
+/*
+=============================================================================
+
 						THE PLAYERS' THINKING
 
 =============================================================================
@@ -184,7 +228,8 @@ static int Index (objtype *ob)
 
 //
 // After id's code has run: its states back to ours, and the sprite's frame.
-// SPR_SS_* stand in until mp/mkbj.py's BJ is loaded
+// the frames: BJ, in the player's colour, from VSWAPM.WL6 (Spr, below);
+// the SS's own when it is not there
 //
 static void After (objtype *ob, int i)
 {
@@ -198,12 +243,12 @@ static void After (objtype *ob, int i)
 		ob->state = &s_mpplayer;
 
 	if (ob->state == &s_mpattack)
-		ob->temp1 = SPR_SS_SHOOT1 + (gamestate.attackframe ? 1 : 0);
+		ob->temp1 = Spr (i,SPR_SS_SHOOT1 + (gamestate.attackframe ? 1 : 0));
 	else
 	{
 		moved = labs (playerxmove) + labs (playerymove);
 		if (!moved)
-			ob->temp1 = SPR_SS_S_1;
+			ob->temp1 = Spr (i,SPR_SS_S_1);
 		else
 		{
 			c->walkdist += moved;
@@ -212,7 +257,7 @@ static void After (objtype *ob, int i)
 				c->walkdist -= TILEGLOBAL/2;
 				c->walkframe = (c->walkframe+1)&3;
 			}
-			ob->temp1 = SPR_SS_W1_1 + 8*c->walkframe;
+			ob->temp1 = Spr (i,SPR_SS_W1_1 + 8*c->walkframe);
 		}
 	}
 }
@@ -461,7 +506,7 @@ void MPDie (objtype *attacker)
 			mpctx[k].frags++;
 	}
 	player->state = &s_mpdead;
-	player->temp1 = SPR_SS_DIE_1;
+	player->temp1 = Spr (mpcur,SPR_SS_DIE_1);
 	if (actorat[player->tilex][player->tiley] == player)
 		actorat[player->tilex][player->tiley] = NULL;
 	player->flags = FL_NEVERMARK;	// a body: not solid, not shootable
@@ -486,7 +531,7 @@ static void Respawn (objtype *ob, int i)
 	SpawnPlayer (c->sx,c->sy,c->sdir);
 	ConnectAreas ();				// SpawnPlayer's InitAreas left only the
 	ob->state = &s_mpplayer;		// players' own areas
-	ob->temp1 = SPR_SS_S_1;
+	ob->temp1 = Spr (i,SPR_SS_S_1);
 	ob->flags = FL_SHOOTABLE;		// solid (DoActor marks it) and shootable
 	if (MPLocal ())
 	{
@@ -505,8 +550,8 @@ void T_MPDead (objtype *ob)
 
 	MPUse (i);
 	c->deadtime += tics;
-	ob->temp1 = c->deadtime < 15 ? SPR_SS_DIE_1 : c->deadtime < 30 ? SPR_SS_DIE_2
-		: c->deadtime < 45 ? SPR_SS_DIE_3 : SPR_SS_DEAD;
+	ob->temp1 = Spr (i,c->deadtime < 15 ? SPR_SS_DIE_1 : c->deadtime < 30 ? SPR_SS_DIE_2
+		: c->deadtime < 45 ? SPR_SS_DIE_3 : SPR_SS_DEAD);
 	if (c->deadtime > 70 && buttonstate[bt_use] && !buttonheld[bt_use])
 		Respawn (ob,i);
 	MPUse (0);
@@ -715,14 +760,14 @@ void MPSpawn (byte far *b)
 		mpctx[i].dead = mpctx[i].deaths = 0;
 		SpawnPlayer (sx,sy,sd);		// sets player's place and Thrust's globals
 		player->state = &s_mpplayer;
-		player->temp1 = SPR_SS_S_1;
+		player->temp1 = Spr (i,SPR_SS_S_1);
 		player->flags = FL_SHOOTABLE;	// solid (DoActor marks it) and shootable
 		Save (i);
 		Load (0);
 		mpcur = 0;
 	}
 	player->state = &s_mpplayer;
-	player->temp1 = SPR_SS_S_1;
+	player->temp1 = Spr (0,SPR_SS_S_1);
 	player->flags = FL_SHOOTABLE;
 	MPAsm (1,&objlist[0]);			// the renderer: no pickups or waking, and
 									// PlaceActors from the list's head

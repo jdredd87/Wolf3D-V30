@@ -1955,6 +1955,7 @@ void main (void)
 #endif
 
 	CheckForEpisodes();
+	MPPageFile ();				// multiplayer: VSWAPM.WL6, with BJ, when it is there
 
 	Patch386 ();
 

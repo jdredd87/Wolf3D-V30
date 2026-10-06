@@ -74,6 +74,18 @@ second, every player holding all 400, and the V30 and the 486 printing the
 same CRC (`99C042E3`); the server compared their SYNCs with the fake's --
 the same sums -- and found no desync.
 
+**The players are BJ, 2026-10-06.**  `python mp/mkbj.py WL6FOLDER --vswap
+VSWAPM.WL6` writes the player's own `VSWAP.WL6` with BJ added at the end of
+the sprite range -- 49 frames in each player's colour (P1 grey, P2 green,
+P3 red, P4 brown), each block in the SS's frame order, the sounds' pages
+moved along behind them (their list is relative to `PMSoundStart`, so
+nothing else changes).  Checked by decoding it again: all 196 frames as
+encoded, every original page byte for byte.  WOLF3DM opens `VSWAPM.WL6`
+when it is there (`MPPageFile`) and draws each player as BJ in their colour,
+the SS when it is not.  Seen on the V30 through the capture card: a green BJ,
+gun in hand, walking past a guard.  The file is built on the player's
+machine from their own data and never committed.
+
 **Phase 4 -- the game on the network -- works, 2026-10-06.**
 `WOLF3DM NET server [PORT n] [NAME x] [NETBOT]` joins the server and plays
 the map it names: each frame this player's controls go out as `INPUT`

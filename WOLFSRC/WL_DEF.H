@@ -1257,6 +1257,7 @@ void	MPHurt (objtype *ob);
 void	MPTook (int points);
 void	MPDie (objtype *attacker);
 void	MPSoundOn (void);
+void	MPPageFile (void);
 extern	int far	tdrealtime;
 boolean	MPDead (void);
 void	MPDoActors (void);

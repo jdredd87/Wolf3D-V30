@@ -3,6 +3,10 @@ hand -- from the SS's frames in the player's own VSWAP.WL6.  StevenC &
 Claude, 2026.  A DRAFT: this first version writes preview sheets only.
 
     python mp/mkbj.py WL6FOLDER        previews into stage/mp/
+    python mp/mkbj.py WL6FOLDER --vswap OUT
+                                       ...and OUT: VSWAP.WL6 with the four
+                                       players' BJ added (VSWAPM.WL6, which
+                                       WOLF3DM uses when it is there)
 
 The SS has the full set a DOOM-style player needs -- 8 standing views,
 4 walking frames in 8 views, 3 firing, 2 pain, 3 dying and a body -- with
@@ -20,10 +24,16 @@ use).  The conversion:
   it as BJ's own grey and in four player colours;
 * his gun, face, boots and harness are kept.
 
+With --vswap, every frame in every player's colour (4 x 49) is encoded in
+VSWAP's sprite format and inserted at the end of the sprite range of a copy
+of the player's own VSWAP.WL6 -- baked, so drawing them costs the V30
+nothing extra.
+
 id's pixels are never written into the repository: everything here is
 built from the player's own data, on their machine.
 """
 import os
+import struct
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -57,10 +67,78 @@ def frames(art):
     n += ["SPR_SS_S_%d" % r for r in range(1, 9)]
     for w in range(1, 5):
         n += ["SPR_SS_W%d_%d" % (w, r) for r in range(1, 9)]
-    n += ["SPR_SS_PAIN_1", "SPR_SS_PAIN_2", "SPR_SS_DIE_1", "SPR_SS_DIE_2",
-          "SPR_SS_DIE_3", "SPR_SS_DEAD", "SPR_SS_SHOOT1", "SPR_SS_SHOOT2",
+    # the SS's own order (WL_DEF.H), so the game finds a frame at
+    # base + colour*49 + (SPR_SS_x - SPR_SS_S_1)
+    n += ["SPR_SS_PAIN_1", "SPR_SS_DIE_1", "SPR_SS_DIE_2", "SPR_SS_DIE_3",
+          "SPR_SS_PAIN_2", "SPR_SS_DEAD", "SPR_SS_SHOOT1", "SPR_SS_SHOOT2",
           "SPR_SS_SHOOT3"]
     return n
+
+
+def encode(img):
+    """A 64x64 image (CLEAR = transparent) in VSWAP's sprite format, as the
+    game's scaler reads it: leftpix, rightpix, an offset a column, and for
+    each column posts of (end*2, pixel offset - start, start*2), 0-ended;
+    pixel y of a post is at chunk[offset + y]."""
+    px = img.load()
+    cols = [x for x in range(64) if any(px[x, y] != CLEAR for y in range(64))]
+    if not cols:
+        cols = [32]
+    left, right = cols[0], cols[-1]
+    ncol = right - left + 1
+    head = 4 + 2 * ncol
+    pixels = bytearray()
+    posts = []                       # per column: [(start, end, pixel offset)]
+    for x in range(left, right + 1):
+        runs, y = [], 0
+        while y < 64:
+            if px[x, y] == CLEAR:
+                y += 1
+                continue
+            s = y
+            while y < 64 and px[x, y] != CLEAR:
+                y += 1
+            runs.append((s, y, head + len(pixels)))
+            pixels += bytes(px[x, k] for k in range(s, y))
+        posts.append(runs)
+    out = bytearray(struct.pack("<HH", left, right)) + bytearray(2 * ncol)
+    out += pixels
+    for i, runs in enumerate(posts):
+        struct.pack_into("<H", out, 4 + 2 * i, len(out))
+        for s, e, off in runs:
+            out += struct.pack("<HhH", e * 2, off - s, s * 2)
+        out += struct.pack("<H", 0)
+    assert len(out) <= 4096, len(out)
+    return bytes(out)
+
+
+def write_vswap(folder, sprites, path):
+    """The player's VSWAP.WL6 with the sprites added at the end of the
+    sprite range (before the sounds, whose list is relative to PMSoundStart),
+    every chunk laid out in order."""
+    d = open(os.path.join(folder, "VSWAP.WL6"), "rb").read()
+    n, spr, snd = struct.unpack_from("<3H", d, 0)
+    offs = struct.unpack_from("<%dI" % n, d, 6)
+    lens = struct.unpack_from("<%dH" % n, d, 6 + 4 * n)
+    chunks = [d[o:o + l] if o else None for o, l in zip(offs, lens)]
+    chunks = chunks[:snd] + list(sprites) + chunks[snd:]
+    m = len(chunks)
+    pos = 6 + 6 * m
+    pos = (pos + 511) & ~511
+    offs2, lens2, body = [], [], bytearray()
+    for c in chunks:
+        if c is None:
+            offs2.append(0)
+            lens2.append(0)
+            continue
+        offs2.append(pos + len(body))
+        lens2.append(len(c))
+        body += c
+    out = struct.pack("<3H", m, spr, snd + len(sprites))
+    out += struct.pack("<%dI" % m, *offs2) + struct.pack("<%dH" % m, *lens2)
+    out += bytes(pos - len(out)) + body
+    open(path, "wb").write(out)
+    return n, m, snd - spr
 
 
 def convert(art, img, hair):
@@ -122,6 +200,13 @@ def main():
     sheet([translate(b, table_to(pal, t)) for t in RAMPS.values() for b in pick],
           len(pick)).save(os.path.join(STAGE, "bj_colours.png"))
     print("previews in", os.path.abspath(STAGE))
+    if "--vswap" in sys.argv:
+        # every colour, in RAMPS' order (P1 grey, P2 green, P3 red, P4 brown)
+        sprites = [encode(translate(b, table_to(pal, t))) for t in RAMPS.values() for b in built]
+        out = sys.argv[sys.argv.index("--vswap") + 1]
+        n, m, base = write_vswap(folder, sprites, out)
+        print("%s: %d chunks (was %d); the BJ sprites are sprites %d-%d, %d bytes"
+              % (out, m, n, base, base + len(sprites) - 1, os.path.getsize(out)))
 
 
 if __name__ == "__main__":
