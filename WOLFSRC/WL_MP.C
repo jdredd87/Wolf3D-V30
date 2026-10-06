@@ -231,6 +231,117 @@ void T_MPAttack (objtype *ob)
 /*
 =============================================================================
 
+						AIMING -- from geometry, not from a screen
+
+id's GunAttack and KnifeAttack took their targets from the last frame drawn:
+FL_VISABLE, and viewx within shootdelta of the screen's centre.  Each machine
+draws only its own player, so in multiplayer the same shot would hit on one
+and miss on another.  Here the shooter's own view is worked out instead, with
+the same transform as id's TransformActor, and the screen-centre test turned
+into the cone it is: |viewx-centerx| < shootdelta = viewwidth/10 is
+|ny|*scale/nx < halfview/5, and scale = halfview*facedist/0x8000 with
+facedist = FOCALLENGTH+MINDIST = 0xAF00 -- so |ny|*5*0xAF00 < nx*0x8000,
+about 8 degrees either side, the same for every window size.  T_Shoot's
+"the player can see to dodge" is the whole screen: |ny|*0xAF00 < nx*0x8000.
+
+=============================================================================
+*/
+
+#define MPFOCAL		0x5700l			// FOCALLENGTH (WL_MAIN.C)
+#define MPACTOR		0x4000l			// ACTORSIZE (WL_DRAW.C)
+
+static long Transform (objtype *from, objtype *to, long *ny)
+{
+	fixed	vc = costable[from->angle], vs = sintable[from->angle];
+	fixed	vx = from->x - FixedByFrac (MPFOCAL,vc);
+	fixed	vy = from->y + FixedByFrac (MPFOCAL,vs);
+	fixed	gx = to->x - vx, gy = to->y - vy;
+
+	*ny = FixedByFrac (gy,vc) + FixedByFrac (gx,vs);
+	return FixedByFrac (gx,vc) - FixedByFrac (gy,vs) - MPACTOR;
+}
+
+// to is in from's aim (the cone a shot can hit in); its distance in *dist
+static boolean InAim (objtype *from, objtype *to, long *dist)
+{
+	long	ny, nx = Transform (from,to,&ny);
+
+	*dist = nx;
+	return nx >= MINDIST && (labs (ny) >> 3) * 875 < (nx >> 3) * 128;	// 5*0xAF00/0x8000
+}
+
+// T_Shoot: can the player (the context) see ob, to dodge?
+boolean MPSees (objtype *ob)
+{
+	long	ny, nx = Transform (player,ob,&ny);
+
+	return nx >= MINDIST && (labs (ny) >> 3) * 175 < (nx >> 3) * 128;	// 0xAF00/0x8000
+}
+
+// GunAttack after its sound: id's targeting, statement for statement, with
+// InAim for the screen
+void MPGunHit (objtype *ob)
+{
+	objtype	*check,*closest,*oldclosest;
+	int		damage,dx,dy,dist;
+	long	viewdist,d;
+
+	viewdist = 0x7fffffffl;
+	closest = NULL;
+	while (1)
+	{
+		oldclosest = closest;
+		for (check=&objlist[0] ; check ; check=check->next)
+			if (check != ob && (check->flags & FL_SHOOTABLE)
+			&& InAim (ob,check,&d) && d < viewdist)
+			{
+				viewdist = d;
+				closest = check;
+			}
+		if (closest == oldclosest)
+			return;						// no more targets, all missed
+		if (CheckLine (closest))
+			break;
+	}
+	dx = abs (closest->tilex - player->tilex);
+	dy = abs (closest->tiley - player->tiley);
+	dist = dx>dy ? dx:dy;
+	if (dist<2)
+		damage = US_RndT() / 4;
+	else if (dist<4)
+		damage = US_RndT() / 6;
+	else
+	{
+		if ( (US_RndT() / 12) < dist)	// missed
+			return;
+		damage = US_RndT() / 6;
+	}
+	DamageActor (closest,damage);
+}
+
+// KnifeAttack after its sound, the same way
+void MPKnifeHit (objtype *ob)
+{
+	objtype	*check,*closest;
+	long	dist,d;
+
+	dist = 0x7fffffff;
+	closest = NULL;
+	for (check=&objlist[0] ; check ; check=check->next)
+		if (check != ob && (check->flags & FL_SHOOTABLE)
+		&& InAim (ob,check,&d) && d < dist)
+		{
+			dist = d;
+			closest = check;
+		}
+	if (!closest || dist> 0x18000l)
+		return;							// missed
+	DamageActor (closest,US_RndT() >> 4);
+}
+
+/*
+=============================================================================
+
 						SETTING UP
 
 =============================================================================

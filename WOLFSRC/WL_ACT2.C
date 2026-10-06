@@ -3401,14 +3401,14 @@ void T_Shoot (objtype *ob)
 
 	if (thrustspeed >= RUNSPEED)
 	{
-		if (ob->flags&FL_VISABLE)
-			hitchance = 160-dist*16;		// player can see to dodge
+		if (mpplayers ? MPSees (ob) : ob->flags&FL_VISABLE)	// (multiplayer:
+			hitchance = 160-dist*16;		// player can see to dodge  from geometry)
 		else
 			hitchance = 160-dist*8;
 	}
 	else
 	{
-		if (ob->flags&FL_VISABLE)
+		if (mpplayers ? MPSees (ob) : ob->flags&FL_VISABLE)
 			hitchance = 256-dist*16;		// player can see to dodge
 		else
 			hitchance = 256-dist*8;

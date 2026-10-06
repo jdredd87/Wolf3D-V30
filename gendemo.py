@@ -155,4 +155,5 @@ def main():
         w3dbuild.ship_zip(z, r"C:\WOLF3D")
 
 
-main()
+if __name__ == "__main__":
+    main()

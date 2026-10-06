@@ -1244,6 +1244,9 @@ void	MPStep (void);
 void	MPReport (void);
 void	MPFace (void);
 void	MPAsm (int on, objtype *first);
+boolean	MPSees (objtype *ob);
+void	MPGunHit (objtype *ob);
+void	MPKnifeHit (objtype *ob);
 
 /*
 =============================================================================

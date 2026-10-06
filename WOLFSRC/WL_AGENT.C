@@ -1145,6 +1145,11 @@ void	KnifeAttack (objtype *ob)
 	long	dist;
 
 	SD_PlaySound (ATKKNIFESND);
+	if (mpplayers)
+	{
+		MPKnifeHit (ob);			// multiplayer: aimed from geometry (WL_MP.C)
+		return;
+	}
 // actually fire
 	dist = 0x7fffffff;
 	closest = NULL;
@@ -1195,6 +1200,11 @@ void	GunAttack (objtype *ob)
 	}
 
 	madenoise = true;
+	if (mpplayers)
+	{
+		MPGunHit (ob);				// multiplayer: aimed from geometry (WL_MP.C)
+		return;
+	}
 
 //
 // find potential targets
