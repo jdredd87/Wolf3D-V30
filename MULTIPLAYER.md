@@ -210,8 +210,19 @@ characters, nothing measurable even on the V30.
   (`C:\dosbridgeDEV\starter\net.pas`), whose lessons are in
   `docs/network.md` there -- above all, **answer ARP**, or unicast stalls.
 * Broadcast UDP finds the server with no ARP at all (`KNET`'s keys had to
-  be broadcast -- `knet.md` says why).  A UDP port of its own, not dosd's
-  8069.
+  be broadcast -- `knet.md` says why).
+* **UDP port 31992 by default, and changeable** (StevenC, 2026-10-06).
+  Checked against IANA's registry (2026-10-06): inside the unassigned
+  block 31950-32033, and clear of the ports games and common programs are
+  known to use -- Steam's 27000s, Quake's 26000, Minecraft's 25565,
+  ZDoom's 5029, Chocolate Doom's 2342, Zandronum's 10666, Xbox's 3074,
+  and the bridge's own 8069.  Below 32768, so Windows (49152 and up) and
+  Linux (32768 and up) never hand it out as an ephemeral port.  The 1992
+  is Wolf3D's year.  To change it, the same number goes to every piece:
+  `PORT n` on the game (and a W3MENU field), `--port n` on the Python
+  server, `PORT n` on the DOS server; a client and a server on different
+  ports simply never meet, so the server prints its port on screen and
+  the game says which port it is looking on while it waits.
 
 ## Protocol (draft)
 
@@ -317,4 +328,3 @@ the 386SX arrives.
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)
 * Does the 486 smooth the view between steps, or just redraw?
-* Which UDP port?
