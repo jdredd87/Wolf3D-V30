@@ -119,36 +119,44 @@ other and outside locked areas; a spawn picks one at random from the
 game's own random numbers, and DOOM's rule applies -- never one where
 another player stands.
 
-**The players' look: BJ** (StevenC, 2026-10-06: not guards -- "playing
-as Nazis doesn't sit well").  Built from what the game already has:
+**The players' look: BJ, every angle, one gun** (StevenC, 2026-10-06:
+not guards -- "playing as Nazis doesn't sit well"; all eight views from
+the start; one gun in hand whatever he carries, as DOOM's players).
+**Drafted -- `mp/mkbj.py`, branch `multiplayer`.**
 
-| in the data | what it gives |
-|---|---|
-| `SPR_BJ_W1`-`W4` (VSWAP) | the run: four frames, front view, guard scale, his grey outfit |
-| `SPR_BJ_JUMP1`-`4` | the leap, arms up -- a pain frame |
-| `L_GUYPIC`, `L_GUY2PIC` (VGAGRAPH, 104x88) | BJ facing out, pistol raised in both hands: the arms and gun for a firing frame, scaled down onto the running body |
-| `L_BJWINSPIC` (88x88) | BJ with the chaingun |
-| `H_BJPIC` (96x88) | crouched with a pistol |
-| `FACE1A`... (24x32) | the status-bar faces: one per player on the frag table and the co-op tally, in their colours |
+The body comes from the **SS**: the one figure in the game with the full
+set a DOOM-style player needs, *and his gun in every frame* -- 8 standing
+views, 4 walking frames in 8 views, 3 firing, 2 pain, 3 dying and a body,
+49 frames, at exactly the scale of everything else.  Repainted into BJ:
 
-* **Rotations.**  Wolf3D's bosses (Hans, Gretel, the fake Hitler) have
-  one view and always face you, so a front-only BJ is in the game's own
-  style and is the first version.  Eight views, as a guard has, need new
-  art -- a back (the head repainted as hair) and the sides; drafts to be
-  judged by eye.
-* **Firing**: the run's hands are empty -- arms and pistol from
-  `L_GUYPIC`, composited.  **Death**: no dead BJ exists, and the guards'
-  deaths are out -- a fall and a body on the floor made from his own
-  frames, as DOOM's player corpse is made.
-* **Four colours**: his grey outfit's colours translated four ways, as
-  DOOM translates its green (green, indigo, brown, red) -- through a
-  256-byte table a player, in a colour-translating path of the asm sprite
-  scaler, so no extra sprite memory.
-* **id's art is never committed** -- the repo is public.  A tool builds the
-  player sprites on the player's own machine from their own `VSWAP.WL6`
-  and `VGAGRAPH.WL6` (as the BSP version writes `BSPCACHE.WL6`): id's
-  frames, our edits applied, written to a file `WOLF3DM` loads.  Only the
-  edits and the code are in the repository.
+* **the cap becomes BJ's orange hair** -- down each column from the top
+  of the head, the cap's blues and its black band mapped by brightness
+  onto the palette's orange ramp (56-63; BJ's own hair is 59 and 61),
+  stopping at the first pixel that is not cap, and at an eye (a blue
+  pixel with skin either side -- the brim sits right on the eyes in the
+  front views, and the first draft gave him an orange visor);
+* **the uniform stays in the SS blue ramp (140-159)** in the built
+  sprite: no other part of him uses those colours, so the game translates
+  that one ramp per player at draw time, DOOM's way -- BJ's own grey for
+  player 1 (palette 18-30, a shade lighter than his 20-31), and any of
+  the palette's other 16-step ramps for the others: green 97-111, red
+  33-47, brown 208-223, purple 166-175 are drafted.  One 256-byte table
+  a player, a colour-translating path in the asm sprite scaler, no extra
+  sprite memory;
+* **kept**: the gun, the face, the near-black blues of boots and shadow
+  (227/228/232 -- BJ's own sprite uses the same), the harness.
+
+The previews (`stage/mp/bj_*.png`, from `python mp/mkbj.py WL6FOLDER`)
+read as BJ at every angle.  Still to do: the built sprites written to a
+file `WOLF3DM` loads (`mp/wl6art.py` reads VSWAP's format and can write
+it), the scaler's translation path, and a look in the game.  BJ's own
+pictures stay for the HUD and tables: the status-bar faces (`FACE1A`...)
+one per player on the frag table and the co-op tally, in their colours.
+
+**id's art is never committed** -- the repo is public.  The tool builds
+the sprites on the player's own machine from their own `VSWAP.WL6` (as
+the BSP version writes `BSPCACHE.WL6`); only the code is in the
+repository, and `stage/`, where the previews land, is git-ignored.
 
 **Between levels**, DOOM's intermission: co-op shows every player's
 kills, items and secrets; deathmatch the frag table (who killed whom).
@@ -271,5 +279,5 @@ the 386SX arrives.
   as it is.)
 * Does the 486 smooth the view between steps, or just redraw?
 * Which UDP port?
-* BJ front-only for the first version, or the eight views from the start?
-* Which four colours?
+* Which four colours?  BJ's grey for player 1; green, red, brown and
+  purple are drafted for the rest.
