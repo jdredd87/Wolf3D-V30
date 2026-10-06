@@ -27,7 +27,7 @@ ECHO     V  WOLF3DV -- id's picture exactly, and every detail option
 ECHO     B  WOLF3DB -- far walls in less detail, and every detail option
 ECHO     T  WOLF3DB with the BSP tree finding the walls
 ECHO     A  all three, one after another
-ECHO     C  choose: any of the three, asked one by one
+ECHO     C  choose: any of the three, and id's code, asked one by one
 ECHO     Q  quit
 ECHO.
 CHOICE /C:VBTACQ /N    Which? 
@@ -63,12 +63,20 @@ ECHO B > SHOWB.RUN
 :PICKC3
 ECHO   T  WOLF3DB with the BSP tree?  Y or N
 CHOICE /C:YN /N > NUL
-IF ERRORLEVEL 2 GOTO PICKED
+IF ERRORLEVEL 2 GOTO PICKC4
 ECHO T > SHOWT.RUN
+:PICKC4
+ECHO   O  id's original code too, first, for comparison?  Y or N
+CHOICE /C:YN /N > NUL
+IF ERRORLEVEL 2 GOTO PICKC5
+GOTO PICKED
+:PICKC5
+ECHO N > SHOWNOID.FLG
 :PICKED
-IF EXIST SHOWV.RUN GOTO ASK
-IF EXIST SHOWB.RUN GOTO ASK
-IF EXIST SHOWT.RUN GOTO ASK
+IF EXIST SHOWV.RUN GOTO ASKMAP
+IF EXIST SHOWB.RUN GOTO ASKMAP
+IF EXIST SHOWT.RUN GOTO ASKMAP
+IF NOT EXIST SHOWNOID.FLG GOTO ASKMAP
 GOTO END
 :ASK
 ECHO.
