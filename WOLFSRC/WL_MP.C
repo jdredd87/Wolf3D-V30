@@ -1129,16 +1129,23 @@ static void LocalInput (byte *bits, int *x, int *y)
 		PollMouseMove ();
 	if (joystickenabled)
 		PollJoystickMove ();
-	if (controlx > 100*tics)
-		controlx = 100*tics;
-	if (controlx < -100*tics)
-		controlx = -100*tics;
-	if (controly > 100*tics)
-		controly = 100*tics;
-	if (controly < -100*tics)
-		controly = -100*tics;
-	*x = controlx/tics;
-	*y = controly/tics;
+	// in int, as id's PollControls does (max = 100*tics; min = -max): tics is
+	// UNSIGNED, and "controlx < -100*tics" compared 0 with 65136 -- every
+	// player turned and ran flat out with no key down (StevenC saw it spin)
+	{
+		int	t = DEMOTICS, max = 100*t, min = -max;
+
+		if (controlx > max)
+			controlx = max;
+		if (controlx < min)
+			controlx = min;
+		if (controly > max)
+			controly = max;
+		if (controly < min)
+			controly = min;
+		*x = controlx/t;
+		*y = controly/t;
+	}
 	for (*bits = 0,i=NUMBUTTONS-1;i>=0;i--)
 		*bits = (*bits << 1) | (buttonstate[i] ? 1 : 0);
 	memcpy (buttonstate,save,sizeof(save));
