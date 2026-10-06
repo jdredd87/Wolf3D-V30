@@ -10,8 +10,9 @@ On the DOS machine, in C:\\WOLF3D, type SHOWCASE and pick a version:
     B  WOLF3DB -- id's rays with far walls in less detail, and every option
     T  WOLF3DB with the BSP tree finding the walls
     A  all three, one after another (the long video)
-    C  choose: Y or N for each of V, B and T -- any combination, in that
-       order (StevenC, 2026-10-06: "what if I just want B and T?")
+    C  choose: Y or N for each of V, B, T and id's code -- any combination,
+       run in that order, id's first (StevenC, 2026-10-06: "what if I just
+       want B and T?"); then only the map is asked
 
 Two questions follow (each answers itself after 15 seconds): whether to
 start with id Software's own 1992 code (WOLF3DO.EXE: id's renderer and
@@ -208,7 +209,7 @@ def menu():
         "ECHO     B  WOLF3DB -- far walls in less detail, and every detail option",
         "ECHO     T  WOLF3DB with the BSP tree finding the walls",
         "ECHO     A  all three, one after another",
-        "ECHO     C  choose: any of the three, asked one by one",
+        "ECHO     C  choose: any of the three, and id's code, asked one by one",
         "ECHO     Q  quit",
         "ECHO.",
         "CHOICE /C:VBTACQ /N    Which? ",
@@ -248,13 +249,23 @@ def menu():
         ":PICKC3",
         "ECHO   T  WOLF3DB with the BSP tree?  Y or N",
         "CHOICE /C:YN /N > NUL",
-        "IF ERRORLEVEL 2 GOTO PICKED",
+        "IF ERRORLEVEL 2 GOTO PICKC4",
         "ECHO T > SHOWT.RUN",
+        # id's code is one more item of the list here, so C does not ask
+        # about it again afterwards (StevenC, 2026-10-06)
+        ":PICKC4",
+        "ECHO   O  id's original code too, first, for comparison?  Y or N",
+        "CHOICE /C:YN /N > NUL",
+        "IF ERRORLEVEL 2 GOTO PICKC5",
+        "GOTO PICKED",
+        ":PICKC5",
+        "ECHO N > SHOWNOID.FLG",
         ":PICKED",
-        "IF EXIST SHOWV.RUN GOTO ASK",          # none of the three: nothing to do
-        "IF EXIST SHOWB.RUN GOTO ASK",
-        "IF EXIST SHOWT.RUN GOTO ASK",
-        "GOTO END",
+        "IF EXIST SHOWV.RUN GOTO ASKMAP",
+        "IF EXIST SHOWB.RUN GOTO ASKMAP",
+        "IF EXIST SHOWT.RUN GOTO ASKMAP",
+        "IF NOT EXIST SHOWNOID.FLG GOTO ASKMAP",    # id's code alone
+        "GOTO END",                                 # nothing chosen
         ":ASK",
         "ECHO.",
         "ECHO   Start with id's original code, for its speed?  Y or N  (Y in %d seconds)" % ASK,
