@@ -196,7 +196,8 @@ WOLF3DM NET 192.168.50.46 NAME V30 LOWDETAIL VIEW 10
 |---|---|
 | `-` / `=` | the window smaller / bigger, id's sizes 4-19.  Each new size rebuilds id's compiled scalers, 2.1 s on the V30 (measured, 145 ticks; freeing and retaking the page manager's memory is 1 tick), so presses are counted and the window changes once, half a second after the last.  The steps go on arriving meanwhile and the machine catches up |
 | F5 | the walls' detail: a ray for every column, every 2nd (`LOWWALLS`), every 4th (`LOWWALLS4`).  Instant.  With `LOWSPRITES`/`LOWDETAIL` on the command line it keeps to 2 and 4: the sprite code is set up for walls in pairs |
-| switches | `VIEW n`, `LOWDETAIL`, `LOWWALLS`, `LOWWALLS4`, `LOWSPRITES`, `FLATWALLS`, `LOWVERT`, `FARBLOBS` -- set at start only |
+| `LOWEST` | every cheap mode at once, the one to use on a V30 (StevenC: "make it so we can easily just scale all the graphics down to the lowest detail ... it makes it pretty playable"): `LOWWALLS4 LOWSPRITES FLATWALLS FLATART LOWVERT FARBLOBS 16`.  The window stays the player's -- `VIEW n`, or `-` and `=` |
+| switches | `VIEW n`, `LOWDETAIL`, `LOWWALLS`, `LOWWALLS4`, `LOWSPRITES`, `FLATWALLS`, `FLATART`, `LOWVERT`, `FARBLOBS` -- set at start only |
 
 Nothing is saved: a network game ends without `WriteConfig`.  The report
 at the end now gives the frame rate too: `net: N pictures in S s, F a
@@ -209,6 +210,17 @@ Measured live, the V30 in a four-player deathmatch (486 + two bots),
 |---|---|
 | view 16, full detail (its CONFIG.WL6) | **2.4** |
 | `LOWDETAIL VIEW 10` | **6.6** |
+| `LOWEST VIEW 10` (each switch given separately, deathmatch, three bots) | **9.0** |
+| `LOWEST VIEW 10`, co-op with the enemies | **8.4** |
+| `LOWEST VIEW 6` | **13.8** |
+
+`LOWVERT` shows every other row of the whole screen, so the status bar
+loses its odd rows too -- the S of SCORE and LIVES looks garbled.  That is
+step 82's design, the same in single player.  Once, in a run of four
+back-to-back games, the V30 with `FLATWALLS` alone left its game at the
+first picture (8 s: `FLATWALLS` reads every wall page then) having had no
+step; run again it played all 500 steps.  Not explained yet -- only a
+`BYE` or 15 s of silence ends a game that way.
 
 The 486 ran at view 19, full detail, 16.6 a second (it draws when a step
 arrives, so 17.5 is its ceiling) -- and **0 desyncs** with the two machines

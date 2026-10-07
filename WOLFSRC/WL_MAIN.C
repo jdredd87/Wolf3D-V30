@@ -1178,7 +1178,7 @@ void DoJukebox(void)
 
 void InitGame (void)
 {
-	int                     i,x,y;
+	int                     i,x,y,lowest = 0;
 	unsigned        *blockstart;
 
 	if (MS_CheckParm ("virtual"))
@@ -1208,6 +1208,18 @@ void InitGame (void)
 		lowvert = 1;					// NEC V30 build (step 82): even rows only
 	if (MS_CheckParm ("flatart"))
 		solidart = flatwalls = 1;		// NEC V30 build (step 84): artwork solid too
+	for (i = 1;i < _argc;i++)			// multiplayer (StevenC & Claude, 2026-10-07):
+	{									// LOWEST, every cheap mode at once --
+		char far *a = _argv[i];			// LOWWALLS4 LOWSPRITES FLATWALLS FLATART
+		if ((a[0]|32)=='l' && (a[1]|32)=='o' && (a[2]|32)=='w' && (a[3]|32)=='e'
+			&& (a[4]|32)=='s' && (a[5]|32)=='t' && !a[6])
+		{								// LOWVERT FARBLOBS 16; the window stays
+			lowest = 1;					// the player's (VIEW n, or - and =)
+			pixstep = 4;
+			lowsprites = lowvert = 1;
+			solidart = flatwalls = 1;
+		}
+	}
 	for (i = 1;i < _argc;i++)			// the automap (2026-10-05): AUTOMAP starts
 	{									// with it on, shown in demos too -- for
 		char far *a = _argv[i];			// showing it; TAB is the game's key
@@ -1219,10 +1231,13 @@ void InitGame (void)
 	{									// under n pixels (16) as silhouettes
 		extern int farblobs;
 		char far *a = _argv[i];
-		if ((a[0]|32)=='f' && (a[1]|32)=='a' && (a[2]|32)=='r' && (a[3]|32)=='b'
+		if (((a[0]|32)=='f' && (a[1]|32)=='a' && (a[2]|32)=='r' && (a[3]|32)=='b'
 			&& (a[4]|32)=='l' && (a[5]|32)=='o' && (a[6]|32)=='b' && (a[7]|32)=='s' && !a[8])
+			|| (lowest == 1 && i == _argc-1))	// LOWEST: FARBLOBS 16, once
 		{
 			int n = 0;
+			if (lowest)
+				lowest = 2;				// FARBLOBS n given as well: its n
 			if (i+1 < _argc)
 			{
 				char far *p = _argv[i+1];
