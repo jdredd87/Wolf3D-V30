@@ -1146,6 +1146,7 @@ int		far	mpstate;			// 0 hello, 1 welcomed, 2 started, 3 over
 unsigned far mpfraglimit;		// WELCOME: deathmatch ends a level at these
 unsigned far mptimelimit;		//   frags, or minutes (0: none)
 long	far	mpheard;			// TimeCount when the server was last heard
+long	far	mpframes, far mpticks;	// pictures drawn, and in how long
 #define DEAF	(15*70)			// silent this long: the server is gone
 int		far	mpwhy;				// why the level ended: 0 elevator, 1 frags, 2 time
 extern	int	ElevatorBackTo[];	// WL_GAME.C
@@ -1460,6 +1461,52 @@ static void Status (void)
 	MPUse (0);
 }
 
+//
+// DOOM's keys for a slow machine: - and = make the window smaller and bigger
+// (id's sizes 4-19, as its Change View menu), F5 the walls' detail -- a ray
+// for every column, every 2nd, every 4th (LOWWALLS, LOWWALLS4).  Only this
+// machine's picture changes: aiming is worked out from geometry (above), so
+// every machine still plays the same game.  Nothing is saved: the game ends
+// without WriteConfig.  LOWSPRITES' sprite code is set up at its first call
+// for walls in pairs at least, so with it F5 keeps to 2 and 4.  A new size
+// rebuilds id's compiled scalers -- 2.1 s on the V30 -- so the presses are
+// counted first and the window changes once, half a second after the last
+//
+#define sc_Less		0x0c			// - _
+#define sc_More		0x0d			// = +
+
+static void Picture (void)
+{
+	static int far size;
+	static long far pressed;
+
+	if (!size)
+		size = viewsize;
+	if (pressed > TimeCount)
+		pressed = TimeCount;			// NetLoop starts TimeCount again each floor
+	if (Keyboard[sc_Less] || Keyboard[sc_More])
+	{
+		if (Keyboard[sc_Less] && size > 4)
+			size--;
+		if (Keyboard[sc_More] && size < 19)
+			size++;
+		Keyboard[sc_Less] = Keyboard[sc_More] = false;
+		pressed = TimeCount;
+	}
+	if (size != viewsize && TimeCount - pressed > 35)
+	{
+		ClearMemory ();				// as id's Change View: the page manager's
+		NewViewSize (size);			// memory let go for the new scalers (and
+		PM_CheckMainMem ();			// their 20 KB to build in), then taken back
+		DrawAllPlayBorder ();
+	}
+	if (Keyboard[sc_F5])
+	{
+		Keyboard[sc_F5] = false;
+		pixstep = pixstep == 1 ? 2 : pixstep == 2 ? 4 : lowsprites ? 2 : 1;
+	}
+}
+
 static void NetLoop (void)
 {
 	static char far leave[] = "Leave the game?  Y or N";
@@ -1531,7 +1578,10 @@ static void NetLoop (void)
 			MPCamera (true);
 			ThreeDRefresh ();
 			MPCamera (false);
+			mpframes++;
 		}
+		if (!asking)
+			Picture ();
 		UpdateSoundLoc ();
 		if (screenfaded)
 			VW_FadeIn ();
@@ -1556,6 +1606,7 @@ static void NetLoop (void)
 		if (mpstate == 3)			// sends steps again
 			playstate = ex_abort;
 	} while (!playstate);
+	mpticks += TimeCount;
 }
 
 /*
@@ -1853,10 +1904,14 @@ void MPNetGame (void)
 	{
 		static char far r[] = "net: %ld steps played, %ld held; packets sent %ld, received %ld; %Fs\n";
 		static char far ok[] = "no desync", far bad[] = "DESYNC reported";
+		static char far f[] = "net: %ld pictures in %ld s, %ld.%ld a second (view %d, walls 1 ray in %d)\n";
 		char	s[90];
+		long	t = mpticks ? mpticks : 1, r10 = mpframes*700/t;
 
 		_fstrcpy ((char far *)s,r);
 		printf (s,mpplayed+1,mphave+1,netsentn,netrecvn,mpdesync < 0 ? (char far *)ok : (char far *)bad);
+		_fstrcpy ((char far *)s,f);
+		printf (s,mpframes,mpticks/70,r10/10,r10%10,viewsize,pixstep);
 	}
 	exit (0);
 }

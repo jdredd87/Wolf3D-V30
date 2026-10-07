@@ -181,6 +181,44 @@ for more than one player; a slow machine runs behind the others after a
 floor loads (10 s on the V30) and catches up as fast as it can play;
 chat; the FPC server.
 
+**A faster picture on a slow machine -- 2026-10-07** (StevenC: "for the
+v30, can we shrink the view port ... or dumb the graphics down?").  Each
+machine draws only its own picture and aiming is geometry, so every
+machine can choose its own window and detail without changing the game.
+The V30 build's switches work on the command line as in single player,
+and DOOM's keys work during play:
+
+```
+WOLF3DM NET 192.168.50.46 NAME V30 LOWDETAIL VIEW 10
+```
+
+| | |
+|---|---|
+| `-` / `=` | the window smaller / bigger, id's sizes 4-19.  Each new size rebuilds id's compiled scalers, 2.1 s on the V30 (measured, 145 ticks; freeing and retaking the page manager's memory is 1 tick), so presses are counted and the window changes once, half a second after the last.  The steps go on arriving meanwhile and the machine catches up |
+| F5 | the walls' detail: a ray for every column, every 2nd (`LOWWALLS`), every 4th (`LOWWALLS4`).  Instant.  With `LOWSPRITES`/`LOWDETAIL` on the command line it keeps to 2 and 4: the sprite code is set up for walls in pairs |
+| switches | `VIEW n`, `LOWDETAIL`, `LOWWALLS`, `LOWWALLS4`, `LOWSPRITES`, `FLATWALLS`, `LOWVERT`, `FARBLOBS` -- set at start only |
+
+Nothing is saved: a network game ends without `WriteConfig`.  The report
+at the end now gives the frame rate too: `net: N pictures in S s, F a
+second (view V, walls 1 ray in K)`.
+
+Measured live, the V30 in a four-player deathmatch (486 + two bots),
+1200 steps each:
+
+| V30 | pictures a second |
+|---|---|
+| view 16, full detail (its CONFIG.WL6) | **2.4** |
+| `LOWDETAIL VIEW 10` | **6.6** |
+
+The 486 ran at view 19, full detail, 16.6 a second (it draws when a step
+arrives, so 17.5 is its ceiling) -- and **0 desyncs** with the two machines
+drawing so differently.  The first try at the keys ran out of memory on
+both machines (`MM_GetPtr`): the scalers need 20 KB to be built in, and
+the page manager holds the rest of memory, so they let it go first as id's
+menu does (`ClearMemory`, then `PM_CheckMainMem`).  Tested with a
+throwaway build whose netbot pressed `-`, `=` and F5 every few frames:
+the window seen resizing on the V30's screen, no crash, no desync.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
