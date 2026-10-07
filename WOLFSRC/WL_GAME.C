@@ -171,11 +171,15 @@ void PlaySoundLocGlobal(word s,fixed gx,fixed gy)
 {
 	SetSoundLoc(gx,gy);
 	SD_PositionSound(leftchannel,rightchannel);
+	mpsndx = gx;					// multiplayer: heard only near (WL_MP.C)
+	mpsndy = gy;
+	mplocated = 1;
 	if (SD_PlaySound(s))
 	{
 		globalsoundx = gx;
 		globalsoundy = gy;
 	}
+	mplocated = 0;
 }
 
 void UpdateSoundLoc(void)

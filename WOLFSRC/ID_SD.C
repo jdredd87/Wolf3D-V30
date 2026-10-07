@@ -36,6 +36,8 @@
 #include "ID_SD.h"
 #else
 #include "ID_HEADS.H"
+
+boolean	MPHear (void);		// WL_MP.C: multiplayer, near enough to hear?
 #endif
 #pragma	hdrstop
 #pragma	warn	-pia
@@ -2122,6 +2124,12 @@ SD_PlaySound(soundnames sound)
 	SoundCommon	far *s;
 	int	lp,rp;
 
+	if (!MPHear ())					// multiplayer: too far away to hear
+	{
+		nextsoundpos = false;
+		LeftPosition = RightPosition = 0;
+		return(false);
+	}
 	lp = LeftPosition;
 	rp = RightPosition;
 	LeftPosition = 0;

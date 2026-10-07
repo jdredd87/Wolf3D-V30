@@ -66,6 +66,10 @@ long	far	mpsteps;
 unsigned long far mpcheck[MAXCHECKS];	// the sum at every 50th step
 unsigned far mprnd;				// the face's own random numbers (see MPFace)
 int		far	mpnoise;			// who made this step's noise (madenoise)
+int		far	mprules;			// the server's rules (MULTIPLAYER.md):
+#define RULE_DM			1		//   deathmatch, not co-op
+#define RULE_NOFF		2		//   co-op: no friendly fire
+#define RULE_NOENEMIES	4		//   no enemies spawned
 long	far	mptook[MAXPLAYERS];	// damage each player has been dealt (the
 								// report: god mode hides it from health)
 
@@ -262,16 +266,68 @@ static void After (objtype *ob, int i)
 	}
 }
 
+objtype	*mpsrc;						// whose thinking is running, or NULL (HEARING)
+
 static void Think (objtype *ob, void (*think) (objtype *))
 {
 	int	i = Index (ob);
 
 	MPUse (i);
+	mpsrc = ob;						// its sounds come from where it stands
 	playerxmove = playerymove = 0;
 	think (ob);
 	AutomapPickup ();				// items: picked up where the player stands,
 	After (ob,i);					// not where a screen saw them
+	mpsrc = NULL;
 	MPUse (0);
+}
+
+/*
+=============================================================================
+
+						HEARING
+
+Every machine plays every player's game, so without this each one hears
+every gun fired and every item taken anywhere on the map, at full volume.
+As DOOM: a sound is heard only near the local player's eyes.  A located
+sound (PlaySoundLocGlobal) is where it says; any other comes from the actor
+whose thinking made it (mpsrc) -- another player's pistol from that player,
+panned there on a Sound Blaster.  Only what is played changes, never the
+game: SD_PlaySound's answer decides nothing but the sound location.
+
+=============================================================================
+*/
+
+#define HEARTILES	16				// DOOM's clipping distance is ~19 tiles
+
+
+int		far	mplocated;				// PlaySoundLocGlobal: mpsndx,y are set
+fixed	far	mpsndx, far mpsndy;
+
+boolean MPHear (void)
+{
+	fixed	x,y;
+
+	if (!mpplayers)
+		return true;
+	if (mplocated)
+	{
+		x = mpsndx;
+		y = mpsndy;
+	}
+	else
+	{
+		if (!mpsrc || mpsrc == mpctx[mplocal].ob)
+			return true;			// our own, or from nowhere in particular
+		x = mpsrc->x;
+		y = mpsrc->y;
+		SetSoundLoc (x,y);			// panned where it was made
+		SD_PositionSound (leftchannel,rightchannel);
+		globalsoundx = x;
+		globalsoundy = y;
+	}
+	return labs (x - viewx) < (long)HEARTILES*TILEGLOBAL
+		&& labs (y - viewy) < (long)HEARTILES*TILEGLOBAL;
 }
 
 void T_MPPlayer (objtype *ob)
@@ -326,6 +382,13 @@ static boolean InAim (objtype *from, objtype *to, long *dist)
 	return nx >= MINDIST && (labs (ny) >> 3) * 875 < (nx >> 3) * 128;	// 5*0xAF00/0x8000
 }
 
+// co-op with friendly fire off: another player is no target -- a shot
+// passes through to what is behind
+static boolean Friend (objtype *ob)
+{
+	return ob->obclass == playerobj && (mprules & (RULE_DM|RULE_NOFF)) == RULE_NOFF;
+}
+
 // A shot or a stab that found its target: an enemy takes it as id's code
 // gives it; a player -- friendly fire, as DOOM's co-op -- takes it in its
 // own context, from `by`
@@ -369,7 +432,7 @@ void MPGunHit (objtype *ob)
 	{
 		oldclosest = closest;
 		for (check=&objlist[0] ; check ; check=check->next)
-			if (check != ob && (check->flags & FL_SHOOTABLE)
+			if (check != ob && (check->flags & FL_SHOOTABLE) && !Friend (check)
 			&& InAim (ob,check,&d) && d < viewdist)
 			{
 				viewdist = d;
@@ -405,7 +468,7 @@ void MPKnifeHit (objtype *ob)
 	dist = 0x7fffffff;
 	closest = NULL;
 	for (check=&objlist[0] ; check ; check=check->next)
-		if (check != ob && (check->flags & FL_SHOOTABLE)
+		if (check != ob && (check->flags & FL_SHOOTABLE) && !Friend (check)
 		&& InAim (ob,check,&d) && d < dist)
 		{
 			dist = d;
@@ -512,15 +575,60 @@ void MPDie (objtype *attacker)
 	player->flags = FL_NEVERMARK;	// a body: not solid, not shootable
 }
 
+// Cmd_Use: may the elevator end the level?  Not in deathmatch
+boolean MPExitOK (void)
+{
+	return !(mprules & RULE_DM);
+}
+
 // TakeDamage: already dead, nothing more to take
 boolean MPDead (void)
 {
 	return mpctx[mpcur].dead;
 }
 
+//
+// Deathmatch: a start somewhere on the map -- open floor, no actor, no
+// player within four tiles -- picked the same way on every machine (from
+// the step count and the player), as DOOM picks a deathmatch start
+//
+static void DMStart (int i, byte *x, byte *y)
+{
+	unsigned	n,k,tries;
+	int			tx,ty,j;
+	objtype		*o;
+
+	n = (unsigned)(mpsteps*7919 + i*104729);
+	for (tries = 0;tries < 400;tries++)
+	{
+		n = n*25173 + 13849;
+		tx = 1 + (n >> 4) % 62;
+		n = n*25173 + 13849;
+		ty = 1 + (n >> 4) % 62;
+		if (tilemap[tx][ty] || actorat[tx][ty]
+		|| *(mapsegs[0] + farmapylookup[ty]+tx) < AREATILE)
+			continue;
+		for (k = 1,j=0;j<mpplayers;j++)
+		{
+			o = mpctx[j].ob;
+			if (j != i && o && abs (o->tilex - tx) < 4 && abs (o->tiley - ty) < 4)
+				k = 0;
+		}
+		if (k)
+		{
+			*x = tx;
+			*y = ty;
+			return;
+		}
+	}
+	*x = mpctx[i].sx;
+	*y = mpctx[i].sy;
+}
+
 static void Respawn (objtype *ob, int i)
 {
 	mpctx_t	far *c = &mpctx[i];
+	byte	x,y;
 
 	c->dead = 0;
 	gamestate.health = 100;
@@ -528,7 +636,14 @@ static void Respawn (objtype *ob, int i)
 	gamestate.weapon = gamestate.bestweapon = gamestate.chosenweapon = wp_pistol;
 	gamestate.attackframe = gamestate.attackcount = gamestate.weaponframe = 0;
 	gamestate.faceframe = 0;
-	SpawnPlayer (c->sx,c->sy,c->sdir);
+	if (mprules & RULE_DM)
+	{
+		DMStart (i,&x,&y);
+		gamestate.keys = 3;			// deathmatch: every door, as DOOM
+		SpawnPlayer (x,y,c->sdir);
+	}
+	else
+		SpawnPlayer (c->sx,c->sy,c->sdir);
 	ConnectAreas ();				// SpawnPlayer's InitAreas left only the
 	ob->state = &s_mpplayer;		// players' own areas
 	ob->temp1 = Spr (i,SPR_SS_S_1);
@@ -549,11 +664,13 @@ void T_MPDead (objtype *ob)
 	mpctx_t	far *c = &mpctx[i];
 
 	MPUse (i);
+	mpsrc = ob;
 	c->deadtime += tics;
 	ob->temp1 = Spr (i,c->deadtime < 15 ? SPR_SS_DIE_1 : c->deadtime < 30 ? SPR_SS_DIE_2
 		: c->deadtime < 45 ? SPR_SS_DIE_3 : SPR_SS_DEAD);
 	if (c->deadtime > 70 && buttonstate[bt_use] && !buttonheld[bt_use])
 		Respawn (ob,i);
+	mpsrc = NULL;
 	MPUse (0);
 }
 
@@ -569,8 +686,10 @@ void MPDoActors (void)
 			continue;
 		if (ob->obclass != playerobj)
 			MPUse (Target (ob));
+		mpsrc = ob;					// an enemy's sounds come from the enemy
 		DoActor (ob);
 	}
+	mpsrc = NULL;
 	MPUse (0);
 }
 
@@ -665,6 +784,7 @@ char far *MPDemoLoad (int n)
 	MM_SetLock (&demobuffer,true);
 	b = (byte far *)demobuffer;
 	Init (b[1]);
+	mprules = mpplayers > 1 ? b[2+4+3] : 0;	// P2's start's 4th byte
 	return (char far *)b + 2 + 4*mpplayers;
 }
 
@@ -772,6 +892,26 @@ void MPSpawn (byte far *b)
 	MPAsm (1,&objlist[0]);			// the renderer: no pickups or waking, and
 									// PlaceActors from the list's head
 	InitAreas ();					// every player's area, now they all exist
+	if (mprules & RULE_DM)
+		for (i=0;i<mpplayers;i++)
+			mpctx[i].gs.keys = 3;	// deathmatch: every door
+	if (mprules & RULE_DM)
+		gamestate.keys = 3;
+	if (mprules & RULE_NOENEMIES)
+	{
+		objtype	*ob,*next;
+
+		for (ob = &objlist[0];ob;ob = next)
+		{
+			next = ob->next;
+			if (ob->obclass == playerobj)
+				continue;
+			if (actorat[ob->tilex][ob->tiley] == ob)
+				actorat[ob->tilex][ob->tiley] = NULL;
+			RemoveObj (ob);
+		}
+		gamestate.killtotal = 0;
+	}
 	mpsum = 0;
 	mpsteps = 0;
 }
@@ -1248,10 +1388,55 @@ int MPNetArgs (void)
 	return mpnet;
 }
 
+//
+// The status bar, from the local player's own numbers: anything that changed
+// since it was drawn is drawn again (the game draws it only when the local
+// player's context happens to be in -- this catches every other way)
+//
+static int far shown[7] = {-1,-1,-1,-1,-1,-1,-1};
+
+static void Status (void)
+{
+	MPUse (mplocal);
+	if (shown[0] != gamestate.health)
+	{
+		shown[0] = gamestate.health;
+		DrawHealth ();
+		DrawFace ();
+	}
+	if (shown[1] != gamestate.ammo)
+	{
+		shown[1] = gamestate.ammo;
+		DrawAmmo ();
+	}
+	if (shown[2] != gamestate.keys)
+	{
+		shown[2] = gamestate.keys;
+		DrawKeys ();
+	}
+	if (shown[3] != gamestate.weapon)
+	{
+		shown[3] = gamestate.weapon;
+		DrawWeapon ();
+	}
+	if (shown[4] != (int)gamestate.score)
+	{
+		shown[4] = (int)gamestate.score;
+		DrawScore ();
+	}
+	if (shown[5] != gamestate.mapon)
+	{
+		shown[5] = gamestate.mapon;
+		DrawLevel ();
+	}
+	MPUse (0);
+}
+
 static void NetLoop (void)
 {
+	static char far leave[] = "Leave the game?  Y or N";
 	long	lastsend = -100;
-	int		n,i;
+	int		n,i,asking = 0;
 
 	playstate = TimeCount = lasttimecount = 0;
 	frameon = 0;
@@ -1295,7 +1480,9 @@ static void NetLoop (void)
 			UpdatePaletteShifts ();
 			gamestate.TimeCount += tics;
 		}
-		if (n || !frameon)
+		if (n)
+			Status ();
+		if ((n || !frameon) && !asking)
 		{
 			MPCamera (true);
 			ThreeDRefresh ();
@@ -1304,7 +1491,23 @@ static void NetLoop (void)
 		UpdateSoundLoc ();
 		if (screenfaded)
 			VW_FadeIn ();
-		if (Keyboard[sc_Escape] || mpstate == 3)
+		// ESC asks first, with the game going on underneath (it cannot
+		// stop for one player); the picture holds still while it asks
+		if (Keyboard[sc_Escape] && !asking)
+		{
+			asking = 1;
+			IN_ClearKeysDown ();
+			Message (leave);			// WL_MENU.C's box, as god mode's
+		}
+		if (asking && Keyboard[sc_Y])
+			playstate = ex_abort;
+		if (asking && (Keyboard[sc_N] || Keyboard[sc_Escape]))
+		{
+			asking = 0;
+			IN_ClearKeysDown ();
+			DrawAllPlayBorderSides ();
+		}
+		if (mpstate == 3)
 			playstate = ex_abort;
 	} while (!playstate);
 }
@@ -1361,6 +1564,7 @@ void MPNetGame (void)
 	for (i=0;i<RING;i++)
 		mpringstep[i] = -1;
 
+	mprules = mpstart[3];
 	NewGame (mpstart[2],mpstart[1]/10);
 	gamestate.mapon = mpstart[1] % 10;
 	godmode = false;

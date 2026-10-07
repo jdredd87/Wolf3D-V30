@@ -1074,7 +1074,8 @@ void Cmd_Use (void)
 		PushWall (checkx,checky,dir);
 		return;
 	}
-	if (!buttonheld[bt_use] && doornum == ELEVATORTILE && elevatorok)
+	if (!buttonheld[bt_use] && doornum == ELEVATORTILE && elevatorok
+	&& (!mpplayers || MPExitOK ()))		// multiplayer: not in deathmatch
 	{
 	//
 	// use elevator

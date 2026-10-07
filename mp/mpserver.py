@@ -1,6 +1,8 @@
 """The multiplayer server, in Python -- the reference.  StevenC & Claude, 2026.
 
-    python mp/mpserver.py [--players 2] [--map 0] [--skill 2] [--rules 0]
+    python mp/mpserver.py [--players 2] [--bots 0] [--map 0] [--skill 2]
+                          [--mode coop|dm] [--ff on|off] [--noenemies]
+                          [--fraglimit N] [--timelimit MIN]
                           [--port 31992] [--bind 0.0.0.0] [--steps N]
                           [--record M50.DEM] [--drop 0.0] [--quiet]
 
@@ -13,6 +15,16 @@ STEPS with every step after the one it last had (up to 64), so a lost packet
 or a slow machine just catches up.  SYNCs are compared and a DESYNC sent if
 two games part.  At the end -- --steps reached, Ctrl-C, or everyone gone --
 the match is written as an Mn.DEM (--record), for TIMEDEMO MGEN.
+
+--players is everyone; --bots N of them are the server's own: they play
+gendemo.py's structured random input (runs, turns, strafes, fire, use), so
+two machines can try a four-player game.  They cannot aim: the server does
+not run the game.
+
+The rules go to every machine in WELCOME and START (MULTIPLAYER.md, "Modes
+and rules"): --mode coop (the default) or dm (deathmatch); --ff off turns
+friendly fire off in co-op (on by default, as DOOM's); --noenemies spawns
+no enemies; --fraglimit and --timelimit end a deathmatch level.
 
 --drop P throws away that fraction of packets each way, for testing.  On
 Windows the port needs an inbound firewall rule (UDP 31992, local subnet).
@@ -27,6 +39,10 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import mpproto as P                 # noqa: E402
+sys.path.insert(0, os.path.join(HERE, ".."))
+import gendemo                      # noqa: E402  (the bots' input)
+
+RULE_DM, RULE_NOFF, RULE_NOENEMIES = 1, 2, 4
 
 
 def arg(name, default, kind=str):
@@ -42,6 +58,7 @@ class Slot:
         self.ready = False
         self.gone = False
         self.inputs = 0
+        self.bot = None             # a bot: its input, a step at a time
 
 
 class Server:
@@ -49,7 +66,16 @@ class Server:
         self.players = arg("--players", 2, int)
         self.map = arg("--map", 0, int)
         self.skill = arg("--skill", 2, int)
+        self.bots = arg("--bots", 0, int)
         self.rules = arg("--rules", 0, int)
+        if arg("--mode", "coop") == "dm":
+            self.rules |= RULE_DM
+        if arg("--ff", "on") == "off":
+            self.rules |= RULE_NOFF
+        if "--noenemies" in sys.argv:
+            self.rules |= RULE_NOENEMIES
+        self.frags = arg("--fraglimit", 0, int)
+        self.minutes = arg("--timelimit", 0, int)
         self.limit = arg("--steps", 0, int)
         self.record = arg("--record", "")
         self.drop = arg("--drop", 0.0, float)
@@ -96,7 +122,7 @@ class Server:
         if kind == P.HELLO:
             name, build, want = P.un_hello(b)
             if i is None:
-                if self.state != "join" or len(self.slots) >= self.players:
+                if self.state != "join" or len(self.slots) >= self.players - self.bots:
                     self.send(P.bye(0xFF), addr)
                     return
                 if self.slots and build != self.slots[0].build:
@@ -106,10 +132,17 @@ class Server:
                 self.slots.append(Slot(addr, name, build))
                 i = len(self.slots) - 1
                 self.log("P%d joined: %s from %s:%d (build %08X)" % (i + 1, name, addr[0], addr[1], build))
-            self.send(P.welcome(i, self.players, self.map, self.skill, self.rules), addr)
-            if len(self.slots) == self.players and self.state == "join":
+            self.send(P.welcome(i, self.players, self.map, self.skill, self.rules,
+                                self.frags, self.minutes), addr)
+            if len(self.slots) == self.players - self.bots and self.state == "join":
+                for k in range(self.bots):          # the bots take the last slots
+                    b = Slot(None, "BOT%d" % (k + 1), 0)
+                    b.bot = iter(gendemo.inputs(random.Random(4242 + k), 1000000))
+                    b.ready = True
+                    self.slots.append(b)
+                    self.log("P%d is a bot" % len(self.slots))
                 self.state = "start"
-                self.log("all %d here: START" % self.players)
+                self.log("all %d here: START (rules %d)" % (self.players, self.rules))
         elif i is None:
             return
         elif kind == P.INPUT:
@@ -128,7 +161,7 @@ class Server:
             slot, step, total = P.un_sync(b)
             got = self.syncs.setdefault(step, {})
             got[i] = total
-            live = [k for k, s in enumerate(self.slots) if not s.gone]
+            live = [k for k, s in enumerate(self.slots) if not s.gone and not s.bot]
             if all(k in got for k in live):
                 first = got[live[0]]
                 mask = sum(1 << k for k in live if got[k] != first)
@@ -136,7 +169,8 @@ class Server:
                     self.desyncs.append((step, mask))
                     self.log("DESYNC at step %d: %s" % (step, " ".join("P%d=%08X" % (k + 1, got[k]) for k in live)))
                     for s in self.slots:
-                        self.send(P.desync(step, mask), s.addr)
+                        if not s.bot:
+                            self.send(P.desync(step, mask), s.addr)
                 del self.syncs[step]
         elif kind == P.BYE:
             self.slots[i].gone = True
@@ -146,15 +180,18 @@ class Server:
             slot, number, text = P.un_chat(b)
             self.log("P%d says: %s" % (i + 1, text))
             for s in self.slots:
-                if not s.gone:
+                if not s.gone and not s.bot:
                     self.send(P.chat(i, number, text, P.CHATMSG), s.addr)
 
     def step(self):
+        for s in self.slots:
+            if s.bot:
+                s.controls = bytes(next(s.bot))
         row = b"".join(s.controls for s in self.slots)
         self.history.append(row)
         newest = len(self.history) - 1
         for s in self.slots:
-            if s.gone:
+            if s.gone or s.bot:
                 continue
             first = 0 if s.have == P.NOBODY else s.have + 1
             first = max(first, newest - P.STEPS_MAX + 1)
@@ -170,8 +207,9 @@ class Server:
                 if self.state == "start" and now >= self.next_start:
                     self.next_start = now + 0.5
                     for s in self.slots:
-                        self.send(P.start(self.players, self.map, self.skill, self.rules,
-                                          [(0, 0, 0, 0)] * self.players), s.addr)
+                        if not s.bot:
+                            self.send(P.start(self.players, self.map, self.skill, self.rules,
+                                              [(0, 0, 0, 0)] * self.players), s.addr)
                     if all(s.ready for s in self.slots):
                         self.state = "play"
                         self.started_at = now
@@ -183,7 +221,7 @@ class Server:
                         tick += P.STEP_SECONDS
                         if self.limit and len(self.history) >= self.limit:
                             raise StopIteration
-                    if self.slots and all(s.gone for s in self.slots):
+                    if self.slots and all(s.gone or s.bot for s in self.slots):
                         raise StopIteration
                 try:
                     data, addr = self.sock.recvfrom(2048)
@@ -195,7 +233,7 @@ class Server:
         except (KeyboardInterrupt, StopIteration):
             pass
         for s in self.slots:
-            if not s.gone:
+            if not s.gone and not s.bot:
                 self.send(P.bye(0xFF), s.addr)
         self.finish()
 
@@ -214,7 +252,10 @@ class Server:
             body = b"".join(self.history[:frames])
             demo = bytes([self.map]) + struct.pack("<H", 4 + per * frames) + b"\0" + body
             # P1's start's 4th byte: the skill + 1 (0 = id's demos' own, hard)
-            starts = bytes([0, 0, 0, self.skill + 1]) + bytes(4 * (self.players - 1))
+            # P2's start's 4th byte: the rules
+            starts = bytes([0, 0, 0, self.skill + 1])
+            if self.players > 1:
+                starts += bytes([0, 0, 0, self.rules]) + bytes(4 * (self.players - 2))
             data = b"M" + bytes([self.players]) + starts + demo
             open(self.record, "wb").write(data)
             self.log("recorded %d steps as %s" % (frames, self.record))
