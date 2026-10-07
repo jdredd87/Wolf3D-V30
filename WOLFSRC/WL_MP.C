@@ -54,6 +54,8 @@ typedef struct
 	int			dead,deaths,frags;			// dead: waiting to respawn
 	long		deadtime;
 	byte		sx,sy,sdir;					// where the player (re)spawns
+	int			absent;						// nobody in this slot (the steps say)
+	int			rejoined;					// came in during a tally: fresh stats
 } mpctx_t;
 
 mpctx_t	far	mpctx[MAXPLAYERS];
@@ -82,6 +84,7 @@ void	T_MPDead (objtype *ob);
 statetype s_mpplayer = {true,-1,0,T_MPPlayer,NULL,NULL};
 statetype s_mpattack = {false,-1,0,T_MPAttack,NULL,NULL};
 statetype s_mpdead = {false,-1,0,T_MPDead,NULL,NULL};
+statetype s_mpgone = {false,0,0,NULL,NULL,NULL};	// an empty slot: no shape, no think
 
 /*
 =============================================================================
@@ -303,6 +306,8 @@ game: SD_PlaySound's answer decides nothing but the sound location.
 
 
 int		far	mplocated;				// PlaySoundLocGlobal: mpsndx,y are set
+int		far	mpcatching;				// joining late: playing every step, fast
+long	far	mpcaught, far mpcaughtticks;	// steps so played, and in how long
 fixed	far	mpsndx, far mpsndy;
 
 boolean MPHear (void)
@@ -311,6 +316,8 @@ boolean MPHear (void)
 
 	if (!mpplayers)
 		return true;
+	if (mpcatching)
+		return false;				// a game played fast to catch up: silent
 	if (mplocated)
 	{
 		x = mpsndx;
@@ -511,12 +518,12 @@ static int Target (objtype *ob)
 			t = 0;
 		ob->flagspad = t;
 	}
-	if (mpctx[t].dead)				// dead: on to the next one alive
+	if (mpctx[t].dead || mpctx[t].absent)	// dead or gone: on to the next one
 	{
 		int	k;
 
 		for (k=1;k<mpplayers;k++)
-			if (!mpctx[(t+k)%mpplayers].dead)
+			if (!mpctx[(t+k)%mpplayers].dead && !mpctx[(t+k)%mpplayers].absent)
 			{
 				t = (t+k)%mpplayers;
 				ob->flagspad = t;
@@ -657,6 +664,86 @@ static void Respawn (objtype *ob, int i)
 		DrawFace ();
 		DrawKeys ();
 	}
+}
+
+/*
+=============================================================================
+
+						JOINING AND LEAVING -- a running game
+
+The server keeps a game going while people come and go.  A slot's presence
+is in every step: an empty slot's 3 bytes are 0, -128, -128 -- a turn and a
+move id's PollControls clamps to 100 a tic never are -- so every machine
+sees a player arrive or go at the same step, and does the same.  One who
+goes vanishes: no body, nothing to hit, nobody's target.  One who comes is
+a new player, as DOOM's: in as from a respawn, score and frags at 0.  A slot
+nobody has taken is empty from the first step.  In a tally only the slot's
+state changes; the next floor puts the world right.
+
+=============================================================================
+*/
+
+int		far	mpintally;			// the tally: presence noted, the world waits
+int		far	mplocalin;			// this machine's player has been in the game
+int		far	mpdropped;			// ... and the server has let it go
+
+static void Leave (int i)
+{
+	mpctx_t	far *c = &mpctx[i];
+	objtype	*ob = c->ob;
+
+	c->absent = 1;
+	c->dead = 0;
+	if (actorat[ob->tilex][ob->tiley] == ob)
+		actorat[ob->tilex][ob->tiley] = NULL;
+	ob->flags = FL_NEVERMARK;		// not solid, not shootable
+	ob->state = &s_mpgone;			// no shape: not drawn
+	ob->ticcount = 0;
+}
+
+static void Join (int i)
+{
+	mpctx_t	far *c = &mpctx[i];
+
+	MPUse (i);
+	c->absent = 0;
+	c->deaths = c->frags = 0;
+	c->deadtime = 0;
+	gamestate.score = gamestate.oldscore = 0;
+	gamestate.nextextra = EXTRAPOINTS;
+	Respawn (player,i);				// 100 health, a pistol, 50 bullets, a start
+	MPUse (0);
+}
+
+static void Presence (int i, int present)
+{
+	mpctx_t	far *c = &mpctx[i];
+
+	if (present == !c->absent)
+		return;
+	if (i == mplocal)
+	{
+		if (present)
+			mplocalin = 1;
+		else if (mplocalin)
+			mpdropped = 1;			// the server stopped hearing this machine
+	}
+	if (mpintally)
+	{
+		c->absent = !present;
+		if (present)
+			c->rejoined = 1;
+		return;
+	}
+	if (present)
+		Join (i);
+	else
+		Leave (i);
+}
+
+static int Gone (byte far *s)
+{
+	return s[1] == 0x80 && s[2] == 0x80;
 }
 
 void T_MPDead (objtype *ob)
@@ -938,10 +1025,16 @@ void MPSpawn (byte far *b)
 //
 static void SetControls (int i, byte far *s)
 {
+	static byte far none[3];
 	mpctx_t	far *c = &mpctx[i];
 	boolean	far *now, far *held;
 	int		b;
-	byte	bits = s[0];
+	byte	bits;
+
+	Presence (i,!Gone (s));			// (first: Join swaps contexts)
+	if (Gone (s))
+		s = none;
+	bits = s[0];
 
 	if (i)
 	{
@@ -978,6 +1071,15 @@ void MPReadDemo (void)
 {
 	int		i;
 
+	if (Gone ((byte far *)demoptr - 3))	// P1's, which id's code has just read
+	{
+		controlx = controly = 0;
+		memset (buttonstate,0,sizeof(buttonstate));
+		Presence (0,0);
+	}
+	else
+		Presence (0,1);
+
 	for (i=1;i<mpplayers;i++)
 	{
 		SetControls (i,(byte far *)demoptr);
@@ -997,7 +1099,7 @@ void MPConnectAreas (boolean connect)
 	{
 		objtype	*ob = i == mpcur ? player : mpctx[i].ob;
 
-		if (!ob)
+		if (!ob || mpctx[i].absent)
 			continue;
 		a = ob->areanumber;
 		areabyplayer[a] = true;
@@ -1147,7 +1249,10 @@ unsigned far mpfraglimit;		// WELCOME: deathmatch ends a level at these
 unsigned far mptimelimit;		//   frags, or minutes (0: none)
 long	far	mpheard;			// TimeCount when the server was last heard
 long	far	mpframes, far mpticks;	// pictures drawn, and in how long
-int		far	mpend;				// why it ended: 0 the game, 1 ESC Y, 2 BYE, 3 silence
+int		far	mpend;				// why it ended: 0 the game, 1 ESC Y, 2 BYE, 3 silence,
+									// 4 dropped by the server
+int		far	mpbye;				// BYE's reason: 0 the end, 1 full, 2 another build,
+									// 3 this machine dropped
 #define DEAF	(15*70)			// silent this long: the server is gone
 int		far	mpwhy;				// why the level ended: 0 elevator, 1 frags, 2 time
 extern	int	ElevatorBackTo[];	// WL_GAME.C
@@ -1245,8 +1350,9 @@ static void Take (byte far *d, unsigned len)
 		break;
 	case 8:							// BYE
 		mpstate = 3;
+		mpbye = len >= 6 ? d[5] : 0;
 		if (!mpend)
-			mpend = 2;
+			mpend = mpbye == 3 ? 4 : 2;
 		break;
 	}
 }
@@ -1333,7 +1439,8 @@ static void SendInput (void)
 	mppkt[8] = mpseq;
 	mppkt[9] = mpseq >> 8;
 	PutL (mppkt+10,mphave < 0 ? 0xffffffffl : mphave);
-	NetSend (mppkt,14);
+	PutL (mppkt+14,mpplayed < 0 ? 0xffffffffl : mpplayed);	// the server lets a
+	NetSend (mppkt,18);				// joiner in once it has caught up
 }
 
 static void Say (char far *s)
@@ -1631,11 +1738,27 @@ static void Picture (void)
 	}
 }
 
+//
+// Joining a running game: every step since the first, played as fast as the
+// machine can -- no picture, no sound -- with a line to say how far it is
+//
+static void Behind (long n)
+{
+	static char far f[] = "Catching up: %ld steps to go";
+	char	s[40], fmt[32];
+
+	_fstrcpy ((char far *)fmt,f);
+	sprintf (s,fmt,n);
+	CenterWindow (28,3);
+	US_CPrint ((char far *)s);
+	VW_UpdateScreen ();
+}
+
 static void NetLoop (void)
 {
 	static char far leave[] = "Leave the game?  Y or N";
-	long	lastsend = -100;
-	int		n,i,asking = 0;
+	long	lastsend = -100, lastsay = -100, catchfrom = 0;
+	int		n,i,asking = 0,limit;
 
 	playstate = TimeCount = lasttimecount = 0;
 	frameon = 0;
@@ -1662,7 +1785,19 @@ static void NetLoop (void)
 			lastsend = TimeCount;
 			SendInput ();
 		}
-		for (n=0;n < 16 && mpplayed < mphave && !playstate;n++)
+		if (mphave - mpplayed > 35)		// two seconds behind: catch up
+			mpcatching = 1;
+		else if (mpcatching && mphave - mpplayed < 8)
+		{
+			mpcatching = 0;
+			DrawAllPlayBorder ();
+			for (i=0;i<7;i++)
+				shown[i] = -1;
+		}
+		limit = mpcatching ? 64 : 16;
+		if (mpcatching)
+			catchfrom = TimeCount;
+		for (n=0;n < limit && mpplayed < mphave && !playstate;n++)
 		{
 			byte	far *row = mpring[++mpplayed % RING];
 
@@ -1684,6 +1819,19 @@ static void NetLoop (void)
 			}
 			UpdatePaletteShifts ();
 			gamestate.TimeCount += tics;
+			if (mpcatching)
+			{
+				mpcaught++;
+				if (!((n+1) & 7))		// catching up, the network too, every 8 steps:
+				{						// its 8 packet slots fill in a fraction of a
+					NetPump (Take);		// second, and the server sends from the step
+					if (TimeCount - lastsend >= 2)	// this machine last said it had
+					{
+						lastsend = TimeCount;
+						SendInput ();
+					}
+				}
+			}
 			if (!playstate && (mprules & RULE_DM))
 			{
 				for (i=0;i<mpplayers;i++)
@@ -1700,17 +1848,30 @@ static void NetLoop (void)
 				}
 			}
 		}
-		if (n)
-			Status ();
-		if ((n || !frameon) && !asking)
+		if (mpcatching)
 		{
-			MPCamera (true);
-			ThreeDRefresh ();
-			MPCamera (false);
-			mpframes++;
+			if (TimeCount >= catchfrom)
+				mpcaughtticks += TimeCount - catchfrom;
+			if (TimeCount - lastsay >= 70 || TimeCount < lastsay)
+			{
+				lastsay = TimeCount;
+				Behind (mphave - mpplayed);
+			}
 		}
-		if (!asking)
-			Picture ();
+		else
+		{
+			if (n)
+				Status ();
+			if ((n || !frameon) && !asking)
+			{
+				MPCamera (true);
+				ThreeDRefresh ();
+				MPCamera (false);
+				mpframes++;
+			}
+			if (!asking)
+				Picture ();
+		}
 		UpdateSoundLoc ();
 		if (screenfaded)
 			VW_FadeIn ();
@@ -1739,9 +1900,12 @@ static void NetLoop (void)
 			if (!mpend)				// like 4 billion ticks of silence.  Its BYE
 				mpend = 3;			// lost, or the server gone: nobody
 		}
-		if (mpstate == 3)			// sends steps again
+		if (mpdropped && !mpend)
+			mpend = 4;
+		if (mpstate == 3 || mpdropped)	// sends steps again
 			playstate = ex_abort;
 	} while (!playstate);
+	mpcatching = 0;
 	mpticks += TimeCount;
 }
 
@@ -1805,6 +1969,7 @@ static void TallyDraw (int over)
 	static char far you[] = ">";
 	static char far next[] = "fire or use: the next floor";
 	static char far end[] = "fire or use: the end";
+	static char far empty[] = "(nobody)";
 	gametype	far *g, far *g0 = Gs (0);
 	int			i,y,oldfont = fontnumber;
 
@@ -1826,6 +1991,11 @@ static void TallyDraw (int over)
 		if (i == mplocal)
 			Col (2,y,you);
 		Col (10,y,nm[i]);
+		if (mpctx[i].absent)
+		{
+			Col (78,y,empty);
+			continue;
+		}
 		ColN (78,y,Pct (g->killcount,g0->killtotal),1);
 		ColN (122,y,Pct (g->treasurecount,g0->treasuretotal),1);
 		ColN (166,y,Pct (g->secretcount,g0->secrettotal),1);
@@ -1861,6 +2031,10 @@ static int Tally (int over)
 		{
 			byte	far *row = mpring[++mpplayed % RING];
 
+			mpintally = 1;
+			for (i=0;i<mpplayers;i++)
+				Presence (i,!Gone (row+3*i));
+			mpintally = 0;
 			if (++steps >= TALLYMAX)
 				done = 1;
 			if (steps >= TALLYMIN)
@@ -1868,7 +2042,8 @@ static int Tally (int over)
 					if (row[3*i] & ((1<<bt_attack) | (1<<bt_use)))
 						done = 1;
 		}
-		if (Keyboard[sc_Escape] || mpstate == 3 || (long)(TimeCount - mpheard) > DEAF)
+		if (Keyboard[sc_Escape] || mpstate == 3 || mpdropped
+		|| (long)(TimeCount - mpheard) > DEAF)
 			return 0;
 	}
 	return 1;
@@ -1882,6 +2057,7 @@ static void NextLevel (void)
 	static gametype far keep[MAXPLAYERS];
 	static int far wasdead[MAXPLAYERS];
 	static byte far nostarts[4*MAXPLAYERS];
+	static int far gone[MAXPLAYERS], far fresh[MAXPLAYERS];
 	gametype	far *g;
 	int			i;
 
@@ -1891,6 +2067,8 @@ static void NextLevel (void)
 	{
 		_fmemcpy (&keep[i],&mpctx[i].gs,sizeof(gametype));
 		wasdead[i] = mpctx[i].dead;
+		gone[i] = mpctx[i].absent;	// MPSpawn spawns every slot: these
+		fresh[i] = mpctx[i].rejoined;	// go again, and these start new
 	}
 	gamestate.keys = 0;
 	gamestate.oldscore = gamestate.score;
@@ -1903,12 +2081,15 @@ static void NextLevel (void)
 	if ((mprules & RULE_DM) && gamestate.mapon > 8)
 		gamestate.mapon = 0;		// deathmatch: round the episode again
 
-	VW_FadeOut ();
-	ClearMemory ();
+	SendInput ();					// heard from, through the load: the server lets
+	VW_FadeOut ();					// a machine go after 30 s of nothing, and a V30
+	ClearMemory ();					// loading a floor is quiet for 15
 	SETFONTCOLOR (0,15);
 	DrawPlayScreen ();
 	VW_FadeIn ();
+	SendInput ();
 	SetupGameLevel ();
+	SendInput ();
 	{								// the steps count on through every floor:
 		long			s = mpsteps;	// the server compares SYNCs by step
 		unsigned long	m = mpsum;
@@ -1930,7 +2111,12 @@ static void NextLevel (void)
 		g->weapon = keep[i].weapon;
 		g->chosenweapon = keep[i].chosenweapon;
 		g->attackframe = g->attackcount = g->weaponframe = 0;
-		if (wasdead[i] || g->health <= 0 || (mprules & RULE_DM))
+		if (fresh[i])				// came in during the tally: a new player
+		{
+			g->score = g->oldscore = 0;
+			g->nextextra = EXTRAPOINTS;
+		}
+		if (wasdead[i] || g->health <= 0 || fresh[i] || (mprules & RULE_DM))
 		{							// back as from a respawn (deathmatch: always)
 			g->health = 100;
 			g->ammo = 50;
@@ -1938,7 +2124,11 @@ static void NextLevel (void)
 		}
 		mpctx[i].dead = mpctx[i].deaths = mpctx[i].frags = 0;
 		mpctx[i].deadtime = 0;
+		mpctx[i].absent = mpctx[i].rejoined = 0;
 	}
+	for (i=0;i<mpplayers;i++)
+		if (gone[i])
+			Leave (i);
 	mpwhy = 0;
 	for (i=0;i<7;i++)
 		shown[i] = -1;				// the status bar, all of it, next frame
@@ -1954,6 +2144,9 @@ void MPNetGame (void)
 	static char far waiting[] = "Waiting for the others...";
 	static char far defname[] = "Player";
 	static char far noanswer[] = "No answer from the server in 90 seconds";
+	static char far full[] = "The server is full -- try again when someone leaves";
+	static char far other[] = "The server is playing a different WOLF3DM";
+	static char far ended[] = "The server ended the game";
 	char	far *why;
 	long	last = -100, began;
 	int		i;
@@ -1997,6 +2190,8 @@ void MPNetGame (void)
 			Quit (NULL);
 		}
 	}
+	if (mpstate == 3)				// a BYE, not a START
+		NetQuit (mpbye == 1 ? full : mpbye == 2 ? other : ended);
 	for (i=0;i<RING;i++)
 		mpringstep[i] = -1;
 
@@ -2051,11 +2246,20 @@ void MPNetGame (void)
 		{
 			static char far e[] = "net: ended by %Fs\n";
 			static char far e0[] = "the game", far e1[] = "this player (ESC, Y)",
-				far e2[] = "the server (BYE)", far e3[] = "15 s with nothing from the server";
-			static char far *far why[4] = {e0,e1,e2,e3};
+				far e2[] = "the server (BYE)", far e3[] = "15 s with nothing from the server",
+				far e4[] = "the server, which stopped hearing this machine";
+			static char far *far why[5] = {e0,e1,e2,e3,e4};
 
 			_fstrcpy ((char far *)s,e);
-			printf (s,why[mpend & 3]);
+			printf (s,why[mpend >= 0 && mpend <= 4 ? mpend : 0]);
+			if (mpcaught)
+			{
+				static char far c[] = "net: caught up %ld steps in %ld s, %ld a second\n";
+				long	t = mpcaughtticks ? mpcaughtticks : 1;
+
+				_fstrcpy ((char far *)s,c);
+				printf (s,mpcaught,mpcaughtticks/70,mpcaught*70/t);
+			}
 		}
 	}
 	exit (0);

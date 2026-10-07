@@ -58,12 +58,19 @@ def un_start(b):
     return dict(players=players, map=mapnum, skill=skill, rules=rules, starts=starts)
 
 
-def inp(slot, buttons, turn, move, seq, have):
-    return head(INPUT) + struct.pack("<BBbbHI", slot, buttons, turn, move, seq & 0xFFFF, have & 0xFFFFFFFF)
+def inp(slot, buttons, turn, move, seq, have, played=None):
+    out = head(INPUT) + struct.pack("<BBbbHI", slot, buttons, turn, move, seq & 0xFFFF, have & 0xFFFFFFFF)
+    if played is not None:          # since 2026-10-07: how far it has PLAYED
+        out += struct.pack("<I", played & 0xFFFFFFFF)
+    return out
 
 
 def un_inp(b):
-    return struct.unpack_from("<BBbbHI", b)
+    """(slot, buttons, turn, move, seq, have, played) -- played None from a
+    client older than 2026-10-07, which does not send it."""
+    v = struct.unpack_from("<BBbbHI", b)
+    played = struct.unpack_from("<I", b, 10)[0] if len(b) >= 14 else None
+    return v + (played,)
 
 
 def steps(first, players, rows):
@@ -95,8 +102,20 @@ def un_desync(b):
     return struct.unpack_from("<IB", b)
 
 
-def bye(slot):
-    return head(BYE) + bytes([slot])
+# BYE's reason (since 2026-10-07; a client older than that ignores it)
+BYE_END, BYE_FULL, BYE_BUILD, BYE_DROPPED = 0, 1, 2, 3
+
+# a slot nobody is in, in a step: 0, -128, -128 -- id's PollControls clamps a
+# turn or a move to +-100 a tic, so no player's controls are ever this
+ABSENT = bytes([0, 0x80, 0x80])
+
+
+def bye(slot, reason=BYE_END):
+    return head(BYE) + bytes([slot, reason])
+
+
+def un_bye(b):
+    return b[0], (b[1] if len(b) >= 2 else BYE_END)
 
 
 def chat(slot, number, text, kind=CHAT):

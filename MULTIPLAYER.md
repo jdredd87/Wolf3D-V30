@@ -294,6 +294,75 @@ back-to-back V30 games joining from `WOLF3DM.CFG` alone (`WOLF3DM NET
 NETBOT LOWEST VIEW 8`), 400 of 400 steps each; V30 (`LOWEST VIEW 10`) and
 486 (view 19) in one four-player game, 1200 steps, 0 desyncs.
 
+**Joining and leaving a running game -- 2026-10-07** (StevenC: "once a
+server runs, people can join and leave as needed? ... if too many people
+try to join ... they get rejected with a message? ... if a machine goes
+down ... a slot is opened up for another person to join?").
+
+```
+python mp/mpserver.py --players 4 --mode dm --timelimit 10
+```
+
+runs until Ctrl-C.  `--players` is the number of slots (4 at most; `--bots`
+of them the server's own, the last ones).  Nobody waits for anybody:
+
+* **The game starts** the moment the first player has loaded the level.
+* **Anyone who comes later** is sent every step from the first, plays them
+  as fast as the machine can -- no picture, no sound, a box saying
+  "Catching up: N steps to go" -- and is let into the game when it is all
+  but caught up.  Every machine sees the player arrive at the same step,
+  as from a respawn: a start, 100 health, a pistol, 50 bullets, score and
+  frags 0.  (The game cannot be handed over -- every machine plays every
+  step from the same beginning, and that is what keeps them the same.)
+* **Leaving** -- ESC, Y -- frees the slot at once; a machine not heard from
+  for 30 s (`--drop-after`) is let go, and told so.  Every machine sees the
+  player vanish at the same step: no body, nothing to hit, nobody's target.
+  A V30 loading a floor is quiet for 15 s or so; it now says it is alive
+  three times during the load.
+* **A full server** answers `HELLO` with `BYE` 1, and the game says "The
+  server is full -- try again when someone leaves" and stops.
+* **When the last player has gone** the game is over; the server waits,
+  and the next player starts a new one (`--once`: it stops instead).
+  `--record` writes each game as it ends (`M50.DEM`, `M50B.DEM` ...).
+
+How: a slot's presence is in every step.  An empty slot's 3 bytes are 0,
+-128, -128 -- a turn and a move that id's `PollControls` clamps to 100 a
+tic, so no player's are ever that -- and `SetControls` (and `MPReadDemo`, for
+a recording) turns a change into `Join` or `Leave` at that step on every
+machine.  A slot nobody has taken is empty from the first step.  In a tally
+only the slot's state changes, and the next floor sets the world to match
+(a player who arrived during it starts new).  The server knows nothing of
+the game: it marks the slots.  `mp/mpcome.py` is a scripted player for
+testing -- `join@20 leave@60 quiet@100 knock@40` -- and SYNCs are now
+checked against the first report of each step, so a machine that joined
+late is compared with those that played it live.
+
+Also fixed on the way: while catching up, the network is read every 8
+steps.  The V30 played 64 between reads, 1.6 s in which its 8 packet slots
+overflowed -- it lost the server's final `BYE` (and ended on 15 s of
+silence instead), and the server kept sending it the same 64 steps,
+because it had not said it had them.
+
+Tested live, V30 and 486, every case:
+
+| | |
+|---|---|
+| the 486 joins 45 s into the V30's game | caught up 360 steps in 0.6 s, in at step 370; 2200 steps, the same end state on both, 0 desyncs |
+| the V30 joins 60 s into the 486's | caught up 1454 steps -- in at step 2501, 60 s later: it plays some 42 steps a second without drawing (E1M1, co-op), so it gains 24 a second on the game; 0 desyncs |
+| `mpcome.py` joins, a fifth knocks, it leaves, another joins, goes quiet | slot P3 in at once; the knock told "full"; the slot freed by `BYE`; taken again; let go after `--drop-after` 10 s, and told so.  V30 and 486 ended identical, 0 desyncs |
+| the last player leaves | game over, the server waits; the next player starts a new game |
+| a one-slot server, the 486 in it, the V30 knocks | the V30 prints "The server is full -- try again when someone leaves" |
+| `--drop-after 4`, a deathmatch floor ends | the V30, loading floor 2, was let go; it ended "by the server, which stopped hearing this machine"; the 486 played on to step 2400, 0 desyncs |
+| the default 30 s, a 1-minute deathmatch floor, three floors | nobody dropped; 2600 steps, 0 desyncs |
+
+**What it shows about the V30**: catching up on E1M2 and later floors
+(a four-player deathmatch, with every enemy) ran at only 23 steps a second
+-- the game runs at 17.5 -- so after each floor's load the V30 spent most
+of the floor catching up, with no picture.  On those floors the V30's limit
+is the game itself, four players' and every enemy's thinking, not the
+drawing; that is the next thing to profile and put into assembly.  The
+report says it: `net: caught up 2079 steps in 88 s, 23 a second`.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
@@ -527,20 +596,23 @@ server that disagrees with it is wrong.
 | 1 | `HELLO` | client | name (16 bytes, NUL-padded), build (u32: the EXE's CRC-32, so two builds never play together), wanted slot (u8, FFh = any) |
 | 2 | `WELCOME` | server | slot (u8), players expected (u8), map (u8), skill (u8), rules (u8), pad, frag limit (u16), time limit (u16, minutes) |
 | 3 | `START` | server | players (u8), map, skill, rules (u8 each), then for each player a start: x, y, direction, 0 -- x 0 means "the map's own start" for P1 and "beside P1" for the others (scattered, in deathmatch), found by the game itself (the same search on every machine).  Rules bits: 1 deathmatch, 2 no friendly fire (co-op), 4 no enemies.  A recording keeps them in P2's start's 4th byte, as it keeps the skill + 1 in P1's |
-| 4 | `INPUT` | client | slot (u8), buttons (u8), turn (s8), move (s8), seq (u16), have (u32) |
-| 5 | `STEPS` | server | first (u32), count (u8), players (u8), then count steps of players x 3 bytes -- buttons, turn, move, P1 first: a step exactly as `Mn.DEM` holds it |
+| 4 | `INPUT` | client | slot (u8), buttons (u8), turn (s8), move (s8), seq (u16), have (u32), played (u32: the highest step it has played; since 2026-10-07 -- the server lets a joiner in once it has caught up) |
+| 5 | `STEPS` | server | first (u32), count (u8), players (u8), then count steps of players x 3 bytes -- buttons, turn, move, P1 first: a step exactly as `Mn.DEM` holds it.  An empty slot's 3 bytes are 0, -128, -128 (since 2026-10-07): no player's are, as id's PollControls clamps a turn and a move to 100 a tic |
 | 6 | `SYNC` | client | slot (u8), pad, step (u32), sum (u32) |
 | 7 | `DESYNC` | server | step (u32), the slots whose sum differed from the first slot's (u8 bit mask) |
-| 8 | `BYE` | either | slot (u8) |
+| 8 | `BYE` | either | slot (u8), and from the server a reason (u8, since 2026-10-07): 0 the game is over, 1 the server is full, 2 a different build, 3 this machine was not heard from and its slot is free |
 | 9 | `CHAT` | client | slot (u8), message number (u8), length (u8), text |
 | 10 | `CHATMSG` | server | slot (u8), message number (u8), length (u8), text -- to every player; the sender's own copy is its acknowledgement |
 
-**Joining.**  A client sends `HELLO` every half second until it has a
-`WELCOME`.  When the expected number have joined, the server sends `START`
-every half second; a client sets up the level, then starts sending `INPUT`.
-The server's clock starts when every player has sent an `INPUT` after
-`START` -- a V30 takes seconds to load a level, and nobody plays until all
-can.
+**Joining** (since 2026-10-07; "Joining and leaving" below).  A client
+sends `HELLO` every half second until it has a `WELCOME`; the server answers
+with `WELCOME` and `START` at once, and `START` again every half second until
+the client sends `INPUT` -- its level is loaded.  The first `INPUT` of a game
+starts the clock.  Anyone after that is sent every step from the first, and
+comes into the game -- its controls in the steps, not the empty slot's --
+once its `INPUT` says it has played all but the last few.  A `HELLO` with
+no free slot gets `BYE` 1.  (Before 2026-10-07 the server waited for the
+number it was given, and started them together.)
 
 **Playing.**  The server steps every 4/70 s (17.5 a second, `DEMOTICS`).
 Each step it takes every player's newest controls -- the highest `seq` it
@@ -552,9 +624,11 @@ never waits.  A client plays the steps in order, as many as it has, and
 draws the last.  `have` is the highest step it holds with none missing.
 
 **Checking.**  Every 50 steps each client sends `SYNC` with the game
-state's checksum (`MPStep`'s); when every slot has reported a step the
-server compares, and a `DESYNC` tells everyone the step where the games
-parted.
+state's checksum (`MPStep`'s).  The first report of a step sets its sum;
+any machine whose sum differs is sent `DESYNC` with the step where its game
+parted -- so a machine that joined late is checked against the ones that
+played those steps live (since 2026-10-07; before, the server waited for
+every slot's report and compared them together).
 
 **Ending.**  `BYE` from a client takes it out (its controls stay at
 nothing); the server ends on Ctrl-C, a step limit, or every player gone,
