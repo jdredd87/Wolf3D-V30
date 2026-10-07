@@ -118,6 +118,69 @@ checksum.  Getting there found:
   doing -- frames sent and received, ARP, this machine's MAC -- so a stuck
   join says why.
 
+**Modes, bots and the end of a level -- work, 2026-10-06** (StevenC's
+asks after the first match: co-op or deathmatch, friendly fire, ESC that
+asks, a score at the end, three or four players, bots to try it with).
+Everything is chosen on the server and sent to every machine in `WELCOME`
+and `START`:
+
+```
+python mp/mpserver.py --players 4 --bots 2 --mode dm --timelimit 5
+python mp/mpserver.py --players 2 --mode coop --ff off
+```
+
+| option | |
+|---|---|
+| `--players N` | everyone, bots included (up to 4) |
+| `--bots N` | the server's own players, in the last slots: gendemo's random runs, turns, strafes, fire and use. They cannot aim -- the server does not play the game -- but they move, shoot, open doors and get shot, and each machine plays them exactly as it plays a person |
+| `--mode coop` / `dm` | co-op (the default) or deathmatch |
+| `--ff off` | co-op without friendly fire: another player is no target, a shot goes through to what is behind |
+| `--noenemies` | no enemies on the map |
+| `--fraglimit N`, `--timelimit MIN` | a deathmatch level ends there |
+
+* **Deathmatch**: every key from the start; everyone starts scattered and
+  respawns scattered (open floor, no actor, no player within four tiles,
+  picked from the step count so every machine picks the same); the
+  elevator does nothing; the maps go round the episode.  The status bar's
+  LIVES box shows frags -- deaths in co-op -- since nobody has lives here.
+* **The end of a level, as DOOM's**: a tally on every machine -- each
+  player's kills, items and secrets, frags and deaths, the local one
+  marked `>` -- while the steps go on arriving.  It ends on a step all
+  agree on (6 s, then the first step with anyone's fire or use; 20 s at
+  most), and everyone loads the next floor together, by id's rules
+  (secret floor and back).  Co-op keeps each player's health, weapons,
+  ammo and score; keys go, as in id's game.
+* **ESC asks** "Leave the game? Y or N" -- the game goes on underneath; it
+  cannot stop for one player.
+* **The status bar** is repainted from the local player's own numbers
+  after every step: the 486 once showed no health, because the game draws
+  it only when the local player's context happens to be in.
+* **Sounds, as DOOM's** (StevenC: P2 killed a guard far away and P1 heard
+  it).  Every machine plays every player's game, so each heard every gun
+  and every pickup on the map at full volume.  Now a sound plays only
+  within 16 tiles of the local player's eyes, and another player's gun or
+  pickup comes from that player, panned there on a Sound Blaster
+  (`MPHear`, asked by `SD_PlaySound`).  Only what is heard changes: nothing
+  in the game depends on a sound's answer.
+* **A machine that falls behind catches up.**  The server used to send only
+  the newest 64 steps, so a machine more than 64 behind (a V30 loading a
+  floor) had a gap nobody filled; it sends from the first one missing now.
+  `BYE` goes five times, and a machine that hears nothing from the server
+  for 15 s ends the game itself -- one lost `BYE` had left the V30 waiting
+  on floor 3.
+
+Tested live, V30 + 486 + two server bots, deathmatch with a one-minute
+limit: 2900 steps over three floors, both machines through every tally
+and every load, **0 packets dropped, no desync**; the tally photographed
+on the V30.  Single player stays IDENTICAL to id and all 20 `MGEN` demos
+agree after each change.
+
+Not yet: a recording replays only its first floor (`TIMEDEMO MGEN` has no
+level changes); a boss floor ends in id's death cam, which is not made
+for more than one player; a slow machine runs behind the others after a
+floor loads (10 s on the V30) and catches up as fast as it can play;
+chat; the FPC server.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
@@ -350,7 +413,7 @@ server that disagrees with it is wrong.
 |---|---|---|---|
 | 1 | `HELLO` | client | name (16 bytes, NUL-padded), build (u32: the EXE's CRC-32, so two builds never play together), wanted slot (u8, FFh = any) |
 | 2 | `WELCOME` | server | slot (u8), players expected (u8), map (u8), skill (u8), rules (u8), pad, frag limit (u16), time limit (u16, minutes) |
-| 3 | `START` | server | players (u8), map, skill, rules (u8 each), then for each player a start: x, y, direction, 0 -- x 0 means "the map's own start" for P1 and "beside P1" for the others, found by the game itself (the same search on every machine) |
+| 3 | `START` | server | players (u8), map, skill, rules (u8 each), then for each player a start: x, y, direction, 0 -- x 0 means "the map's own start" for P1 and "beside P1" for the others (scattered, in deathmatch), found by the game itself (the same search on every machine).  Rules bits: 1 deathmatch, 2 no friendly fire (co-op), 4 no enemies.  A recording keeps them in P2's start's 4th byte, as it keeps the skill + 1 in P1's |
 | 4 | `INPUT` | client | slot (u8), buttons (u8), turn (s8), move (s8), seq (u16), have (u32) |
 | 5 | `STEPS` | server | first (u32), count (u8), players (u8), then count steps of players x 3 bytes -- buttons, turn, move, P1 first: a step exactly as `Mn.DEM` holds it |
 | 6 | `SYNC` | client | slot (u8), pad, step (u32), sum (u32) |
@@ -382,6 +445,7 @@ parted.
 
 **Ending.**  `BYE` from a client takes it out (its controls stay at
 nothing); the server ends on Ctrl-C, a step limit, or every player gone,
+sends `BYE` five times (a client also gives up after 15 s of silence),
 and writes the match as `Mn.DEM`, so `TIMEDEMO MGEN n` replays it on any
 machine (a demo holds 65535 bytes: 5,400 steps -- five minutes -- of four
 players, more of fewer).

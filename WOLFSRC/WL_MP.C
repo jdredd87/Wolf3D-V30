@@ -1612,7 +1612,8 @@ static int Pct (int n, int total)
 static void TallyDraw (int over)
 {
 	static char far t0[] = "FLOOR COMPLETE", far t1[] = "FRAG LIMIT", far t2[] = "TIME LIMIT";
-	static char far hd[] = "KILLS  ITEMS  SECRET  FRAGS  DIED";
+	static char far h1[] = "KILLS", far h2[] = "ITEMS", far h3[] = "SECRET";
+	static char far h4[] = "FRAGS", far h5[] = "DIED";
 	static char far nm[4][9] = {"P1 GREY","P2 GREEN","P3 RED","P4 BROWN"};
 	static char far you[] = ">";
 	static char far next[] = "fire or use: the next floor";
@@ -1621,12 +1622,16 @@ static void TallyDraw (int over)
 	int			i,y,oldfont = fontnumber;
 
 	fontnumber = 0;
-	CenterWindow (36,12);
+	CenterWindow (38,12);			// the small font: about 7 pixels a letter
 	SETFONTCOLOR (0,15);
 	PrintY = WindowY + 4;
 	US_CPrint (mpwhy == 1 ? t1 : mpwhy == 2 ? t2 : t0);
 	SETFONTCOLOR (0,15);
-	Col (88,20,hd);
+	Col (78,20,h1);
+	Col (122,20,h2);
+	Col (166,20,h3);
+	Col (218,20,h4);
+	Col (262,20,h5);
 	for (i=0;i<mpplayers;i++)
 	{
 		g = Gs (i);
@@ -1634,11 +1639,11 @@ static void TallyDraw (int over)
 		if (i == mplocal)
 			Col (2,y,you);
 		Col (10,y,nm[i]);
-		ColN (88,y,Pct (g->killcount,g0->killtotal),1);
-		ColN (130,y,Pct (g->treasurecount,g0->treasuretotal),1);
-		ColN (172,y,Pct (g->secretcount,g0->secrettotal),1);
-		ColN (222,y,mpctx[i].frags,0);
-		ColN (260,y,mpctx[i].deaths,0);
+		ColN (78,y,Pct (g->killcount,g0->killtotal),1);
+		ColN (122,y,Pct (g->treasurecount,g0->treasuretotal),1);
+		ColN (166,y,Pct (g->secretcount,g0->secrettotal),1);
+		ColN (218,y,mpctx[i].frags,0);
+		ColN (262,y,mpctx[i].deaths,0);
 	}
 	PrintY = WindowY + 34 + 4*12 + 4;
 	US_CPrint (over ? end : next);
