@@ -804,6 +804,7 @@ void GetBonus (statobj_t *check)
 
 	StartBonusFlash ();
 	check->shapenum = -1;			// remove from list
+	MPBonusGone (check);			// multiplayer: its tile's bit (WL_MP.C)
 }
 
 

@@ -24,6 +24,24 @@ NS_DROPS	=	2
 NS_LEN		=	4
 NS_RING		=	20
 
+DATASEG
+
+EXTRN	_player:WORD				; the player in the globals (MPSwapIn/Out)
+EXTRN	_gamestate:WORD
+EXTRN	_controlx:WORD
+EXTRN	_controly:WORD
+EXTRN	_buttonstate:WORD
+EXTRN	_buttonheld:WORD
+EXTRN	_running:WORD
+EXTRN	_thrustspeed:WORD
+EXTRN	_plux:WORD
+EXTRN	_pluy:WORD
+EXTRN	_anglefrac:WORD
+EXTRN	_gotgatgun:WORD
+EXTRN	_LastAttacker:WORD
+EXTRN	_playerxmove:WORD
+EXTRN	_playerymove:WORD
+
 CODESEG
 
 share_off	dw	0
@@ -96,6 +114,125 @@ PUBLIC	_NetRecv
 	pop		si
 	pop		bx
 	pop		ds
+	retf
+ENDP
+
+;
+; NEC V30 build, StevenC & Claude (2026-10-07): a player's context, in and
+; out -- WL_MP.C's Save and Load, which every enemy's think pays for (its
+; target's context goes in first).  The fields in mpctx_t's order: ob,
+; gs (gswords words), controlx, controly, buttonstate[8], buttonheld[8],
+; running, thrustspeed, plux, pluy, anglefrac, gotgatgun, LastAttacker,
+; playerxmove, playerymove.  WL_MP.C's Init checks mpctx_t has that layout.
+;
+; void MPSwapOut (void far *ctx, unsigned gswords): the globals -> ctx
+;
+PROC	_MPSwapOut FAR
+PUBLIC	_MPSwapOut
+	push	bp
+	mov		bp,sp
+	push	si
+	push	di
+	les		di,[bp+6]
+	mov		dx,[bp+10]
+	cld
+	mov		ax,[_player]
+	stosw
+	mov		si,OFFSET _gamestate
+	mov		cx,dx
+	rep		movsw
+	mov		ax,[_controlx]
+	stosw
+	mov		ax,[_controly]
+	stosw
+	mov		si,OFFSET _buttonstate
+	mov		cx,8
+	rep		movsw
+	mov		si,OFFSET _buttonheld
+	mov		cx,8
+	rep		movsw
+	mov		ax,[_running]
+	stosw
+	mov		si,OFFSET _thrustspeed
+	movsw
+	movsw
+	mov		ax,[_plux]
+	stosw
+	mov		ax,[_pluy]
+	stosw
+	mov		ax,[_anglefrac]
+	stosw
+	mov		ax,[_gotgatgun]
+	stosw
+	mov		ax,[_LastAttacker]
+	stosw
+	mov		si,OFFSET _playerxmove
+	movsw
+	movsw
+	mov		si,OFFSET _playerymove
+	movsw
+	movsw
+	pop		di
+	pop		si
+	pop		bp
+	retf
+ENDP
+
+;
+; void MPSwapIn (void far *ctx, unsigned gswords): ctx -> the globals
+;
+PROC	_MPSwapIn FAR
+PUBLIC	_MPSwapIn
+	push	bp
+	mov		bp,sp
+	push	si
+	push	di
+	push	ds
+	mov		dx,[bp+10]
+	mov		ax,ds
+	mov		es,ax					; ES: DGROUP, the globals
+	lds		si,[bp+6]				; DS:SI: the context
+	cld
+	lodsw
+	mov		[es:_player],ax
+	mov		di,OFFSET _gamestate
+	mov		cx,dx
+	rep		movsw
+	lodsw
+	mov		[es:_controlx],ax
+	lodsw
+	mov		[es:_controly],ax
+	mov		di,OFFSET _buttonstate
+	mov		cx,8
+	rep		movsw
+	mov		di,OFFSET _buttonheld
+	mov		cx,8
+	rep		movsw
+	lodsw
+	mov		[es:_running],ax
+	mov		di,OFFSET _thrustspeed
+	movsw
+	movsw
+	lodsw
+	mov		[es:_plux],ax
+	lodsw
+	mov		[es:_pluy],ax
+	lodsw
+	mov		[es:_anglefrac],ax
+	lodsw
+	mov		[es:_gotgatgun],ax
+	lodsw
+	mov		[es:_LastAttacker],ax
+	mov		di,OFFSET _playerxmove
+	movsw
+	movsw
+	mov		di,OFFSET _playerymove
+	movsw
+	movsw
+	pop		ds
+	pop		di
+	pop		si
+	pop		bp
 	retf
 ENDP
 

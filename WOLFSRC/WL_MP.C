@@ -113,49 +113,30 @@ static void mprintf (char far *fmt, ...)
 =============================================================================
 */
 
+//
+// A player's globals -- player, gamestate, the controls, the weapon timing --
+// out to its context and in again: MPSwapOut and MPSwapIn, string moves in
+// WL_NETA.ASM (2026-10-07: these in C, with their _fmemcpy, were 24% of a
+// V30's time catching up -- every enemy thinks with its target's context in).
+// Init checks mpctx_t's layout is the one they copy
+//
+void	MPSwapOut (void far *ctx, unsigned gswords);
+void	MPSwapIn (void far *ctx, unsigned gswords);
+
 static void Save (int i)
 {
-	mpctx_t	far *c = &mpctx[i];
+	mpctx_t	far *c;
+	unsigned keys = gamestate.keys;
 	int		j;
 
-	c->ob = player;
-	_fmemcpy (&c->gs,(gametype far *)&gamestate,sizeof(gametype));
-	c->controlx = controlx;
-	c->controly = controly;
-	_fmemcpy (c->buttonstate,(boolean far *)buttonstate,sizeof(buttonstate));
-	_fmemcpy (c->buttonheld,(boolean far *)buttonheld,sizeof(buttonheld));
-	c->running = running;
-	c->thrustspeed = thrustspeed;
-	c->plux = plux;
-	c->pluy = pluy;
-	c->anglefrac = anglefrac;
-	c->gotgatgun = gotgatgun;
-	c->LastAttacker = LastAttacker;
-	c->playerxmove = playerxmove;
-	c->playerymove = playerymove;
-	for (j=0;j<mpplayers;j++)		// keys: one player picks one up, every
-		mpctx[j].gs.keys |= gamestate.keys;	// player has it (StevenC)
+	MPSwapOut (&mpctx[i],sizeof(gametype)/2);
+	for (c = mpctx,j=0;j<mpplayers;j++,c++)	// keys: one player picks one
+		c->gs.keys |= keys;					// up, every player has it (StevenC)
 }
 
 static void Load (int i)
 {
-	mpctx_t	far *c = &mpctx[i];
-
-	player = c->ob;
-	_fmemcpy ((gametype far *)&gamestate,&c->gs,sizeof(gametype));
-	controlx = c->controlx;
-	controly = c->controly;
-	_fmemcpy ((boolean far *)buttonstate,c->buttonstate,sizeof(buttonstate));
-	_fmemcpy ((boolean far *)buttonheld,c->buttonheld,sizeof(buttonheld));
-	running = c->running;
-	thrustspeed = c->thrustspeed;
-	plux = c->plux;
-	pluy = c->pluy;
-	anglefrac = c->anglefrac;
-	gotgatgun = c->gotgatgun;
-	LastAttacker = c->LastAttacker;
-	playerxmove = c->playerxmove;
-	playerymove = c->playerymove;
+	MPSwapIn (&mpctx[i],sizeof(gametype)/2);
 }
 
 void MPUse (int i)
@@ -289,6 +270,18 @@ void MPBonusClear (void)
 void MPBonusAt (int x, int y)
 {
 	mpbonus[(x<<3) | (y>>3)] |= 1 << (y&7);
+}
+
+// GetBonus took one: its tile's bit goes when no other bonus lies there
+void MPBonusGone (statobj_t *gone)
+{
+	statobj_t	*st;
+	byte		x = gone->tilex, y = gone->tiley;
+
+	for (st = &statobjlist[0];st != laststatobj;st++)
+		if (st->tilex == x && st->tiley == y && st->shapenum != -1 && (st->flags & FL_BONUS))
+			return;
+	mpbonus[(x<<3) | (y>>3)] &= ~(1 << (y&7));
 }
 
 static void Think (objtype *ob, void (*think) (objtype *))
@@ -856,8 +849,24 @@ void MPArgs (void)
 		godmode = !mortal;
 }
 
+#define FOFS(f)	((unsigned)(&((mpctx_t far *)0)->f))
+
 static void Init (int players)
 {
+	static char far bad[] = "WOLF3DM: mpctx_t is not the layout MPSwapIn/Out copy";
+
+	if ((sizeof(gametype) & 1) || FOFS(gs) != 2 || FOFS(controlx) != 2+sizeof(gametype)
+	|| FOFS(controly) != FOFS(controlx)+2 || FOFS(buttonstate) != FOFS(controlx)+4
+	|| FOFS(buttonheld) != FOFS(buttonstate)+16 || FOFS(running) != FOFS(buttonheld)+16
+	|| FOFS(thrustspeed) != FOFS(running)+2 || FOFS(plux) != FOFS(thrustspeed)+4
+	|| FOFS(LastAttacker) != FOFS(plux)+8 || FOFS(playerxmove) != FOFS(LastAttacker)+2
+	|| FOFS(playerymove) != FOFS(playerxmove)+4 || sizeof(boolean) != 2 || NUMBUTTONS != 8)
+	{
+		char	s[60];
+
+		_fstrcpy ((char far *)s,bad);
+		Quit (s);
+	}
 	mpplayers = players < 1 ? 1 : players > MAXPLAYERS ? MAXPLAYERS : players;
 	_fmemset (mpctx,0,sizeof(mpctx));
 	_fmemset (mptook,0,sizeof(mptook));
@@ -1157,16 +1166,33 @@ void MPCamera (boolean on)
 // player.  Two machines -- or two cameras -- playing the same demo must agree
 // on every step
 //
-static void Sum (unsigned long v)
-{
-	mpsum = (mpsum << 5) + (mpsum >> 27) + v;
+static void Sum (unsigned long v)	// mpsum = (mpsum << 5) + (mpsum >> 27) + v,
+{								// in 16-bit halves: the 32-bit shifts were two
+	unsigned	lo = ((unsigned far *)&mpsum)[0];	// runtime calls a value
+	unsigned	hi = ((unsigned far *)&mpsum)[1];
+	unsigned	nl = (lo << 5) | (hi >> 11);		// the rotate by 5
+	unsigned	nh = (hi << 5) | (lo >> 11);
+	unsigned	s = nl + ((unsigned *)&v)[0];
+
+	((unsigned far *)&mpsum)[0] = s;
+	((unsigned far *)&mpsum)[1] = nh + ((unsigned *)&v)[1] + (s < nl);
 }
+
+//
+// Sum's step on the locals lo, hi: the sum rotated left 5, plus v (as an
+// unsigned long, exactly as Sum's argument)
+//
+#define SUMV(v)	{ unsigned long sv_ = (v); unsigned sl_ = (lo << 5) | (hi >> 11);	\
+				  unsigned sh_ = (hi << 5) | (lo >> 11);								\
+				  lo = sl_ + ((unsigned *)&sv_)[0];									\
+				  hi = sh_ + ((unsigned *)&sv_)[1] + (lo < sl_); }
 
 void MPStep (void)
 {
 	objtype		*ob;
 	statobj_t	*st;
 	int			i;
+	unsigned	lo,hi;
 
 	// the whole state is summed only every 50th step -- when it is compared
 	// -- each sum chained to the one before: summed every step it cost the
@@ -1175,32 +1201,36 @@ void MPStep (void)
 		return;
 	MPUse (0);
 	Save (0);
-	for (ob = &objlist[0];ob;ob = ob->next)
+	lo = ((unsigned far *)&mpsum)[0];	// Sum's arithmetic, in locals: a call
+	hi = ((unsigned far *)&mpsum)[1];	// and the far sum a value cost the V30
+	for (ob = &objlist[0];ob;ob = ob->next)	// 3% of its time catching up
 	{
-		Sum (ob->x);
-		Sum (ob->y);
-		Sum (ob->angle);
-		Sum (ob->hitpoints);
-		Sum ((unsigned)ob->state);
-		Sum (ob->ticcount);
-		Sum (ob->flags & ~FL_VISABLE);
-		Sum (ob->active);
-		Sum (ob->dir);
+		SUMV (ob->x);
+		SUMV (ob->y);
+		SUMV (ob->angle);
+		SUMV (ob->hitpoints);
+		SUMV ((unsigned)ob->state);
+		SUMV (ob->ticcount);
+		SUMV (ob->flags & ~FL_VISABLE);
+		SUMV (ob->active);
+		SUMV (ob->dir);
 	}
 	for (st = &statobjlist[0];st != laststatobj;st++)
-		Sum (st->shapenum);
+		SUMV (st->shapenum);
 	for (i=0;i<doornum;i++)
-		Sum (doorposition[i]);
+		SUMV (doorposition[i]);
 	for (i=0;i<mpplayers;i++)
 	{
-		Sum (mpctx[i].gs.health);
-		Sum (mpctx[i].gs.ammo);
-		Sum (mpctx[i].gs.keys);
-		Sum (mpctx[i].gs.weapon);
-		Sum (mpctx[i].gs.score);
-		Sum (mpctx[i].deaths);
-		Sum (mpctx[i].frags);
+		SUMV (mpctx[i].gs.health);
+		SUMV (mpctx[i].gs.ammo);
+		SUMV (mpctx[i].gs.keys);
+		SUMV (mpctx[i].gs.weapon);
+		SUMV (mpctx[i].gs.score);
+		SUMV (mpctx[i].deaths);
+		SUMV (mpctx[i].frags);
 	}
+	((unsigned far *)&mpsum)[0] = lo;
+	((unsigned far *)&mpsum)[1] = hi;
 	if (mpsteps/50 <= MAXCHECKS)
 		mpcheck[mpsteps/50-1] = mpsum;
 }
@@ -1353,15 +1383,21 @@ static void Take (byte far *d, unsigned len)
 		players = d[9];
 		if (players != mpplayers || len < 10 + count*3*players)
 			break;
-		for (i=0;i<count;i++)
-		{
-			s = first+i;
-			if (s <= mphave || s > mpplayed + RING)
-				continue;			// had it, or no room yet: it comes again
-			_fmemcpy (mpring[s % RING],d+10+i*3*players,3*players);
-			mpringstep[s % RING] = s;
+		{							// the steps it lacks, and has room for:
+			long	lo = (long)first > mphave ? (long)first : mphave+1;	// the
+			long	hi = (long)first + count - 1;	// rest come again
+			unsigned k;
+
+			if (hi > mpplayed + RING)
+				hi = mpplayed + RING;
+			for (s = lo;s <= hi;s++)
+			{
+				k = (unsigned)s & (RING-1);
+				_fmemcpy (mpring[k],d+10+(unsigned)(s-first)*3*players,3*players);
+				mpringstep[k] = s;
+			}
 		}
-		while (mpringstep[(mphave+1) % RING] == mphave+1)
+		while (mpringstep[(unsigned)(mphave+1) & (RING-1)] == mphave+1)
 			mphave++;
 		break;
 	case 7:							// DESYNC
@@ -1806,9 +1842,13 @@ static void NetLoop (void)
 			SendInput ();
 		}
 		if (mphave - mpplayed > 35)		// two seconds behind: catch up
+		{
 			mpcatching = 1;
+			ProfStart ();				// PROFILE: the catching up, only
+		}
 		else if (mpcatching && mphave - mpplayed < 8)
 		{
+			ProfStop ();
 			mpcatching = 0;
 			DrawAllPlayBorder ();
 			for (i=0;i<7;i++)
@@ -1819,7 +1859,7 @@ static void NetLoop (void)
 			catchfrom = TimeCount;
 		for (n=0;n < limit && mpplayed < mphave && !playstate;n++)
 		{
-			byte	far *row = mpring[++mpplayed % RING];
+			byte	far *row = mpring[(unsigned)++mpplayed & (RING-1)];
 
 			for (i=0;i<mpplayers;i++)
 				SetControls (i,row+3*i);
@@ -1925,6 +1965,7 @@ static void NetLoop (void)
 		if (mpstate == 3 || mpdropped)	// sends steps again
 			playstate = ex_abort;
 	} while (!playstate);
+	ProfStop ();					// before the next floor's StartMusic sets INT 8
 	mpcatching = 0;
 	mpticks += TimeCount;
 }
@@ -2049,7 +2090,7 @@ static int Tally (int over)
 		}
 		while (mpplayed < mphave && !done)
 		{
-			byte	far *row = mpring[++mpplayed % RING];
+			byte	far *row = mpring[(unsigned)++mpplayed & (RING-1)];
 
 			mpintally = 1;
 			for (i=0;i<mpplayers;i++)
@@ -2167,6 +2208,7 @@ void MPNetGame (void)
 	static char far full[] = "The server is full -- try again when someone leaves";
 	static char far other[] = "The server is playing a different WOLF3DM";
 	static char far ended[] = "The server ended the game";
+	static char far wprof[] = "profile";
 	char	far *why;
 	long	last = -100, began;
 	int		i;
@@ -2232,6 +2274,14 @@ void MPNetGame (void)
 	PM_CheckMainMem ();
 	fizzlein = true;
 	DrawLevel ();
+	for (i = 1;i < _argc;i++)		// PROFILE: the catching up (NetLoop); its
+		if (Is (_argv[i],wprof))	// 36 KB from the page manager's memory
+		{
+			ClearMemory ();
+			ProfInit ();
+			PM_CheckMainMem ();
+			break;
+		}
 
 	for (;;)
 	{
@@ -2250,6 +2300,17 @@ void MPNetGame (void)
 	mppkt[4] = mplocal;
 	NetSend (mppkt,5);
 	NetStop ();
+	{
+		static char far p[] = "PROFILE: %lu samples of catching up in PROF.BIN\n";
+		unsigned long n = profiling ? ProfWrite () : 0;	// before ShutdownId
+		char	s[60];
+
+		if (profiling)
+		{
+			_fstrcpy ((char far *)s,p);
+			printf (s,n);
+		}
+	}
 	ShutdownId ();
 	MPReport ();
 	{

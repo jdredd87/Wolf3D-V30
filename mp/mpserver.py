@@ -79,6 +79,8 @@ class Slot:
         self.inputs = 0
         self.heard = time.perf_counter()
         self.bot = None             # a bot: its input, a step at a time
+        self.sent_first = self.sent_last = None     # the last STEPS sent it
+        self.sent_at = 0
 
 
 class Server:
@@ -311,8 +313,16 @@ class Server:
             # STEPS_MAX at a time
             first = 0 if s.have == P.NOBODY else s.have + 1
             last = min(newest, first + P.STEPS_MAX - 1)
-            if first <= newest:
-                self.send(P.steps(first, self.players, self.history[first:last + 1]), s.addr)
+            if first > newest:
+                continue
+            # a machine busy catching up says what it has only now and then:
+            # the same steps again at most 4 times a second (each copy cost a
+            # V30 catching up its time to take in, 17 a second)
+            now = time.perf_counter()
+            if first == s.sent_first and last == s.sent_last and now - s.sent_at < 0.25:
+                continue
+            s.sent_first, s.sent_last, s.sent_at = first, last, now
+            self.send(P.steps(first, self.players, self.history[first:last + 1]), s.addr)
 
     def run(self):
         self.log("listening on UDP %d: %d slots (%d for people, %d bots), map %d, rules %d"

@@ -1261,6 +1261,7 @@ void	MPPageFile (void);
 boolean	MPExitOK (void);
 void MPBonusClear(void);
 void MPBonusAt(int x, int y);
+void MPBonusGone(statobj_t *gone);
 boolean	MPHear (void);
 extern	int far	mplocated;
 extern	fixed far mpsndx, far mpsndy;

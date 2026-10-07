@@ -363,6 +363,38 @@ is the game itself, four players' and every enemy's thinking, not the
 drawing; that is the next thing to profile and put into assembly.  The
 report says it: `net: caught up 2079 steps in 88 s, 23 a second`.
 
+**Catching up, profiled and made faster -- 2026-10-07.**  `WOLF3DM NET ...
+PROFILE` now runs WL_PROF.C's sampler over the catching up only, and
+writes `PROF.BIN` (`python profmap.py PROF.BIN WOLFSRC\WOLF3DV.MAP`); its
+36 KB come from the page manager's memory, as the window keys' do.  The
+test: a four-player deathmatch on E1M2 (`--map 1`, two bots), the 486 in
+it a minute before the V30 joins.
+
+| | V30 catching up | what it was |
+|---|---|---|
+| before | 28 steps a second | -- |
+| pickups only where a bonus may lie | (TIMEDEMO MGEN 11: play 937 -> 758 ticks) | `AutomapPickup`, a scan of the whole static list for every player every step: 16% |
+| the context swap in assembly | 31 | `Save`/`Load` and their `_fmemcpy`: 24% |
+| a tile's bonus bit cleared at its last pickup; `Take` copies only new steps; the state sum in locals; the server sends a stalled machine the same steps 4 times a second, not 17 | **35** | packets 6%, the sum 3%, old item tiles 4% |
+
+* **Pickups**: a bit a tile (512 bytes, far) says a bonus may lie there --
+  set by `SpawnStatic` and `PlaceItemType`, cleared with the list and when
+  `GetBonus` takes a tile's last one -- and `Think` scans only there.
+* **`MPSwapOut`/`MPSwapIn`** (WL_NETA.ASM) copy a context's fields with
+  string moves, in `mpctx_t`'s order; `Init` checks that order and the
+  struct's packing, and Borland reports the check as always false.
+* **`% RING`** on a long was a 32-bit division per step; a mask now.
+* Every change leaves the game as it was: the 20 `MGEN` demos give the same
+  sums as before them, every 50 steps, from both players' eyes.
+
+Tried and dropped: not saving a context back when an enemy's think left it
+unchanged (an enemy runs with its target's context in, and an idle one
+looks at each player in turn, so the context changes at nearly every
+actor).  The idea is sound, but something besides `TakeDamage` and the death
+cam changes the target's context -- M3's sums parted at step 100, and the
+486 froze -- so it is not in.  The swaps are still some 17% of catching up:
+the next place to look, with the context's real writers found first.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
