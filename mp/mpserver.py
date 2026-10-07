@@ -193,10 +193,13 @@ class Server:
         for s in self.slots:
             if s.gone or s.bot:
                 continue
+            # from the first step it lacks: a machine that fell behind (a
+            # level loading on a V30) catches up STEPS_MAX at a time.  The
+            # newest STEPS_MAX would leave it a gap nobody ever fills
             first = 0 if s.have == P.NOBODY else s.have + 1
-            first = max(first, newest - P.STEPS_MAX + 1)
+            last = min(newest, first + P.STEPS_MAX - 1)
             if first <= newest:
-                self.send(P.steps(first, self.players, self.history[first:newest + 1]), s.addr)
+                self.send(P.steps(first, self.players, self.history[first:last + 1]), s.addr)
 
     def run(self):
         self.log("listening on UDP %d for %d players, map %d" % (self.sock.getsockname()[1], self.players, self.map))
@@ -232,9 +235,11 @@ class Server:
                     pass                # Windows: an ICMP port-unreachable
         except (KeyboardInterrupt, StopIteration):
             pass
-        for s in self.slots:
-            if not s.gone and not s.bot:
-                self.send(P.bye(0xFF), s.addr)
+        for k in range(5):              # UDP: one BYE lost left a V30 waiting
+            for s in self.slots:        # for steps that never came
+                if not s.gone and not s.bot:
+                    self.send(P.bye(0xFF), s.addr)
+            time.sleep(0.05)
         self.finish()
 
     def finish(self):

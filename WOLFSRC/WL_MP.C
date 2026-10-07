@@ -30,6 +30,7 @@ extern	statetype	s_player,s_attack;
 
 void	T_Player (objtype *ob);
 void	T_Attack (objtype *ob);
+void	LatchNumber (int x, int y, int width, long number);
 void	MPAsm (int on, objtype *first);		// WL_DR_A.ASM: the renderer's MP hooks
 void	AutomapPickup (void);				// WL_DR_A.ASM: GetBonus where the player stands
 void	ConnectAreas (void);
@@ -869,6 +870,11 @@ void MPSpawn (byte far *b)
 			sy = b[1];
 			sd = b[2];
 		}
+		else if (mprules & RULE_DM)
+		{
+			DMStart (i,&sx,&sy);		// deathmatch: scattered, as DOOM
+			sd = mpctx[0].sdir;
+		}
 		else
 		{
 			Beside (i,&sx,&sy);
@@ -877,7 +883,8 @@ void MPSpawn (byte far *b)
 		mpctx[i].sx = sx;
 		mpctx[i].sy = sy;
 		mpctx[i].sdir = sd;
-		mpctx[i].dead = mpctx[i].deaths = 0;
+		mpctx[i].dead = mpctx[i].deaths = mpctx[i].frags = 0;
+		mpctx[i].deadtime = 0;
 		SpawnPlayer (sx,sy,sd);		// sets player's place and Thrust's globals
 		player->state = &s_mpplayer;
 		player->temp1 = Spr (i,SPR_SS_S_1);
@@ -1136,6 +1143,12 @@ unsigned far mpport = 31992;
 int		far	mpbot;				// NETBOT: random controls of its own
 char	far	mpname[17];
 int		far	mpstate;			// 0 hello, 1 welcomed, 2 started, 3 over
+unsigned far mpfraglimit;		// WELCOME: deathmatch ends a level at these
+unsigned far mptimelimit;		//   frags, or minutes (0: none)
+long	far	mpheard;			// TimeCount when the server was last heard
+#define DEAF	(15*70)			// silent this long: the server is gone
+int		far	mpwhy;				// why the level ended: 0 elevator, 1 frags, 2 time
+extern	int	ElevatorBackTo[];	// WL_GAME.C
 byte	far	mpstart[4+4*MAXPLAYERS];	// START's players, map, skill, rules, starts
 byte	far	mpring[RING][3*MAXPLAYERS];
 long	far	mpringstep[RING];
@@ -1180,6 +1193,7 @@ static void Take (byte far *d, unsigned len)
 
 	if (len < 4 || d[0] != 'W' || d[1] != 'M' || d[2] != 1)
 		return;
+	mpheard = TimeCount;
 	switch (d[3])
 	{
 	case 2:							// WELCOME
@@ -1187,6 +1201,11 @@ static void Take (byte far *d, unsigned len)
 		{
 			mplocal = d[4];
 			mpstate = 1;
+			if (len >= 14)
+			{
+				mpfraglimit = d[10] | (d[11] << 8);
+				mptimelimit = d[12] | (d[13] << 8);
+			}
 		}
 		break;
 	case 3:							// START
@@ -1429,6 +1448,15 @@ static void Status (void)
 		shown[5] = gamestate.mapon;
 		DrawLevel ();
 	}
+	{								// LIVES: no lives here -- frags in a
+		int	n = mprules & RULE_DM ? mpctx[mplocal].frags : mpctx[mplocal].deaths;
+
+		if (shown[6] != n)			// deathmatch, deaths in co-op, as DOOM
+		{
+			shown[6] = n;
+			LatchNumber (13,16,2,n);
+		}
+	}
 	MPUse (0);
 }
 
@@ -1448,6 +1476,7 @@ static void NetLoop (void)
 	if (MousePresent)
 		Mouse(MDelta);
 	tics = DEMOTICS;
+	mpheard = 0;
 	SendInput ();					// "loaded": the server starts its clock
 	do
 	{
@@ -1479,6 +1508,21 @@ static void NetLoop (void)
 			}
 			UpdatePaletteShifts ();
 			gamestate.TimeCount += tics;
+			if (!playstate && (mprules & RULE_DM))
+			{
+				for (i=0;i<mpplayers;i++)
+					if (mpfraglimit && mpctx[i].frags >= mpfraglimit)
+					{
+						playstate = ex_completed;
+						mpwhy = 1;
+					}
+				if (!playstate && mptimelimit
+				&& gamestate.TimeCount >= (long)mptimelimit*60*70)
+				{
+					playstate = ex_completed;
+					mpwhy = 2;
+				}
+			}
 		}
 		if (n)
 			Status ();
@@ -1507,9 +1551,209 @@ static void NetLoop (void)
 			IN_ClearKeysDown ();
 			DrawAllPlayBorderSides ();
 		}
-		if (mpstate == 3)
+		if (TimeCount - mpheard > DEAF)
+			mpstate = 3;			// its BYE lost, or the server gone: nobody
+		if (mpstate == 3)			// sends steps again
 			playstate = ex_abort;
 	} while (!playstate);
+}
+
+/*
+=============================================================================
+
+						THE END OF A LEVEL
+
+DOOM's way: everyone sees the same tally -- each player's kills, items and
+secrets, frags and deaths -- and then everyone goes to the next floor
+together.  The steps go on arriving all through it, so it ends on a step
+every machine agrees on: after 6 seconds, the first step in which anyone
+presses fire or use, and after 20 seconds regardless.  Co-op keeps each
+player's health, weapons, ammo and score from floor to floor (a player who
+was dead comes back as from a respawn); keys go, as in id's game.
+
+=============================================================================
+*/
+
+#define TALLYMIN	105				// steps: 6 seconds
+#define TALLYMAX	350				// 20
+
+static gametype far *Gs (int i)
+{
+	return i == mpcur ? (gametype far *)&gamestate : &mpctx[i].gs;
+}
+
+static void Col (int x, int y, char far *s)
+{
+	PrintX = WindowX + x;
+	PrintY = WindowY + y;
+	US_Print (s);
+}
+
+static void ColN (int x, int y, long n, int pct)
+{
+	char	s[12];
+	int		k;
+
+	ltoa (n,s,10);
+	if (pct)
+	{
+		k = strlen (s);
+		s[k] = '%';
+		s[k+1] = 0;
+	}
+	Col (x,y,(char far *)s);
+}
+
+static int Pct (int n, int total)
+{
+	return total ? (int)((long)n*100/total) : 0;
+}
+
+static void TallyDraw (int over)
+{
+	static char far t0[] = "FLOOR COMPLETE", far t1[] = "FRAG LIMIT", far t2[] = "TIME LIMIT";
+	static char far hd[] = "KILLS  ITEMS  SECRET  FRAGS  DIED";
+	static char far nm[4][9] = {"P1 GREY","P2 GREEN","P3 RED","P4 BROWN"};
+	static char far you[] = ">";
+	static char far next[] = "fire or use: the next floor";
+	static char far end[] = "fire or use: the end";
+	gametype	far *g, far *g0 = Gs (0);
+	int			i,y,oldfont = fontnumber;
+
+	fontnumber = 0;
+	CenterWindow (36,12);
+	SETFONTCOLOR (0,15);
+	PrintY = WindowY + 4;
+	US_CPrint (mpwhy == 1 ? t1 : mpwhy == 2 ? t2 : t0);
+	SETFONTCOLOR (0,15);
+	Col (88,20,hd);
+	for (i=0;i<mpplayers;i++)
+	{
+		g = Gs (i);
+		y = 34 + i*12;
+		if (i == mplocal)
+			Col (2,y,you);
+		Col (10,y,nm[i]);
+		ColN (88,y,Pct (g->killcount,g0->killtotal),1);
+		ColN (130,y,Pct (g->treasurecount,g0->treasuretotal),1);
+		ColN (172,y,Pct (g->secretcount,g0->secrettotal),1);
+		ColN (222,y,mpctx[i].frags,0);
+		ColN (260,y,mpctx[i].deaths,0);
+	}
+	PrintY = WindowY + 34 + 4*12 + 4;
+	US_CPrint (over ? end : next);
+	VW_UpdateScreen ();
+	fontnumber = oldfont;
+}
+
+//
+// The tally, playing the steps as they come.  Returns 0 if this player
+// left (ESC) or the server ended the game
+//
+static int Tally (int over)
+{
+	long	lastsend = -100;
+	int		steps = 0,i,done = 0;
+
+	TallyDraw (over);
+	mpheard = TimeCount;
+	while (!done)
+	{
+		NetPump (Take);
+		if (TimeCount - lastsend >= 2)
+		{
+			lastsend = TimeCount;
+			SendInput ();
+		}
+		while (mpplayed < mphave && !done)
+		{
+			byte	far *row = mpring[++mpplayed % RING];
+
+			if (++steps >= TALLYMAX)
+				done = 1;
+			if (steps >= TALLYMIN)
+				for (i=0;i<mpplayers;i++)
+					if (row[3*i] & ((1<<bt_attack) | (1<<bt_use)))
+						done = 1;
+		}
+		if (Keyboard[sc_Escape] || mpstate == 3 || TimeCount - mpheard > DEAF)
+			return 0;
+	}
+	return 1;
+}
+
+//
+// Everyone to the next floor, the way id's GameLoop picks it
+//
+static void NextLevel (void)
+{
+	static gametype far keep[MAXPLAYERS];
+	static int far wasdead[MAXPLAYERS];
+	static byte far nostarts[4*MAXPLAYERS];
+	gametype	far *g;
+	int			i;
+
+	MPUse (0);
+	Save (0);
+	for (i=0;i<mpplayers;i++)
+	{
+		_fmemcpy (&keep[i],&mpctx[i].gs,sizeof(gametype));
+		wasdead[i] = mpctx[i].dead;
+	}
+	gamestate.keys = 0;
+	gamestate.oldscore = gamestate.score;
+	if (gamestate.mapon == 9)
+		gamestate.mapon = ElevatorBackTo[gamestate.episode];	// back from the secret floor
+	else if (playstate == ex_secretlevel)
+		gamestate.mapon = 9;
+	else
+		gamestate.mapon++;
+	if ((mprules & RULE_DM) && gamestate.mapon > 8)
+		gamestate.mapon = 0;		// deathmatch: round the episode again
+
+	VW_FadeOut ();
+	ClearMemory ();
+	SETFONTCOLOR (0,15);
+	DrawPlayScreen ();
+	VW_FadeIn ();
+	SetupGameLevel ();
+	{								// the steps count on through every floor:
+		long			s = mpsteps;	// the server compares SYNCs by step
+		unsigned long	m = mpsum;
+
+		MPSpawn (nostarts);
+		mpsteps = s;
+		mpsum = m;
+	}
+	for (i=0;i<mpplayers;i++)
+	{
+		g = Gs (i);
+		g->oldscore = keep[i].oldscore;
+		g->score = keep[i].score;
+		g->nextextra = keep[i].nextextra;
+		g->lives = keep[i].lives;
+		g->health = keep[i].health;
+		g->ammo = keep[i].ammo;
+		g->bestweapon = keep[i].bestweapon;
+		g->weapon = keep[i].weapon;
+		g->chosenweapon = keep[i].chosenweapon;
+		g->attackframe = g->attackcount = g->weaponframe = 0;
+		if (wasdead[i] || g->health <= 0 || (mprules & RULE_DM))
+		{							// back as from a respawn (deathmatch: always)
+			g->health = 100;
+			g->ammo = 50;
+			g->weapon = g->bestweapon = g->chosenweapon = wp_pistol;
+		}
+		mpctx[i].dead = mpctx[i].deaths = mpctx[i].frags = 0;
+		mpctx[i].deadtime = 0;
+	}
+	mpwhy = 0;
+	for (i=0;i<7;i++)
+		shown[i] = -1;				// the status bar, all of it, next frame
+	StartMusic ();
+	PM_CheckMainMem ();
+	fizzlein = true;
+	DrawLevel ();
 }
 
 void MPNetGame (void)
@@ -1582,7 +1826,18 @@ void MPNetGame (void)
 	fizzlein = true;
 	DrawLevel ();
 
-	NetLoop ();
+	for (;;)
+	{
+		int	over;
+
+		NetLoop ();
+		if (playstate == ex_abort)
+			break;
+		over = playstate != ex_completed && playstate != ex_secretlevel;
+		if (!Tally (over) || over)
+			break;
+		NextLevel ();
+	}
 
 	Head (8);						// BYE
 	mppkt[4] = mplocal;
