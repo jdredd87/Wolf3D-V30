@@ -1259,6 +1259,8 @@ void	MPDie (objtype *attacker);
 void	MPSoundOn (void);
 void	MPPageFile (void);
 boolean	MPExitOK (void);
+void MPBonusClear(void);
+void MPBonusAt(int x, int y);
 boolean	MPHear (void);
 extern	int far	mplocated;
 extern	fixed far mpsndx, far mpsndy;

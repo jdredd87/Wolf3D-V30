@@ -124,6 +124,7 @@ struct
 void InitStaticList (void)
 {
 	laststatobj = &statobjlist[0];
+	MPBonusClear ();				// multiplayer: where a bonus may lie (WL_MP.C)
 }
 
 
@@ -174,6 +175,7 @@ void SpawnStatic (int tilex, int tiley, int type)
 	case	bo_spear:
 		laststatobj->flags = FL_BONUS;
 		laststatobj->itemnumber = statinfo[type].type;
+		MPBonusAt (tilex,tiley);
 		break;
 	}
 
@@ -236,6 +238,7 @@ void PlaceItemType (int itemtype, int tilex, int tiley)
 	spot->tiley = tiley;
 	spot->visspot = &spotvis[tilex][tiley];
 	spot->flags = FL_BONUS;
+	MPBonusAt (tilex,tiley);
 	spot->itemnumber = statinfo[type].type;
 }
 

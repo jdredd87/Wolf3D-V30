@@ -272,6 +272,25 @@ static void After (objtype *ob, int i)
 
 objtype	*mpsrc;						// whose thinking is running, or NULL (HEARING)
 
+//
+// Where a bonus may lie, a bit a tile: set wherever a bonus static is made
+// (SpawnStatic, PlaceItemType), cleared with the list -- never on a pickup,
+// so a superset.  The players' pickups (AutomapPickup, a scan of the whole
+// static list) look only there: that scan, for every player every step, was
+// 16% of the V30's time in a four-player game on E1M2
+//
+byte	far	mpbonus[64*64/8];
+
+void MPBonusClear (void)
+{
+	_fmemset (mpbonus,0,sizeof(mpbonus));
+}
+
+void MPBonusAt (int x, int y)
+{
+	mpbonus[(x<<3) | (y>>3)] |= 1 << (y&7);
+}
+
 static void Think (objtype *ob, void (*think) (objtype *))
 {
 	int	i = Index (ob);
@@ -280,7 +299,8 @@ static void Think (objtype *ob, void (*think) (objtype *))
 	mpsrc = ob;						// its sounds come from where it stands
 	playerxmove = playerymove = 0;
 	think (ob);
-	AutomapPickup ();				// items: picked up where the player stands,
+	if (mpbonus[(player->tilex<<3) | (player->tiley>>3)] & (1 << (player->tiley&7)))
+		AutomapPickup ();			// items: picked up where the player stands,
 	After (ob,i);					// not where a screen saw them
 	mpsrc = NULL;
 	MPUse (0);
