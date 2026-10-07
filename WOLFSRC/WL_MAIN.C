@@ -1294,10 +1294,12 @@ void InitGame (void)
 
 
 #ifndef SPEAR
-	if (mminfo.mainmem < 215000L)	// multiplayer (StevenC & Claude): id's 235000
-									// less 20 KB, as the BSP version -- the
-									// network code put the 486 (550 KB free)
-									// just under it
+	if (mminfo.mainmem < 200000L)	// multiplayer (StevenC & Claude): id's 235000
+									// less 35 KB -- the network code put the 486
+									// (550 KB free) just under 235000, then on
+									// 2026-10-07 under 215000.  id's figure is
+									// for a page cache it likes; less is a few
+									// pages fewer, from XMS
 #else
 	if (mminfo.mainmem < 257000L && !MS_CheckParm("debugmode"))
 #endif

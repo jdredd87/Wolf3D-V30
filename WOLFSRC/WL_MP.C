@@ -1147,6 +1147,7 @@ unsigned far mpfraglimit;		// WELCOME: deathmatch ends a level at these
 unsigned far mptimelimit;		//   frags, or minutes (0: none)
 long	far	mpheard;			// TimeCount when the server was last heard
 long	far	mpframes, far mpticks;	// pictures drawn, and in how long
+int		far	mpend;				// why it ended: 0 the game, 1 ESC Y, 2 BYE, 3 silence
 #define DEAF	(15*70)			// silent this long: the server is gone
 int		far	mpwhy;				// why the level ended: 0 elevator, 1 frags, 2 time
 extern	int	ElevatorBackTo[];	// WL_GAME.C
@@ -1244,6 +1245,8 @@ static void Take (byte far *d, unsigned len)
 		break;
 	case 8:							// BYE
 		mpstate = 3;
+		if (!mpend)
+			mpend = 2;
 		break;
 	}
 }
@@ -1354,58 +1357,179 @@ static void NetQuit (char far *why)
 }
 
 //
-// The command line: NET a.b.c.d [PORT n] [NAME x] [NETBOT]
+// The command line: NET [a.b.c.d] [PORT n] [NAME x] [NETBOT].  The server,
+// the port and the name are remembered in WOLF3DM.CFG, a text file beside
+// the game that the PLAY menu writes too:
 //
+//	SERVER 192.168.1.10
+//	PORT 31992
+//	NAME StevenC
+//
+// so NET alone joins the last server, and whatever the command line gives
+// is saved for next time (not by NETBOT, a test, which leaves it alone).
+// The picture switches are not in it: the menu remembers those (W3MENU.CFG)
+//
+static char far netcfg[] = "WOLF3DM.CFG";
+static char far noword[1];
+static int far mpcfg;			// a server is known
+
+// the word at a is w (lower case), whole -- the command line's or the file's
+static int Is (char far *a, char far *w)
+{
+	while (*w)
+		if ((*a++|32) != *w++)
+			return 0;
+	return (byte)*a <= ' ';
+}
+
+// a dotted address at p into d[4]: 1 if it was one
+static int Addr (char far *p, byte *d)
+{
+	int	v = 0, part = 0, digits = 0;
+
+	for (;;p++)
+		if (*p >= '0' && *p <= '9')
+		{
+			if (++digits > 3)
+				return 0;
+			v = v*10 + *p - '0';
+		}
+		else
+		{
+			if (!digits || part > 3 || v > 255)
+				return 0;
+			d[part++] = v;
+			v = digits = 0;
+			if (*p != '.')
+				return part == 4 && (byte)*p <= ' ';
+		}
+}
+
+static unsigned Num (char far *p)
+{
+	unsigned n = 0;
+
+	for (;*p >= '0' && *p <= '9';p++)
+		n = n*10 + *p - '0';
+	return n;
+}
+
+static void Name (char far *p)
+{
+	int	k;
+
+	for (k=0;k<16 && (byte)p[k] > ' ';k++)
+		mpname[k] = p[k];
+	mpname[k] = 0;
+}
+
+static void LoadNet (void)
+{
+	static char far wserver[] = "server", far wport[] = "port", far wname[] = "name";
+	char	buf[256], fn[12];
+	char	far *p, far *v;
+	byte	d[4];
+	int		h,n;
+
+	_fstrcpy ((char far *)fn,netcfg);
+	h = open (fn,O_RDONLY|O_BINARY);
+	if (h == -1)
+		return;
+	n = read (h,buf,sizeof(buf)-1);
+	close (h);
+	if (n <= 0)
+		return;
+	buf[n] = 0;
+	for (p = (char far *)buf;*p;)
+	{
+		for (v = p;(byte)*v > ' ';v++)		// the word, then its value
+			;
+		while (*v == ' ' || *v == '\t')
+			v++;
+		if (Is (p,wserver) && Addr (v,d))
+		{
+			_fmemcpy (mpserver,d,4);
+			mpcfg = 1;
+		}
+		if (Is (p,wport) && Num (v))
+			mpport = Num (v);
+		if (Is (p,wname))
+			Name (v);
+		while (*p && *p != '\n')
+			p++;
+		if (*p)
+			p++;
+	}
+}
+
+static void SaveNet (void)
+{
+	static char far f[] = "SERVER %d.%d.%d.%d\r\nPORT %u\r\nNAME %s\r\n";
+	char	buf[80], fmt[40], fn[12], name[17];
+	int		h;
+
+	_fstrcpy ((char far *)fn,netcfg);
+	_fstrcpy ((char far *)fmt,f);
+	_fstrcpy ((char far *)name,mpname);
+	sprintf (buf,fmt,mpserver[0],mpserver[1],mpserver[2],mpserver[3],mpport,name);
+	h = _creat (fn,0);
+	if (h == -1)
+		return;
+	write (h,buf,strlen (buf));
+	close (h);
+}
+
 int MPNetArgs (void)
 {
-	int		i,k;
+	static int far done;
+	static char far wnet[] = "net", far wport[] = "port", far wname[] = "name", far wbot[] = "netbot";
+	static char far none[] = "WOLF3DM NET: which server?  WOLF3DM NET a.b.c.d -- remembered after that\n";
+	int		i,net = 0,given = 0;
+	byte	d[4];
 
+	if (done)						// asked twice: before InitGame, and after
+		return mpnet;
+	done = 1;
+	for (i = 1;i < _argc;i++)
+		if (Is (_argv[i],wnet))
+			net = 1;
+	if (!net)
+		return 0;
+	LoadNet ();
 	for (i = 1;i < _argc;i++)
 	{
 		char	far *a = _argv[i];
-		char	far *p = i+1 < _argc ? _argv[i+1] : a;
-		unsigned n = 0;
+		char	far *p = i+1 < _argc ? _argv[i+1] : noword;
 
-		if ((a[0]|32) == 'n' && (a[1]|32) == 'e' && (a[2]|32) == 't' && !a[3])
+		if (Is (a,wnet) && Addr (p,d))
 		{
-			int	v = 0, part = 0, digits = 0;
-
-			for (;;p++)
-				if (*p >= '0' && *p <= '9')
-				{
-					v = v*10 + *p - '0';
-					digits++;
-				}
-				else
-				{
-					if (!digits || part > 3 || v > 255)
-						break;
-					mpserver[part++] = v;
-					v = digits = 0;
-					if (*p != '.')
-						break;
-				}
-			if (part == 4)
-				mpnet = 1;
+			_fmemcpy (mpserver,d,4);
+			mpcfg = given = 1;
 		}
-		if ((a[0]|32) == 'p' && (a[1]|32) == 'o' && (a[2]|32) == 'r' && (a[3]|32) == 't' && !a[4])
+		if (Is (a,wport) && Num (p))
 		{
-			for (;*p >= '0' && *p <= '9';p++)
-				n = n*10 + *p - '0';
-			if (n)
-				mpport = n;
+			mpport = Num (p);
+			given = 1;
 		}
-		if ((a[0]|32) == 'n' && (a[1]|32) == 'a' && (a[2]|32) == 'm' && (a[3]|32) == 'e' && !a[4])
+		if (Is (a,wname) && *p)
 		{
-			for (k=0;k<16 && p[k];k++)
-				mpname[k] = p[k];
-			mpname[k] = 0;
+			Name (p);
+			given = 1;
 		}
-		if ((a[0]|32) == 'n' && (a[1]|32) == 'e' && (a[2]|32) == 't' && (a[3]|32) == 'b'
-		&& (a[4]|32) == 'o' && (a[5]|32) == 't' && !a[6])
+		if (Is (a,wbot))
 			mpbot = 1;
 	}
-	return mpnet;
+	if (!mpcfg)
+	{
+		char	s[80];
+
+		_fstrcpy ((char far *)s,none);
+		printf (s);
+		exit (1);
+	}
+	if (given && !mpbot)
+		SaveNet ();
+	return mpnet = 1;
 }
 
 //
@@ -1524,6 +1648,11 @@ static void NetLoop (void)
 		Mouse(MDelta);
 	tics = DEMOTICS;
 	mpheard = 0;
+	MPCamera (true);				// the first picture BEFORE "loaded": it reads
+	ThreeDRefresh ();				// the level's walls and sprites into the page
+	MPCamera (false);				// cache, and with FLATWALLS averages every wall
+	mpframes++;						// -- 8 s on the V30, which the server's clock
+	lasttimecount = TimeCount = 0;	// must not be running for
 	SendInput ();					// "loaded": the server starts its clock
 	do
 	{
@@ -1594,15 +1723,22 @@ static void NetLoop (void)
 			Message (leave);			// WL_MENU.C's box, as god mode's
 		}
 		if (asking && Keyboard[sc_Y])
+		{
 			playstate = ex_abort;
+			mpend = 1;
+		}
 		if (asking && (Keyboard[sc_N] || Keyboard[sc_Escape]))
 		{
 			asking = 0;
 			IN_ClearKeysDown ();
 			DrawAllPlayBorderSides ();
 		}
-		if (TimeCount - mpheard > DEAF)
-			mpstate = 3;			// its BYE lost, or the server gone: nobody
+		if ((long)(TimeCount - mpheard) > DEAF)	// signed: id's first frame
+		{							// sets TimeCount back to 0 after a fade-in, and
+			mpstate = 3;			// unsigned, a packet a tick before it looked
+			if (!mpend)				// like 4 billion ticks of silence.  Its BYE
+				mpend = 3;			// lost, or the server gone: nobody
+		}
 		if (mpstate == 3)			// sends steps again
 			playstate = ex_abort;
 	} while (!playstate);
@@ -1732,7 +1868,7 @@ static int Tally (int over)
 					if (row[3*i] & ((1<<bt_attack) | (1<<bt_use)))
 						done = 1;
 		}
-		if (Keyboard[sc_Escape] || mpstate == 3 || TimeCount - mpheard > DEAF)
+		if (Keyboard[sc_Escape] || mpstate == 3 || (long)(TimeCount - mpheard) > DEAF)
 			return 0;
 	}
 	return 1;
@@ -1912,6 +2048,15 @@ void MPNetGame (void)
 		printf (s,mpplayed+1,mphave+1,netsentn,netrecvn,mpdesync < 0 ? (char far *)ok : (char far *)bad);
 		_fstrcpy ((char far *)s,f);
 		printf (s,mpframes,mpticks/70,r10/10,r10%10,viewsize,pixstep);
+		{
+			static char far e[] = "net: ended by %Fs\n";
+			static char far e0[] = "the game", far e1[] = "this player (ESC, Y)",
+				far e2[] = "the server (BYE)", far e3[] = "15 s with nothing from the server";
+			static char far *far why[4] = {e0,e1,e2,e3};
+
+			_fstrcpy ((char far *)s,e);
+			printf (s,why[mpend & 3]);
+		}
 	}
 	exit (0);
 }

@@ -219,8 +219,8 @@ loses its odd rows too -- the S of SCORE and LIVES looks garbled.  That is
 step 82's design, the same in single player.  Once, in a run of four
 back-to-back games, the V30 with `FLATWALLS` alone left its game at the
 first picture (8 s: `FLATWALLS` reads every wall page then) having had no
-step; run again it played all 500 steps.  Not explained yet -- only a
-`BYE` or 15 s of silence ends a game that way.
+step; run again it played all 500 steps.  Explained the next day (below,
+"Easier to run"): the silence check's arithmetic was unsigned.
 
 The 486 ran at view 19, full detail, 16.6 a second (it draws when a step
 arrives, so 17.5 is its ceiling) -- and **0 desyncs** with the two machines
@@ -230,6 +230,69 @@ the page manager holds the rest of memory, so they let it go first as id's
 menu does (`ClearMemory`, then `PM_CheckMainMem`).  Tested with a
 throwaway build whose netbot pressed `-`, `=` and F5 every few frames:
 the window seen resizing on the V30's screen, no crash, no desync.
+
+**Easier to run -- 2026-10-07** (StevenC: "be able to remember settings and
+IP, name, port ... The long command lines get hard").
+
+* **`WOLF3DM.CFG`**, a text file beside the game, keeps the server, the
+  port and the name:
+
+  ```
+  SERVER 192.168.1.10
+  PORT 31992
+  NAME StevenC
+  ```
+
+  `WOLF3DM NET` alone joins that server as that name.  Whatever the
+  command line gives (`NET a.b.c.d`, `PORT n`, `NAME x`) is used and saved
+  for next time -- not under `NETBOT`, a test.  With no server known yet it
+  says so and stops: `WOLF3DM NET a.b.c.d -- remembered after that`.  The
+  game cannot add the file's words to its command line (medium model: the
+  arguments are near strings, and DGROUP is full), so the file holds only
+  these three; the picture switches are the menu's.
+* **The PLAY menu has a network page: M** (shown when `WOLF3DM.EXE` is
+  there).  S types the server's address (checked: four numbers 0-255), O
+  the port, Y your name; A is the lowest picture (`LOWEST`'s switches), N
+  full detail, +/- the window -- the same switches and size as the first
+  page, FASTOPL left alone.  J (or Enter) writes `W3RUN.BAT` with the whole
+  line, `WOLF3DM NET 192.168.1.10 PORT 31992 NAME StevenC LOWWALLS ...
+  VIEW 10`, and PLAY.BAT runs it and comes back.  Driven over the bridge
+  with KINJ: a new server, port and name typed, `WOLF3DM.CFG` and
+  `W3RUN.BAT` exactly as above.
+* **The report says how a game ended**: `net: ended by the server (BYE)`,
+  `this player (ESC, Y)`, `15 s with nothing from the server`, or `the
+  game`.
+
+Found on the way, all three fixed:
+
+* **The silence check was unsigned.**  `TimeCount` is a `longword`, and
+  id's renderer sets it back to 0 after the first picture's fade-in; a
+  packet heard a tick before that made `TimeCount - mpheard` about four
+  billion -- "15 s of silence" -- and the machine left at its first
+  picture with no step played.  It was the `FLATWALLS` early exit above:
+  any first picture could do it, a slow one more often.  Now signed.
+* **The first picture is drawn before the machine tells the server it is
+  ready**, so the server's clock does not run while it reads the level's
+  walls and sprites into the cache, or (`FLATWALLS`) averages every wall
+  -- 8 s on the V30, which it used to spend behind.  V30, `LOWEST VIEW
+  10`, four players: 9.9 pictures a second (9.0 before).
+* **"BadScale called!" on the V30, a frozen 486 -- in single player too.**
+  Not this branch's bug but the exact build's: `WL_SC_A.ASM` declared
+  `EXTRN PM_GetPage:FAR` inside its code segment, so TASM framed both far
+  calls on WL_SCALE_TEXT -- right only while ID_PM's code lay within 64 KB
+  above it.  This branch's code lies between them and grew past that, and
+  PM_GetPage wrapped round mid-function.  Fixed on `v30-8086` (d5426eb,
+  same bytes, id's picture exactly; see V30NOTES.md) and merged here.
+* **id's memory check** wanted 215000 bytes of main memory (lowered from
+  235000 for this branch once already); the 486, 550 KB free, fell under
+  it again and showed "You do not have enough memory".  200000 now: id's
+  figure is for a page cache it likes, and less is a few pages fewer,
+  from XMS.
+
+Tested: single player IDENTICAL to id; all 20 `MGEN` demos agree; three
+back-to-back V30 games joining from `WOLF3DM.CFG` alone (`WOLF3DM NET
+NETBOT LOWEST VIEW 8`), 400 of 400 steps each; V30 (`LOWEST VIEW 10`) and
+486 (view 19) in one four-player game, 1200 steps, 0 desyncs.
 
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is

@@ -15,6 +15,12 @@
   of the menu is in memory while the game runs: every 4 KB it kept would
   be a page less for the game's cache.
 
+  M, when WOLF3DM.EXE is here, is the network game's page: the server's
+  address, the port and your name, typed once and kept in WOLF3DM.CFG --
+  the file WOLF3DM reads too, so WOLF3DM NET alone joins the same server.
+  J (or Enter) there writes W3RUN.BAT with the whole command line, the
+  picture switches and window size from the first page included.
+
   With no key for 30 seconds it quits by itself, so a menu nobody is at --
   or one started over the bridge -- never waits for ever.
 
@@ -48,6 +54,8 @@ const
      'walls in four-pixel columns (over LOWWALLS)');
   CfgName = 'W3MENU.CFG';
   RunName = 'W3RUN.BAT';
+  NetCfgName = 'WOLF3DM.CFG';     { the network game's: WOLF3DM.EXE reads it too }
+  DefPort = 31992;
   TicksPerDay = 1573040;
 
 var
@@ -59,6 +67,12 @@ var
   BspNoLod: Boolean;          { L: NOLOD, far walls at full detail }
   Timeout: Integer;           { seconds; 0 = never }
   TimeoutPlays: Boolean;
+  HaveNet: Boolean;           { WOLF3DM.EXE is here }
+  NetPage: Boolean;           { M: the network game's page is showing }
+  NetIp: string[15];          { the server, a.b.c.d ('' until typed) }
+  NetPort: Word;
+  NetName: string[16];
+  Msg: string;                { a line under the page, once }
 
 function Ticks: LongInt;
 begin
@@ -73,12 +87,17 @@ begin
   KeyReady := (r.Flags and FZero) = 0;
 end;
 
-function GetKey: Char;
+function GetRawKey: Char;
 var r: Registers;
 begin
   r.ah := 0;
   Intr($16, r);
-  GetKey := UpCase(Chr(r.al));
+  GetRawKey := Chr(r.al);
+end;
+
+function GetKey: Char;
+begin
+  GetKey := UpCase(GetRawKey);
 end;
 
 procedure ClearScreen;          { scroll the whole page away, cursor home: }
@@ -115,6 +134,123 @@ begin
     s := s + ' VIEW ' + t;
   end;
   Args := s;
+end;
+
+{ a.b.c.d, each part 0-255 }
+function IpOk(const s: string): Boolean;
+var i, parts, digits, v: Integer;
+begin
+  IpOk := False;
+  parts := 0; digits := 0; v := 0;
+  for i := 1 to Length(s) + 1 do
+    if (i <= Length(s)) and (s[i] in ['0'..'9']) then
+    begin
+      Inc(digits);
+      if digits > 3 then Exit;
+      v := v * 10 + Ord(s[i]) - Ord('0');
+    end
+    else
+    begin
+      if (digits = 0) or (v > 255) then Exit;
+      Inc(parts);
+      digits := 0; v := 0;
+      if (i <= Length(s)) and (s[i] <> '.') then Exit;
+    end;
+  IpOk := parts = 4;
+end;
+
+{ WOLF3DM.CFG: SERVER a.b.c.d, PORT n, NAME x -- a line each, any order }
+procedure LoadNet;
+var f: Text; s, w, v: string; i, code: Integer; n: Word;
+begin
+  HaveNet := FSearch('WOLF3DM.EXE', '') <> '';
+  NetIp := '';
+  NetPort := DefPort;
+  NetName := '';
+  Assign(f, NetCfgName);
+  {$I-} Reset(f); {$I+}
+  if IOResult <> 0 then Exit;
+  while not Eof(f) do
+  begin
+    ReadLn(f, s);
+    i := Pos(' ', s);
+    if i = 0 then i := Length(s) + 1;
+    w := Copy(s, 1, i - 1);
+    v := Copy(s, i + 1, 255);
+    while (v <> '') and (v[1] = ' ') do Delete(v, 1, 1);
+    while (v <> '') and (v[Length(v)] = ' ') do Delete(v, Length(v), 1);
+    for i := 1 to Length(w) do w[i] := UpCase(w[i]);
+    if (w = 'SERVER') and IpOk(v) then NetIp := v
+    else if w = 'PORT' then
+    begin
+      Val(v, n, code);
+      if (code = 0) and (n > 0) then NetPort := n;
+    end
+    else if w = 'NAME' then NetName := Copy(v, 1, 16);
+  end;
+  Close(f);
+end;
+
+procedure SaveNet;
+var f: Text;
+begin
+  Assign(f, NetCfgName);
+  {$I-} Rewrite(f); {$I+}
+  if IOResult <> 0 then Exit;
+  WriteLn(f, 'SERVER ', NetIp);
+  WriteLn(f, 'PORT ', NetPort);
+  WriteLn(f, 'NAME ', NetName);
+  Close(f);
+end;
+
+{ the picture switches and the window, for WOLF3DM (no BSP or NOLOD there) }
+function NetArgs: string;
+var i: Integer; s, t: string;
+begin
+  s := '';
+  for i := 1 to NSW do
+    if SwOn[i] then s := s + ' ' + SwName[i];
+  if ViewSz > 0 then
+  begin
+    Str(ViewSz, t);
+    s := s + ' VIEW ' + t;
+  end;
+  NetArgs := s;
+end;
+
+function NetLine: string;
+var t: string;
+begin
+  Str(NetPort, t);
+  if NetIp = '' then
+    NetLine := 'WOLF3DM NET (no server yet)'
+  else if NetName = '' then
+    NetLine := 'WOLF3DM NET ' + NetIp + ' PORT ' + t + NetArgs
+  else
+    NetLine := 'WOLF3DM NET ' + NetIp + ' PORT ' + t + ' NAME ' + NetName + NetArgs;
+end;
+
+{ Type a value on the line: it starts as cur, Backspace takes a character
+  back, Enter keeps it, Esc puts cur back.  Only the characters in ok. }
+function Ask(const prompt, cur: string; max: Integer; ok: string): string;
+var s: string; c: Char;
+begin
+  s := cur;
+  Write(#13'  ', prompt, s);
+  repeat
+    c := GetRawKey;
+    if (c = #8) and (s <> '') then
+    begin
+      Delete(s, Length(s), 1);
+      Write(#8' '#8);
+    end
+    else if (c >= ' ') and (Length(s) < max) and (Pos(c, ok) > 0) then
+    begin
+      s := s + c;
+      Write(c);
+    end;
+  until (c = #13) or (c = #27);
+  if c = #27 then Ask := cur else Ask := s;
 end;
 
 procedure LoadCfg;
@@ -168,7 +304,9 @@ begin
   Rewrite(f);
   WriteLn(f, '@ECHO OFF');
   WriteLn(f, 'REM Written by W3MENU (StevenC & Claude) for PLAY.BAT');
-  if bench then
+  if NetPage then
+    WriteLn(f, NetLine)
+  else if bench then
   begin
     WriteLn(f, Prog, ' TIMEDEMO QUICK PRELOAD', Args);
     WriteLn(f, 'PAUSE');
@@ -186,9 +324,45 @@ begin
   Pad := t;
 end;
 
+procedure DrawNet;
+var p: string;
+begin
+  ClearScreen;
+  WriteLn;
+  WriteLn('  Wolfenstein 3-D  --  network game, up to four players');
+  WriteLn;
+  WriteLn('  Kept in ', NetCfgName, ', so it is asked only once:');
+  WriteLn;
+  Write('    S  server:     ');
+  if NetIp = '' then WriteLn('(none yet -- the address the server prints)') else WriteLn(NetIp);
+  WriteLn('    O  port:       ', NetPort, '  (', DefPort, ' unless the server says otherwise)');
+  Write('    Y  your name:  ');
+  if NetName = '' then WriteLn('(none: "Player")') else WriteLn(NetName);
+  WriteLn;
+  p := NetArgs;
+  if p = '' then p := ' full detail, the game''s own window';
+  WriteLn('  Picture:', p);
+  WriteLn('    A  lowest detail (the fastest)    N  full detail    +/-  window size');
+  WriteLn;
+  WriteLn('    J  join the game     M or Esc  back');
+  WriteLn;
+  WriteLn('  ', NetLine);
+  WriteLn;
+  if Msg <> '' then
+  begin
+    WriteLn('  ', Msg);
+    Msg := '';
+  end;
+end;
+
 procedure Draw;
 var i: Integer;
 begin
+  if NetPage then
+  begin
+    DrawNet;
+    Exit;
+  end;
   ClearScreen;
   WriteLn;
   WriteLn('  Wolfenstein 3-D  --  optimized by StevenC and Claude');
@@ -226,6 +400,8 @@ begin
   WriteLn('    A  all on (the fastest)     N  all off (id''s own picture)');
   WriteLn;
   WriteLn('    P  play     B  benchmark these switches     Q  quit');
+  if HaveNet then
+    WriteLn('    M  network game (WOLF3DM)');
   WriteLn('       (in the game, TAB shows the map of what you have seen)');
   WriteLn;
   WriteLn('  ', Prog, Args);
@@ -339,11 +515,15 @@ end;
 var
   start, now, el, lastleft, left: LongInt;
   c: Char;
-  i: Integer;
+  i, v, code: Integer;
+  s: string;
 
 begin
   ParseArgs;
   LoadCfg;
+  LoadNet;
+  NetPage := False;
+  Msg := '';
   Draw;
   start := Ticks;
   lastleft := -1;
@@ -351,7 +531,60 @@ begin
     if KeyReady then
     begin
       c := GetKey;
+      if NetPage then
+        case c of
+          'S': begin
+                 NetIp := Ask('Server address: ', NetIp, 15, '0123456789.');
+                 if (NetIp <> '') and not IpOk(NetIp) then
+                 begin
+                   Msg := 'Not an address: four numbers 0-255 with dots, as 192.168.1.10';
+                   NetIp := '';
+                 end;
+                 SaveNet;
+               end;
+          'O': begin
+                 Str(NetPort, s);
+                 s := Ask('Port: ', s, 5, '0123456789');
+                 Val(s, v, code);
+                 if (code = 0) and (v > 0) then NetPort := v else NetPort := DefPort;
+                 SaveNet;
+               end;
+          'Y': begin
+                 NetName := Ask('Your name: ', NetName, 16,
+                   'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_!');
+                 SaveNet;
+               end;
+          'A': for i := 1 to NSW do         { the picture only: FASTOPL is sound }
+                 if SwName[i] <> 'FASTOPL' then SwOn[i] := True;
+          'N': for i := 1 to NSW do
+                 if SwName[i] <> 'FASTOPL' then SwOn[i] := False;
+          '+', '=':
+            if ViewSz = 0 then ViewSz := 15
+            else if ViewSz < 19 then Inc(ViewSz);
+          '-', '_':
+            if ViewSz = 0 then ViewSz := 15
+            else if ViewSz > 4 then Dec(ViewSz);
+          'J', #13:
+            if NetIp = '' then
+              Msg := 'First the server''s address: S'
+            else
+            begin
+              SaveCfg;
+              SaveNet;
+              WriteRun(False);
+              WriteLn;
+              Halt(0);
+            end;
+          'M', #27: NetPage := False;
+          'Q': begin
+                 SaveCfg;
+                 WriteLn;
+                 Halt(1);
+               end;
+        end
+      else
       case c of
+        'M': if HaveNet then NetPage := True;
         'A': for i := 1 to NSW do SwOn[i] := True;
         'N': for i := 1 to NSW do SwOn[i] := False;
         '+', '=':
