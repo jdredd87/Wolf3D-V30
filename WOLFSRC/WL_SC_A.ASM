@@ -29,6 +29,18 @@
 	P186
 	JUMPS						; long conditional jumps become Jcc-around-JMP
 
+;
+; NEC V30 build, StevenC & Claude (2026-10-07): PM_GetPage is declared up
+; here, before any segment.  Inside WL_SCALE_TEXT, TASM took it to be IN it
+; and gave the far call that segment's frame: right while ID_PM's code lay
+; within 64 KB above this one, and once more code came between them, a call
+; to WL_SCALE_TEXT:FFxx that wrapped round in the middle of PM_GetPage --
+; "BadScale called!" on the V30, a frozen 486.  TLINK says "fixup overflow"
+; only once the entry itself is past 64 KB.  (Under DATASEG it would be taken
+; to be in DGROUP, which is no better.)
+;
+EXTRN	PM_GetPage:FAR
+
 DATASEG
 
 EXTRN	PMSpriteStart:WORD
@@ -76,8 +88,6 @@ OP_RETF		=	0CBh
 
 SEGMENT	WL_SCALE_TEXT WORD PUBLIC 'CODE'	; WORD, so EVEN below is a real even address
 	ASSUME	cs:WL_SCALE_TEXT, ds:DGROUP
-
-EXTRN	PM_GetPage:FAR
 
 
 ;============================
