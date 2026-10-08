@@ -2,7 +2,7 @@
 
     python mp/mpserver.py [--players 4] [--bots 0] [--map 0] [--skill 2]
                           [--mode coop|dm] [--ff on|off] [--noenemies]
-                          [--fraglimit N] [--timelimit MIN]
+                          [--fraglimit N] [--timelimit MIN] [--itemrespawn SECS]
                           [--port 31992] [--bind 0.0.0.0] [--steps N] [--once]
                           [--drop-after 30] [--record M50.DEM] [--drop 0.0] [--quiet]
 
@@ -35,7 +35,13 @@ aim: the server does not run the game.
 The rules go to every machine in WELCOME and START (MULTIPLAYER.md, "Modes
 and rules"): --mode coop (the default) or dm (deathmatch); --ff off turns
 friendly fire off in co-op (on by default, as DOOM's); --noenemies spawns
-no enemies; --fraglimit and --timelimit end a deathmatch level.
+no enemies; --fraglimit and --timelimit end a deathmatch level;
+--itemrespawn SECS brings a taken item back that long after (in 5 s steps,
+to 155; 30 in deathmatch unless given, never in co-op unless given).
+
+Every player's name goes to every machine (NAMES) when anyone comes or
+goes, and every two seconds -- the game shows them in its notices, its
+scores (TAB) and its chat (T, relayed as CHATMSG).
 
 SYNCs are compared step by step -- the first machine to report a step sets
 its sum, and any other that differs is told DESYNC -- so a machine that
@@ -97,6 +103,9 @@ class Server:
             self.rules |= RULE_NOFF
         if "--noenemies" in sys.argv:
             self.rules |= RULE_NOENEMIES
+        self.respawn = arg("--itemrespawn", 30 if self.rules & RULE_DM else 0, int)
+        self.rules = (self.rules & 7) | P.respawn_bits(self.respawn)
+        self.next_names = 0
         self.frags = arg("--fraglimit", 0, int)
         self.minutes = arg("--timelimit", 0, int)
         self.limit = arg("--steps", 0, int)
@@ -176,6 +185,7 @@ class Server:
         self.slots[i] = Slot(addr, name, build)
         self.log("%s joined from %s:%d (build %08X)%s" % (self.who(i), addr[0], addr[1], build,
                  "" if self.state == "wait" else ", into a game at step %d" % len(self.history)))
+        self.next_names = 0                     # everyone: who is here now
         return i
 
     def leave(self, i, why, reason=None):
@@ -186,6 +196,7 @@ class Server:
         self.log("%s %s (%d inputs, had step %s)" % (self.who(i), why, s.inputs,
                  "none" if s.have == P.NOBODY else s.have))
         self.slots[i] = None
+        self.next_names = 0
         if self.state == "play" and not self.people():
             self.game_over("everyone has left")
 
@@ -325,8 +336,11 @@ class Server:
             self.send(P.steps(first, self.players, self.history[first:last + 1]), s.addr)
 
     def run(self):
-        self.log("listening on UDP %d: %d slots (%d for people, %d bots), map %d, rules %d"
-                 % (self.sock.getsockname()[1], self.players, self.humans, self.bots, self.map, self.rules))
+        self.log("listening on UDP %d: %d slots (%d for people, %d bots), map %d, rules %d (%s%s, items %s)"
+                 % (self.sock.getsockname()[1], self.players, self.humans, self.bots, self.map, self.rules,
+                    "deathmatch" if self.rules & RULE_DM else "co-op",
+                    ", no enemies" if self.rules & RULE_NOENEMIES else "",
+                    "back after %d s" % ((self.rules >> 3) * 5) if self.rules >> 3 else "do not come back"))
         try:
             while True:
                 now = time.perf_counter()
@@ -335,6 +349,11 @@ class Server:
                     for i in self.people():
                         if not self.slots[i].ready:
                             self.send(self.start_packet(), self.slots[i].addr)
+                if now >= self.next_names:      # every name, to everyone
+                    self.next_names = now + 2.0
+                    packet = P.names([s.name if s else "" for s in self.slots])
+                    for i in self.people():
+                        self.send(packet, self.slots[i].addr)
                 for i in self.people():         # machines gone quiet
                     s = self.slots[i]
                     quiet = now - s.heard

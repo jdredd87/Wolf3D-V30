@@ -73,6 +73,8 @@ int		far	mprules;			// the server's rules (MULTIPLAYER.md):
 #define RULE_DM			1		//   deathmatch, not co-op
 #define RULE_NOFF		2		//   co-op: no friendly fire
 #define RULE_NOENEMIES	4		//   no enemies spawned
+#define RULE_RESPAWN(r)	(((r) >> 3) & 31)	//   bits 3-7: items come back after
+										//   5 s times this (0: never)
 long	far	mptook[MAXPLAYERS];	// damage each player has been dealt (the
 								// report: god mode hides it from health)
 
@@ -103,6 +105,77 @@ static void mprintf (char far *fmt, ...)
 	va_start (ap,fmt);
 	vprintf (s,ap);
 	va_end (ap);
+}
+
+// sprintf with a far format (DGROUP is full: no near string literals)
+static void Fmt (char *out, char far *fmt, ...)
+{
+	char	f[64];
+	va_list	ap;
+
+	_fstrcpy ((char far *)f,fmt);
+	va_start (ap,fmt);
+	vsprintf (out,f,ap);
+	va_end (ap);
+}
+
+/*
+=============================================================================
+
+						NAMES AND NOTICES (2026-10-08)
+
+The server sends every player's name (NAMES); until it has, a player is its
+colour.  A notice is a line at the top of the view for six seconds: a chat
+message, who killed whom, who came and who went.  Only this machine's
+picture: nothing here is in the game, so nothing here can part two machines
+
+=============================================================================
+*/
+
+extern	int	far	mpnet;
+char	far	mpnames[MAXPLAYERS][17];
+static byte far pcol[MAXPLAYERS] = {7,10,12,6};	// grey, green, red, brown
+
+static char far *Who (int i)
+{
+	static char far dn[MAXPLAYERS][9] = {"P1 GREY","P2 GREEN","P3 RED","P4 BROWN"};
+
+	return mpnames[i][0] ? (char far *)mpnames[i] : (char far *)dn[i];
+}
+
+#define NOTES		4
+#define NOTELEN		64
+#define NOTETICS	(6*70)
+static char far notes[NOTES][NOTELEN];		// the oldest first
+static byte far notecol[NOTES];
+static long far noteuntil[NOTES];
+
+static void Notice (int color, char far *fmt, ...)
+{
+	char	f[64], s[120];
+	va_list	ap;
+	int		i;
+
+	_fstrcpy ((char far *)f,fmt);
+	va_start (ap,fmt);
+	vsprintf (s,f,ap);
+	va_end (ap);
+	for (i=0;i<NOTES-1;i++)
+	{
+		_fmemcpy (notes[i],notes[i+1],NOTELEN);
+		notecol[i] = notecol[i+1];
+		noteuntil[i] = noteuntil[i+1];
+	}
+	s[NOTELEN-1] = 0;
+	_fstrcpy (notes[NOTES-1],(char far *)s);
+	notecol[NOTES-1] = color;
+	noteuntil[NOTES-1] = TimeCount + NOTETICS;
+}
+
+static int Live (int i)				// TimeCount starts again each floor
+{
+	return notes[i][0] && TimeCount < noteuntil[i]
+		&& noteuntil[i] - TimeCount <= NOTETICS;
 }
 
 /*
@@ -262,9 +335,62 @@ objtype	*mpsrc;						// whose thinking is running, or NULL (HEARING)
 //
 byte	far	mpbonus[64*64/8];
 
+//
+// Items come back (rules bits 3-7, the server's --itemrespawn), as DOOM's
+// deathmatch 2.0: one the map put there, taken, is back that long after --
+// counted in steps, so on every machine at the same step.  One dropped
+// (PlaceItemType) is not, and its slot is not given to a drop while the
+// item that was there waits to come back.  The Spear never comes back
+//
+long	far	mpitemdue[MAXSTATS];	// the step it comes back at (0: not waiting)
+int		far	mpitemshape[MAXSTATS];	// the map's item in each slot
+byte	far	mpitemdrop[MAXSTATS];	// the slot holds a dropped item
+long	far	mpitemnext;				// the soonest due (0: none)
+
 void MPBonusClear (void)
 {
 	_fmemset (mpbonus,0,sizeof(mpbonus));
+	_fmemset (mpitemdue,0,sizeof(mpitemdue));
+	_fmemset (mpitemdrop,0,sizeof(mpitemdrop));
+	mpitemnext = 0;
+}
+
+void MPBonusOrig (statobj_t *s)		// SpawnStatic: the map's own item
+{
+	mpitemshape[s-statobjlist] = s->shapenum;
+	mpitemdrop[s-statobjlist] = 0;
+}
+
+void MPBonusDrop (statobj_t *s)		// PlaceItemType: a dropped one
+{
+	mpitemdrop[s-statobjlist] = 1;
+}
+
+boolean MPBonusWaits (statobj_t *s)	// PlaceItemType: not a free slot yet
+{
+	return mpitemdue[s-statobjlist] != 0;
+}
+
+static void ItemsBack (void)
+{
+	statobj_t	*st;
+	int			i;
+	long		next = 0, due;
+
+	for (st = &statobjlist[0],i=0;st != laststatobj;st++,i++)
+	{
+		if (!(due = mpitemdue[i]))
+			continue;
+		if (due <= mpsteps)
+		{
+			mpitemdue[i] = 0;
+			st->shapenum = mpitemshape[i];	// its flags and number stay
+			MPBonusAt (st->tilex,st->tiley);
+		}
+		else if (!next || due < next)
+			next = due;
+	}
+	mpitemnext = next;
 }
 
 void MPBonusAt (int x, int y)
@@ -278,6 +404,15 @@ void MPBonusGone (statobj_t *gone)
 	statobj_t	*st;
 	byte		x = gone->tilex, y = gone->tiley;
 
+	if (mpplayers && RULE_RESPAWN (mprules) && !mpitemdrop[gone-statobjlist]
+	&& gone->itemnumber != bo_spear)
+	{
+		long	due = mpsteps + (long)RULE_RESPAWN (mprules)*5*35/2;	// 17.5 a s
+
+		mpitemdue[gone-statobjlist] = due;
+		if (!mpitemnext || due < mpitemnext)
+			mpitemnext = due;
+	}
 	for (st = &statobjlist[0];st != laststatobj;st++)
 		if (st->tilex == x && st->tiley == y && st->shapenum != -1 && (st->flags & FL_BONUS))
 			return;
@@ -573,13 +708,18 @@ brings them back at their own start with 100 health, a pistol and 50 bullets
 */
 
 // TakeDamage, health gone: the player in the globals
+int		far	mpkiller[MAXPLAYERS];	// who killed each (-1: not a player)
+
 void MPDie (objtype *attacker)
 {
+	static char far fk[] = "%Fs killed %Fs", far fs[] = "%Fs killed themselves",
+		far fd[] = "%Fs died";
 	mpctx_t	far *c = &mpctx[mpcur];
 
 	c->dead = 1;
 	c->deadtime = 0;
 	c->deaths++;
+	mpkiller[mpcur] = -1;
 	if (attacker && attacker->obclass == playerobj)
 	{
 		int	k = Index (attacker);
@@ -588,6 +728,18 @@ void MPDie (objtype *attacker)
 			mpctx[k].frags--;		// by one's own hand
 		else
 			mpctx[k].frags++;
+		mpkiller[mpcur] = k;
+	}
+	if (mpnet && !mpcatching)
+	{
+		int	k = mpkiller[mpcur];
+
+		if (k == mpcur)
+			Notice (pcol[k],fs,Who (k));
+		else if (k >= 0)
+			Notice (pcol[k],fk,Who (k),Who (mpcur));
+		else
+			Notice (pcol[mpcur],fd,Who (mpcur));
 	}
 	player->state = &s_mpdead;
 	player->temp1 = Spr (mpcur,SPR_SS_DIE_1);
@@ -700,11 +852,18 @@ int		far	mpintally;			// the tally: presence noted, the world waits
 int		far	mplocalin;			// this machine's player has been in the game
 int		far	mpdropped;			// ... and the server has let it go
 
+static byte far chatlast[MAXPLAYERS];	// each slot's last chat message's number
+static byte far mpseen[MAXPLAYERS];		// a step has had this slot in the game
+
 static void Leave (int i)
 {
+	static char far f[] = "%Fs left the game";
 	mpctx_t	far *c = &mpctx[i];
 	objtype	*ob = c->ob;
 
+	if (mpnet && !mpcatching && mpseen[i])	// not an empty slot's first step
+		Notice (pcol[i],f,Who (i));
+	mpseen[i] = 0;
 	c->absent = 1;
 	c->dead = 0;
 	if (actorat[ob->tilex][ob->tiley] == ob)
@@ -716,8 +875,12 @@ static void Leave (int i)
 
 static void Join (int i)
 {
+	static char far f[] = "%Fs joined the game";
 	mpctx_t	far *c = &mpctx[i];
 
+	if (mpnet && !mpcatching && i != mplocal)
+		Notice (pcol[i],f,Who (i));
+	chatlast[i] = 0;
 	MPUse (i);
 	c->absent = 0;
 	c->deaths = c->frags = 0;
@@ -732,6 +895,8 @@ static void Presence (int i, int present)
 {
 	mpctx_t	far *c = &mpctx[i];
 
+	if (present)
+		mpseen[i] = 1;
 	if (present == !c->absent)
 		return;
 	if (i == mplocal)
@@ -1197,7 +1362,10 @@ void MPStep (void)
 	// the whole state is summed only every 50th step -- when it is compared
 	// -- each sum chained to the one before: summed every step it cost the
 	// V30 most of a frame (32-bit shifts are software on an 8086)
-	if (++mpsteps % 50)
+	++mpsteps;
+	if (mpitemnext && mpsteps >= mpitemnext)
+		ItemsBack ();				// items taken a while ago come back
+	if (mpsteps % 50)
 		return;
 	MPUse (0);
 	Save (0);
@@ -1317,6 +1485,17 @@ byte	far	mppkt[64+3*MAXPLAYERS*8];
 unsigned far mpbotrnd = 1;
 int		far	mpbotleft, far mpbotx, far mpboty, far mpbotb;
 
+int		far	mpchatting;			// T: a line being typed
+static char far chatline[41];
+static int far chatlen;
+static char far chatkeys[16];		// typed, from the keyboard's interrupt
+static unsigned far chathead, far chattail;
+static byte far chatnum;			// the last message's number (1-255)
+static byte far chatwait;			// ... until the server has it (0: has)
+static int far chattries;
+static long far chatsent;
+static char far chatsend[41];
+
 static void PutL (byte far *p, unsigned long v)
 {
 	p[0] = v;
@@ -1410,6 +1589,33 @@ static void Take (byte far *d, unsigned len)
 		if (!mpend)
 			mpend = mpbye == 3 ? 4 : 2;
 		break;
+	case 10:						// CHATMSG: anyone's, this player's too
+		if (len >= 7 && d[4] < MAXPLAYERS && len >= 7 + d[6])
+		{
+			static char far f[] = "%Fs: %Fs";
+			char	line[52];
+			int		k = d[4];
+
+			n = d[6] > 50 ? 50 : d[6];
+			if (k == mplocal && d[5] == chatwait)
+				chatwait = 0;		// the server has it
+			if (d[5] == chatlast[k])
+				break;				// a copy sent again
+			chatlast[k] = d[5];
+			_fmemcpy ((char far *)line,d+7,n);
+			line[n] = 0;
+			Notice (pcol[k],f,Who (k),(char far *)line);
+		}
+		break;
+	case 11:						// NAMES: count, then 16 bytes each
+		if (len >= 5)
+			for (i=0;i<d[4] && i<MAXPLAYERS && len >= 5+16*(i+1);i++)
+				if (d[5+16*i])		// a name stays till another comes: a
+				{					// leaver's notice still has it
+					_fmemcpy (mpnames[i],d+5+16*i,16);
+					mpnames[i][16] = 0;
+				}
+		break;
 	}
 }
 
@@ -1437,6 +1643,12 @@ static void LocalInput (byte *bits, int *x, int *y)
 		*bits = mpbotb | ((mpbotrnd & 0x700) == 0x700 ? 8 : 0);	// use, now and then
 		*x = mpbotx;
 		*y = mpboty;
+		return;
+	}
+	if (mpchatting)					// typing: standing still, the keys are words
+	{
+		*bits = 0;
+		*x = *y = 0;
 		return;
 	}
 	memcpy (save,buttonstate,sizeof(save));
@@ -1748,6 +1960,397 @@ static void Status (void)
 	MPUse (0);
 }
 
+/*
+=============================================================================
+
+						CHAT, THE SCORES, DYING (2026-10-08)
+
+T: a line typed (40 letters; ENTER sends, ESC does not) and sent as CHAT
+until the server's CHATMSG comes back; the keyboard's interrupt hands each
+letter over (IN_SetKeyHook), so a V30 drawing 10 pictures a second drops
+none.  Typing, this player stands still.  TAB held: the scores.  Dead: no
+gun, the view red, who did it, and how to come back.  All drawn over the
+view (MPOverlay, from ThreeDRefresh), so only this machine sees it
+
+=============================================================================
+*/
+
+int		far	mpshowscores;			// TAB is down
+int		far	mpred;					// the dead tint shown (0: none)
+extern	int		lowvert;			// WL_DRAW.C: 2 while LOWVERT is shown
+extern	byte	far redshifts[][768];	// WL_PLAY.C
+extern	byte	far gamepal;
+extern	int		damagecount,bonuscount;
+extern	boolean	palshifted;
+
+static void ChatHook (void)			// from the keyboard's interrupt
+{
+	if (LastASCII)
+	{
+		chatkeys[chathead++ & 15] = LastASCII;
+		LastASCII = 0;
+	}
+}
+
+static void ChatBegin (void)
+{
+	LastASCII = 0;					// not the T that began it
+	chathead = chattail = 0;
+	chatlen = 0;
+	chatline[0] = 0;
+	Keyboard[sc_T] = false;
+	mpchatting = 1;
+	IN_SetKeyHook (ChatHook);
+}
+
+static void ChatEnd (void)
+{
+	IN_SetKeyHook (NULL);
+	mpchatting = 0;
+	IN_ClearKeysDown ();			// its ENTER or ESC is not the game's
+}
+
+static void ChatOut (void)
+{
+	int	n = _fstrlen (chatsend);
+
+	Head (9);						// CHAT
+	mppkt[4] = mplocal;
+	mppkt[5] = chatwait;
+	mppkt[6] = n;
+	_fmemcpy (mppkt+7,chatsend,n);
+	NetSend (mppkt,7+n);
+	chatsent = TimeCount;
+	chattries++;
+}
+
+static void Chat (void)
+{
+	char	k;
+
+	if (chatwait && (TimeCount - chatsent >= 35 || TimeCount < chatsent))
+	{
+		if (chattries >= 6)
+			chatwait = 0;			// the server never had it: let it go
+		else
+			ChatOut ();
+	}
+	if (!mpchatting)
+		return;
+	while (chattail != chathead)
+	{
+		k = chatkeys[chattail++ & 15];
+		if (k == 13)				// ENTER: send it
+		{
+			if (chatlen)
+			{
+				_fstrcpy (chatsend,chatline);
+				chatnum = chatnum % 255 + 1;
+				chatwait = chatnum;
+				chattries = 0;
+				ChatOut ();
+			}
+			ChatEnd ();
+			return;
+		}
+		if (k == 27)				// ESC: never mind
+		{
+			ChatEnd ();
+			return;
+		}
+		if (k == 8)
+		{
+			if (chatlen)
+				chatline[--chatlen] = 0;
+		}
+		else if (k >= 32 && k < 127 && chatlen < 40)
+		{
+			chatline[chatlen++] = k;
+			chatline[chatlen] = 0;
+		}
+	}
+}
+
+//
+// NETBOT, a test with nobody at the keyboard: the scores 5 s in every 10,
+// and a chat line every 20 s -- what TAB and T do, for a camera to see
+//
+static void BotShow (void)
+{
+	static char far f[] = "%Fs here, step %ld";
+	static long far said = -9999;
+	char	s[64];
+
+	mpshowscores = (TimeCount / 350) % 4 == 1;
+	if (TimeCount - said >= 20*70 || TimeCount < said)
+	{
+		said = TimeCount;
+		Fmt (s,f,(char far *)mpname,mpplayed);
+		s[40] = 0;
+		_fstrcpy (chatsend,(char far *)s);
+		chatnum = chatnum % 255 + 1;
+		chatwait = chatnum;
+		chattries = 0;
+		ChatOut ();
+	}
+}
+
+//
+// How long this machine's player has lay dead, for the picture (-1: alive).
+// NETBOT also looks dead 5 s in every 20 -- the picture only, not the game
+// (nothing here is summed) -- so the death screen can be photographed
+//
+long MPDeadLook (void)
+{
+	mpctx_t	far *c = &mpctx[mplocal];
+
+	if (c->dead && !c->absent)
+		return c->deadtime;
+	if (mpbot && mpnet && (TimeCount / 350) % 4 == 2)
+		return TimeCount % 350;
+	return -1;
+}
+
+//
+// Dead: the view red, strong at once and fading in a second to a hold.
+// Set only when it changes (each set waits for the retrace), not every
+// step as a hit's flash is
+//
+static void DeadTint (void)
+{
+	int		want = 0;
+	long	t;
+
+	if ((t = MPDeadLook ()) >= 0)
+		want = t < 15 ? 6 : t < 30 ? 5 : t < 45 ? 4 : 3;
+	if (want == mpred)
+		return;
+	damagecount = bonuscount = 0;
+	VW_WaitVBL (1);
+	if (want)
+	{
+		VL_SetPalette (redshifts[want-1]);
+		palshifted = true;
+	}
+	else
+	{
+		VL_SetPalette (&gamepal);
+		palshifted = false;
+	}
+	mpred = want;
+}
+
+//
+// Text over the view: the small font, with a shadow so it reads over any
+// wall.  With LOWVERT shown only the even rows are, so each of the font's
+// rows goes to two (it is drawn twice as tall: the only way it can be read)
+//
+static int far rows;				// a font row in rows of the page
+
+static int Width (char far *s)
+{
+	fontstruct	far *font = (fontstruct far *)grsegs[STARTFONT];
+	int			w = 0;
+
+	while (*s)
+		w += font->width[(byte)*s++];
+	return w;
+}
+
+static char far *Fit (char *t, char far *s, int w)	// s, cut to w pixels
+{
+	fontstruct	far *font = (fontstruct far *)grsegs[STARTFONT];
+	int			k = 0, n = 0;
+
+	while (s[k] && k < 63 && (!font || n + font->width[(byte)s[k]] <= w))
+	{
+		if (font)
+			n += font->width[(byte)s[k]];
+		else if (k >= 8)
+			break;
+		t[k] = s[k];
+		k++;
+	}
+	t[k] = 0;
+	return (char far *)t;
+}
+
+static void Text1 (int x, int y, char far *s, int color)
+{
+	fontstruct	far *font = (fontstruct far *)grsegs[STARTFONT];
+	unsigned	step = linewidth*rows, h = font->height, r;
+	byte		far *dest = MK_FP(SCREENSEG,bufferofs+ylookup[y]+(x>>2));
+	byte		far *src, far *d;
+	byte		mask = 1 << (x&3), ch;
+	int			w,cw;
+
+	while ((ch = *s++) != 0)
+	{
+		cw = w = font->width[ch];
+		src = (byte far *)font + font->location[ch];
+		while (w--)
+		{
+			outport (SC_INDEX,SC_MAPMASK | (mask << 8));
+			for (d = dest,r=0;r<h;r++,d += step)
+				if (src[r*cw])
+					*d = color;
+			src++;
+			if ((mask <<= 1) == 16)
+			{
+				mask = 1;
+				dest++;
+			}
+		}
+	}
+	outport (SC_INDEX,SC_MAPMASK | (15 << 8));
+}
+
+static void Text (int x, int y, char far *s, int color)
+{
+	Text1 (x+1,y+rows,s,0);
+	Text1 (x,y,s,color);
+}
+
+static void Center (int y, char far *s, int color)
+{
+	char	t[64];
+
+	Fit (t,s,viewwidth-4);
+	Text ((viewwidth - Width ((char far *)t))/2,y,(char far *)t,color);
+}
+
+static long Key (int i)
+{
+	return mprules & RULE_DM ? (long)mpctx[i].frags : mpctx[i].gs.score;
+}
+
+static void ScoreBoard (int lh)
+{
+	static char far hdm[] = "DEATHMATCH", far hco[] = "CO-OP";
+	static char far flim[] = "%Fs to %u", far ftime[] = "%s  %u:%02u left";
+	static char far hf[] = "FRAGS", far hs[] = "SCORE", far hd[] = "DIED";
+	static char far sf[] = "F", far ss[] = "S", far sd[] = "D";
+	static char far fn[] = "%ld";
+	char		t[64], u[64];
+	int			order[MAXPLAYERS], n = 0, i, j, w, x0, y, bh, rd, rf, nw, title;
+	char		far *lf, far *ld;
+	long		tc;
+
+	for (i=0;i<mpplayers;i++)
+		if (!mpctx[i].absent)
+			order[n++] = i;
+	for (i=1;i<n;i++)				// the most frags (score, co-op) first
+		for (j=i;j>0 && Key (order[j]) > Key (order[j-1]);j--)
+		{
+			int	k = order[j];
+
+			order[j] = order[j-1];
+			order[j-1] = k;
+		}
+	w = viewwidth - 8;
+	if (w > 240)
+		w = 240;
+	x0 = (viewwidth - w)/2;
+	title = (n + 2)*lh + 4*rows <= viewheight - 2*rows;	// room for a title
+	bh = (n + 1 + title)*lh + 3*rows;
+	y = ((viewheight - bh)/2) & ~(rows-1);
+	if (y < 0)
+		y = 0;
+	VL_Bar (x0,y,w,bh > viewheight ? viewheight : bh,0);
+	y += rows*2;
+	if (title)
+	{
+		Fmt (u,mprules & RULE_DM ? hdm : hco);
+		if ((mprules & RULE_DM) && mpfraglimit)
+			Fmt (u,flim,(char far *)(mprules & RULE_DM ? hdm : hco),mpfraglimit);
+		if (mptimelimit && (mprules & RULE_DM))
+		{
+			tc = (long)mptimelimit*60*70 - (mplocal ? mpctx[0].gs.TimeCount : gamestate.TimeCount);
+			if (tc < 0)
+				tc = 0;
+			tc /= 70;
+			_fstrcpy ((char far *)t,(char far *)u);
+			Fmt (u,ftime,t,(unsigned)(tc/60),(unsigned)(tc%60));
+		}
+		Center (y,(char far *)u,15);
+		y += lh;
+	}
+	lf = mprules & RULE_DM ? hf : hs;
+	ld = hd;
+	if (w < 150)
+	{
+		lf = mprules & RULE_DM ? sf : ss;
+		ld = sd;
+	}
+	rd = x0 + w - 4;				// the right edges of the two columns
+	rf = rd - Width (ld) - 10;
+	nw = rf - Width (lf) - 6 - (x0+4);
+	Text (rd - Width (ld),y,ld,14);
+	Text (rf - Width (lf),y,lf,14);
+	y += lh;
+	for (j=0;j<n;j++)
+	{
+		i = order[j];
+		Text (x0+4,y,Fit (t,Who (i),nw > 0 ? nw : 0),pcol[i]);
+		Fmt (u,fn,Key (i));
+		Text (rf - Width ((char far *)u),y,(char far *)u,i == mplocal ? 15 : 7);
+		Fmt (u,fn,(long)mpctx[i].deaths);
+		Text (rd - Width ((char far *)u),y,(char far *)u,i == mplocal ? 15 : 7);
+		y += lh;
+	}
+}
+
+void MPOverlay (void)
+{
+	static char far fby[] = "Killed by %Fs", far fself[] = "You killed yourself",
+		far fdied[] = "You died", far fspace[] = "Press SPACE to respawn",
+		far fsay[] = "Say: %Fs%Fs", far fcur[] = "_", far fnone[] = "";
+	char		t[64], u[80];
+	int			i,y,lh,show,k;
+	long		dead = MPDeadLook ();
+
+	if (!grsegs[STARTFONT])
+		return;
+	rows = lowvert == 2 ? 2 : 1;
+	lh = (((fontstruct far *)grsegs[STARTFONT])->height + 1)*rows;
+	show = viewheight/(3*lh);		// notices: a third of the view at most
+	if (show < 1)
+		show = 1;
+	if (show > NOTES)
+		show = NOTES;
+	y = rows*2;
+	for (i=NOTES-show;i<NOTES && !mpshowscores;i++)	// not under the scores
+		if (Live (i))
+		{
+			Text (2,y,Fit (t,notes[i],viewwidth-6),notecol[i]);
+			y += lh;
+		}
+	if (dead >= 0)
+	{
+		y = (viewheight/2 - lh) & ~(rows-1);
+		k = mpkiller[mplocal];
+		if (k == mplocal)
+			Fmt (u,fself);
+		else if (k >= 0)
+			Fmt (u,fby,Who (k));
+		else
+			Fmt (u,fdied);
+		Center (y,(char far *)u,12);
+		if (dead > 70)
+			Center (y+lh,fspace,15);
+	}
+	if (mpshowscores)
+		ScoreBoard (lh);
+	if (mpchatting)
+	{
+		Fmt (u,fsay,(char far *)chatline,(TimeCount & 16) ? (char far *)fcur : (char far *)fnone);
+		while (u[5] && Width ((char far *)u) > viewwidth-6)
+			memmove (u+5,u+6,strlen (u+5));	// too long: its end shows
+		y = (viewheight - lh - rows) & ~(rows-1);
+		Text (2,y,(char far *)u,15);
+	}
+}
+
 //
 // DOOM's keys for a slow machine: - and = make the window smaller and bigger
 // (id's sizes 4-19, as its Change View menu), F5 the walls' detail -- a ray
@@ -1823,6 +2426,10 @@ static void NetLoop (void)
 	facecount = 0;
 	memset (buttonstate,0,sizeof(buttonstate));
 	ClearPaletteShifts ();
+	mpred = 0;
+	ClearMemory ();					// the small font, for notices and the scores:
+	CA_CacheGrChunk (STARTFONT);	// the page manager has the rest of memory,
+	PM_CheckMainMem ();				// so it lets go first (as id's messages)
 	if (MousePresent)
 		Mouse(MDelta);
 	tics = DEMOTICS;
@@ -1877,7 +2484,8 @@ static void NetLoop (void)
 				PutL (mppkt+10,mpsum);
 				NetSend (mppkt,14);
 			}
-			UpdatePaletteShifts ();
+			if (!mpred)				// dead: the tint holds (DeadTint)
+				UpdatePaletteShifts ();
 			gamestate.TimeCount += tics;
 			if (mpcatching)
 			{
@@ -1922,14 +2530,21 @@ static void NetLoop (void)
 		{
 			if (n)
 				Status ();
+			if (!asking && !mpchatting && Keyboard[sc_T])
+				ChatBegin ();
+			Chat ();
+			mpshowscores = !mpchatting && !asking && Keyboard[sc_Tab];
+			if (mpbot)
+				BotShow ();
 			if ((n || !frameon) && !asking)
 			{
+				DeadTint ();
 				MPCamera (true);
 				ThreeDRefresh ();
 				MPCamera (false);
 				mpframes++;
 			}
-			if (!asking)
+			if (!asking && !mpchatting)
 				Picture ();
 		}
 		UpdateSoundLoc ();
@@ -1937,12 +2552,13 @@ static void NetLoop (void)
 			VW_FadeIn ();
 		// ESC asks first, with the game going on underneath (it cannot
 		// stop for one player); the picture holds still while it asks
-		if (Keyboard[sc_Escape] && !asking)
+		if (Keyboard[sc_Escape] && !asking && !mpchatting)
 		{
 			asking = 1;
 			IN_ClearKeysDown ();
-			Message (leave);			// WL_MENU.C's box, as god mode's
-		}
+			ClearMemory ();				// as id's own in play (WL_PLAY.C): the page
+			Message (leave);			// manager lets go, so the box's big font has
+		}								// room -- without it, MM_GetPtr: Out of memory
 		if (asking && Keyboard[sc_Y])
 		{
 			playstate = ex_abort;
@@ -1952,6 +2568,8 @@ static void NetLoop (void)
 		{
 			asking = 0;
 			IN_ClearKeysDown ();
+			UNCACHEGRCHUNK (STARTFONT+1);
+			PM_CheckMainMem ();
 			DrawAllPlayBorderSides ();
 		}
 		if ((long)(TimeCount - mpheard) > DEAF)	// signed: id's first frame
@@ -1965,6 +2583,16 @@ static void NetLoop (void)
 		if (mpstate == 3 || mpdropped)	// sends steps again
 			playstate = ex_abort;
 	} while (!playstate);
+	if (mpchatting)
+		ChatEnd ();
+	if (mpred)						// dead as the floor ended: the tint goes
+	{
+		VW_WaitVBL (1);
+		VL_SetPalette (&gamepal);
+		palshifted = false;
+		mpred = 0;
+	}
+	mpshowscores = 0;
 	ProfStop ();					// before the next floor's StartMusic sets INT 8
 	mpcatching = 0;
 	mpticks += TimeCount;
@@ -2026,7 +2654,6 @@ static void TallyDraw (int over)
 	static char far t0[] = "FLOOR COMPLETE", far t1[] = "FRAG LIMIT", far t2[] = "TIME LIMIT";
 	static char far h1[] = "KILLS", far h2[] = "ITEMS", far h3[] = "SECRET";
 	static char far h4[] = "FRAGS", far h5[] = "DIED";
-	static char far nm[4][9] = {"P1 GREY","P2 GREEN","P3 RED","P4 BROWN"};
 	static char far you[] = ">";
 	static char far next[] = "fire or use: the next floor";
 	static char far end[] = "fire or use: the end";
@@ -2051,7 +2678,11 @@ static void TallyDraw (int over)
 		y = 34 + i*12;
 		if (i == mplocal)
 			Col (2,y,you);
-		Col (10,y,nm[i]);
+		{
+			char	t[64];
+
+			Col (10,y,Fit (t,Who (i),66));
+		}
 		if (mpctx[i].absent)
 		{
 			Col (78,y,empty);

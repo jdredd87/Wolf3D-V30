@@ -176,6 +176,7 @@ void SpawnStatic (int tilex, int tiley, int type)
 		laststatobj->flags = FL_BONUS;
 		laststatobj->itemnumber = statinfo[type].type;
 		MPBonusAt (tilex,tiley);
+		MPBonusOrig (laststatobj);		// multiplayer: it may come back (WL_MP.C)
 		break;
 	}
 
@@ -227,8 +228,8 @@ void PlaceItemType (int itemtype, int tilex, int tiley)
 			break;
 		}
 
-		if (spot->shapenum == -1)				// -1 is a free spot
-			break;
+		if (spot->shapenum == -1 && !MPBonusWaits (spot))	// -1 is a free spot
+			break;						// (not one whose item will come back)
 	}
 //
 // place it
@@ -239,6 +240,7 @@ void PlaceItemType (int itemtype, int tilex, int tiley)
 	spot->visspot = &spotvis[tilex][tiley];
 	spot->flags = FL_BONUS;
 	MPBonusAt (tilex,tiley);
+	MPBonusDrop (spot);
 	spot->itemnumber = statinfo[type].type;
 }
 

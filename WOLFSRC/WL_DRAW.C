@@ -1001,6 +1001,9 @@ void DrawPlayerWeapon (void)
 	}
 #endif
 
+	if (mpplayers && (MPDead () || MPDeadLook () >= 0))	// multiplayer, dead:
+		return;							// no gun in hand
+
 	if (gamestate.weapon != -1)
 	{
 		shapenum = weaponscale[gamestate.weapon]+gamestate.weaponframe;
@@ -1303,6 +1306,8 @@ asm	rep stosw
 	}
 	if (AutomapOn (demoplayback))		// the automap (TAB), over the view
 		AutomapDraw ();
+	if (mpnet)
+		MPOverlay ();					// a network game: notices, the scores (WL_MP.C)
 
 //
 // show screen and time last cycle

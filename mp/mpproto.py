@@ -6,9 +6,10 @@ import struct
 
 PORT = 31992
 VERSION = 1
-HELLO, WELCOME, START, INPUT, STEPS, SYNC, DESYNC, BYE, CHAT, CHATMSG = range(1, 11)
+HELLO, WELCOME, START, INPUT, STEPS, SYNC, DESYNC, BYE, CHAT, CHATMSG, PLAYERS = range(1, 12)
 NAMES = {HELLO: "HELLO", WELCOME: "WELCOME", START: "START", INPUT: "INPUT", STEPS: "STEPS",
-         SYNC: "SYNC", DESYNC: "DESYNC", BYE: "BYE", CHAT: "CHAT", CHATMSG: "CHATMSG"}
+         SYNC: "SYNC", DESYNC: "DESYNC", BYE: "BYE", CHAT: "CHAT", CHATMSG: "CHATMSG",
+         PLAYERS: "NAMES"}
 STEPS_MAX = 64                  # steps in one STEPS packet
 STEP_SECONDS = 4 / 70           # DEMOTICS of the 70 Hz clock
 SYNC_EVERY = 50                 # steps between SYNCs
@@ -126,6 +127,24 @@ def chat(slot, number, text, kind=CHAT):
 def un_chat(b):
     slot, number, n = b[:3]
     return slot, number, b[3:3 + n].decode("latin-1")
+
+
+def names(names):
+    """NAMES (type 11, since 2026-10-08): every slot's name, "" for an
+    empty one -- 16 bytes each, NUL-padded."""
+    out = head(PLAYERS) + bytes([len(names)])
+    for n in names:
+        out += n.encode("latin-1")[:16].ljust(16, b"\0")
+    return out
+
+
+def un_names(b):
+    return [b[1 + 16 * i:17 + 16 * i].split(b"\0")[0].decode("latin-1") for i in range(b[0])]
+
+
+# the rules' bits 3-7 (since 2026-10-08): items come back after 5 s times this
+def respawn_bits(seconds):
+    return max(0, min(31, (int(seconds) + 2) // 5)) << 3
 
 
 def seq_newer(a, b):

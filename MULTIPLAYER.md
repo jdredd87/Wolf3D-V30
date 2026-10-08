@@ -395,6 +395,58 @@ cam changes the target's context -- M3's sums parted at step 100, and the
 486 froze -- so it is not in.  The swaps are still some 17% of catching up:
 the next place to look, with the context's real writers found first.
 
+**Deathmatch, made to feel like one -- 2026-10-08** (StevenC: "can we do
+death match with no enemies? and if so, items respawn? ... when killed, it
+looks odd. your gun shows ... red tint? ... press space to respawn? ...
+TAB to show the score board? ... not sure if T for message works?").
+
+* **No enemies** was already there: `mpserver.py --mode dm --noenemies`.
+* **Items come back** (`--itemrespawn SECS`, 30 in deathmatch unless given,
+  never in co-op unless given): an item the map put there, taken, is back
+  that many seconds later -- counted in steps, so at the same step on every
+  machine, and a late joiner playing the steps again sees the same.  The
+  time travels in the rules byte's bits 3-7 (5 s times n, to 155 s), so
+  `WELCOME`, `START` and a recording carry it with no new field.  A dropped
+  item does not come back, a slot whose item will is not handed to a drop
+  (`PlaceItemType`), and the Spear never does.
+* **Dying**: no gun in hand; the view goes red at once and fades in a
+  second to a red that holds until the respawn (the palette is set only
+  when it changes -- each set waits for the retrace, and a hit's flash sets
+  it every step); "Killed by NAME" (or "You killed yourself", "You died")
+  in the middle of the view, and after a second "Press SPACE to respawn".
+* **TAB** held: the scores over the view -- every player in the game, the
+  most frags first (score in co-op), frags and deaths, the frag limit and
+  the time left when there are any.
+* **T** (chat): the protocol had `CHAT`/`CHATMSG` and the server relayed
+  them, but the game had never sent or shown one -- T did nothing.  Now T
+  opens a line ("Say:", 40 letters, ENTER sends, ESC does not), sent until
+  the server's copy comes back; typing, the player stands still.  The
+  keyboard interrupt hands each letter to a 16-letter ring
+  (`IN_SetKeyHook`), so the V30 drops none at 10 pictures a second.
+* **Notices** at the top of the view for six seconds: chat, who killed
+  whom, who joined and who left -- in the player's colour.
+* **Names**: the server sends every slot's name (`NAMES`, type 11) when
+  anyone comes or goes and every two seconds; the notices, the scores and
+  the tally use them.
+* **ESC quit with `MM_GetPtr: Out of memory`** (StevenC, the same night, on
+  both machines): the "Leave the game?" box loads the big font, and in a
+  network game the page manager holds the rest of memory.  id's own
+  in-game messages let it go first (`ClearMemory`) and take it back after;
+  so does this one now.  The small font the notices use is loaded the
+  same way at each floor's start.
+* Text is drawn over the finished view (`MPOverlay`, from `ThreeDRefresh`)
+  with a shadow; with `LOWVERT` only the even rows are shown, so the font
+  is drawn twice as tall there -- the only way it reads.
+* **Tested** on the two machines (NETBOT, which now also holds up the
+  scores 5 s in every 20, sends a chat line every 20 s, and *looks* dead
+  5 s in every 20 -- the picture only, nothing summed -- so a camera can
+  see what TAB, T and dying do): 3,000 steps of deathmatch with no enemies
+  and items back after 5 s, the 486 joining late and catching up through
+  the pickups and the items' return -- 0 desyncs, both machines ending on
+  the same sum (`4A53F687`), 18 chat lines relayed, the V30 at 8.4
+  pictures a second (`LOWEST VIEW 10`) with the text over the view.  The
+  20 `MGEN` demos agree as before; single player is IDENTICAL to id.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
@@ -627,7 +679,7 @@ server that disagrees with it is wrong.
 |---|---|---|---|
 | 1 | `HELLO` | client | name (16 bytes, NUL-padded), build (u32: the EXE's CRC-32, so two builds never play together), wanted slot (u8, FFh = any) |
 | 2 | `WELCOME` | server | slot (u8), players expected (u8), map (u8), skill (u8), rules (u8), pad, frag limit (u16), time limit (u16, minutes) |
-| 3 | `START` | server | players (u8), map, skill, rules (u8 each), then for each player a start: x, y, direction, 0 -- x 0 means "the map's own start" for P1 and "beside P1" for the others (scattered, in deathmatch), found by the game itself (the same search on every machine).  Rules bits: 1 deathmatch, 2 no friendly fire (co-op), 4 no enemies.  A recording keeps them in P2's start's 4th byte, as it keeps the skill + 1 in P1's |
+| 3 | `START` | server | players (u8), map, skill, rules (u8 each), then for each player a start: x, y, direction, 0 -- x 0 means "the map's own start" for P1 and "beside P1" for the others (scattered, in deathmatch), found by the game itself (the same search on every machine).  Rules bits: 1 deathmatch, 2 no friendly fire (co-op), 4 no enemies; bits 3-7 (since 2026-10-08) n: a taken item comes back after 5n seconds, 0 never.  A recording keeps them in P2's start's 4th byte, as it keeps the skill + 1 in P1's |
 | 4 | `INPUT` | client | slot (u8), buttons (u8), turn (s8), move (s8), seq (u16), have (u32), played (u32: the highest step it has played; since 2026-10-07 -- the server lets a joiner in once it has caught up) |
 | 5 | `STEPS` | server | first (u32), count (u8), players (u8), then count steps of players x 3 bytes -- buttons, turn, move, P1 first: a step exactly as `Mn.DEM` holds it.  An empty slot's 3 bytes are 0, -128, -128 (since 2026-10-07): no player's are, as id's PollControls clamps a turn and a move to 100 a tic |
 | 6 | `SYNC` | client | slot (u8), pad, step (u32), sum (u32) |
@@ -635,6 +687,7 @@ server that disagrees with it is wrong.
 | 8 | `BYE` | either | slot (u8), and from the server a reason (u8, since 2026-10-07): 0 the game is over, 1 the server is full, 2 a different build, 3 this machine was not heard from and its slot is free |
 | 9 | `CHAT` | client | slot (u8), message number (u8), length (u8), text |
 | 10 | `CHATMSG` | server | slot (u8), message number (u8), length (u8), text -- to every player; the sender's own copy is its acknowledgement |
+| 11 | `NAMES` | server | count (u8), then each slot's name (16 bytes, NUL-padded; empty: nobody) -- when anyone comes or goes, and every 2 s (since 2026-10-08) |
 
 **Joining** (since 2026-10-07; "Joining and leaving" below).  A client
 sends `HELLO` every half second until it has a `WELCOME`; the server answers
