@@ -93,7 +93,7 @@ the map it names: each frame this player's controls go out as `INPUT`
 every step that has arrived is played exactly as a demo's step, and the
 picture is drawn once.  `WOLFSRC/WL_NET.C` is the network -- the packet
 driver, ARP (answered, always), IPv4 and UDP -- and `WL_NETA.ASM` the
-driver's receive callback, into a 12 KB ring allocated only for a network
+driver's receive callback, into an 8 KB ring allocated only for a network
 game.  The first match, the V30 (P2) and the 486 (P1) through the Python
 server on the Windows PC: **600 steps, both machines ending on the same
 game-state checksum (`203A7E11`), no desync** -- and the server's
@@ -446,6 +446,42 @@ TAB to show the score board? ... not sure if T for message works?").
   the same sum (`4A53F687`), 18 chat lines relayed, the V30 at 8.4
   pictures a second (`LOWEST VIEW 10`) with the text over the view.  The
   20 `MGEN` demos agree as before; single player is IDENTICAL to id.
+
+**The 486's memory, and the ESC box again -- 2026-10-08, later** (StevenC
+out for the day; a NETBOT build that also pressed ESC every minute, N four
+seconds on and Y the fifth time, found both).
+
+* **ESC could still end the 486**, with `PML_TransferPageSpace: Zero
+  replacement`, at the second ESC.  The box's fix let the page manager's
+  memory go and took it back only on N -- but the game goes on under the
+  box, and a sound from a page that had been let go found no memory there.
+  id's own order (`WL_PLAY.C`) is the cure: `Message`, `UNCACHEGRCHUNK`,
+  `PM_CheckMainMem` at once.  Five ESCs then on both machines, no desync.
+  After N the WHOLE border is drawn again: at a small view the box stands
+  on the border above the view, and redrawing only the sides left half of
+  it there for good (the V30's screen showed it).
+* **The 486 was within 50 bytes of not starting.**  id's check wants
+  200,000 bytes for its caches (`WL_MAIN.C`); under the bridge the 486 has
+  550 KB free (DOS low, no EMS) and gave WOLF3DM about 199,950 -- a test
+  build 1 KB bigger was refused.  Without EMS every page passes through
+  main memory, so that figure is real, not id being fussy.  Two cuts, and
+  neither changes the game:
+  * Borland gives every `far` variable its own segment, rounded up to 16
+    bytes: 1.9 KB of padding, mostly in `WL_MP.C`.  `#pragma option -zE`
+    puts a file's far data in one segment, and `-Fc-` (from
+    `BUILD86.BAT`; a pragma cannot say it) lets the uninitialized ones
+    join -- 1,467 bytes back.  Only `WL_MP` gets `-Fc-`: id's `WL_MENU.H`
+    defines a variable (`menuitems`), and a second such module defines it
+    twice.
+  * The receive ring's slots were 1,536 bytes, a whole Ethernet frame;
+    the biggest packet the server sends is 820 (64 four-player steps).
+    Slots of 1,024: the ring is 8 KB, not 12, and 4 KB more is the page
+    manager's once a network game starts.
+  The EXE is 333,678 bytes (was 335,166).  The 20 `MGEN` demos agree;
+  single player is IDENTICAL to id.
+* **More would come from the 486's `CONFIG.SYS`**, StevenC's to change:
+  HIMEM is loaded and MEM says "The high memory area is available", but
+  there is no `DOS=HIGH` -- DOS keeps 72 KB of conventional memory there.
 
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is

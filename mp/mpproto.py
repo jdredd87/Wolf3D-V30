@@ -11,6 +11,7 @@ NAMES = {HELLO: "HELLO", WELCOME: "WELCOME", START: "START", INPUT: "INPUT", STE
          SYNC: "SYNC", DESYNC: "DESYNC", BYE: "BYE", CHAT: "CHAT", CHATMSG: "CHATMSG",
          PLAYERS: "NAMES"}
 STEPS_MAX = 64                  # steps in one STEPS packet
+# (the game's receive slots are 1024 bytes: 4 players x 3 x STEPS_MAX + 52 must fit)
 STEP_SECONDS = 4 / 70           # DEMOTICS of the 70 Hz clock
 SYNC_EVERY = 50                 # steps between SYNCs
 NOBODY = 0xFFFFFFFF             # `have` before the first step

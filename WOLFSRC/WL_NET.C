@@ -15,6 +15,10 @@
 // file named by %MTCPCFG%, then C:\AI\NET.CFG -- lines IPADDR, NETMASK,
 // GATEWAY and PACKETINT.  Everything here is far data: DGROUP is full.
 
+// The initialized far variables here in ONE segment, not one each rounded
+// up to 16 bytes (the uninitialized would need -Fc-, and a second -Fc-
+// module defines id's menuitems twice: BUILD86.BAT)
+#pragma option -zEWL_NET_FAR
 #include "WL_DEF.H"
 #pragma hdrstop
 #include <dos.h>
@@ -23,7 +27,8 @@
 #include <stdlib.h>
 
 #define NSLOTS		8
-#define SLOTSZ		1536
+#define SLOTSZ		1024		// the biggest packet, STEPS of 64 four-player steps,
+								// is an 820-byte frame (mpproto.py's STEPS_MAX)
 
 typedef struct
 {
@@ -33,7 +38,7 @@ typedef struct
 	byte				ring[NSLOTS][SLOTSZ];
 } netshare_t;
 
-memptr		netmem;			// the ring: 12 KB, only when a network game starts
+memptr		netmem;			// the ring: 8 KB, only when a network game starts
 							// (WL_NETA.ASM knows the layout).  NEAR, in DGROUP: the
 							// memory manager keeps a near pointer to its owner, and
 							// a far one gave it only the offset -- the ring was 0:0,

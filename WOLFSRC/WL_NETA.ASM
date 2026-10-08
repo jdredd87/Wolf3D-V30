@@ -17,7 +17,7 @@ IDEAL
 MODEL	MEDIUM
 
 NSLOTS		=	8
-SLOTSZ		=	1536
+SLOTSZ		=	1024
 NS_HEAD		=	0
 NS_TAIL		=	1
 NS_DROPS	=	2
@@ -85,9 +85,7 @@ PUBLIC	_NetRecv
 	mov		al,[bx+NS_HEAD]
 	and		ax,NSLOTS-1				; AX = the slot
 	mov		di,ax
-	shl		di,1
-	add		di,ax					; slot*3
-	shl		di,9					; slot*1536
+	shl		di,10					; slot*1024
 	add		di,bx
 	add		di,NS_RING
 	mov		ax,ds

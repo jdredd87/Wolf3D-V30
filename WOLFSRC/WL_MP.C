@@ -13,6 +13,11 @@
 //
 // Everything here is in far data: DGROUP is full.
 
+// Every far variable here in ONE segment: Borland gives each its own by
+// default, rounded up to 16 bytes -- 1.3 KB of padding in this file, and
+// the 486 (no EMS: every page passes through main memory) needs it.
+// BUILD86.BAT compiles it -Fc-, so the uninitialized ones join too
+#pragma option -zEWL_MP_FAR
 #include "WL_DEF.H"
 #pragma hdrstop
 #include <stdarg.h>
@@ -2558,7 +2563,12 @@ static void NetLoop (void)
 			IN_ClearKeysDown ();
 			ClearMemory ();				// as id's own in play (WL_PLAY.C): the page
 			Message (leave);			// manager lets go, so the box's big font has
-		}								// room -- without it, MM_GetPtr: Out of memory
+			UNCACHEGRCHUNK (STARTFONT+1);	// room (without it, MM_GetPtr: Out of
+			PM_CheckMainMem ();			// memory), and takes it back AT ONCE: the
+		}								// game goes on under the box, and a sound
+										// from a page it had let go ended the 486
+										// with "PML_TransferPageSpace: Zero
+										// replacement" (an XMS-only machine)
 		if (asking && Keyboard[sc_Y])
 		{
 			playstate = ex_abort;
@@ -2568,9 +2578,8 @@ static void NetLoop (void)
 		{
 			asking = 0;
 			IN_ClearKeysDown ();
-			UNCACHEGRCHUNK (STARTFONT+1);
-			PM_CheckMainMem ();
-			DrawAllPlayBorderSides ();
+			DrawAllPlayBorder ();		// all of it: at a small view the box stands
+										// on the border above (Sides left it there)
 		}
 		if ((long)(TimeCount - mpheard) > DEAF)	// signed: id's first frame
 		{							// sets TimeCount back to 0 after a fade-in, and
