@@ -490,7 +490,8 @@ seconds on and Y the fifth time, found both).
   made before this would not replay the same.)
 * **Dead, at a small view**, the top notice ("X killed Y") was written over
   "Killed by X": only as many notices as fit above it are shown now.
-* **A real kill, at last, on camera**: the test bots hunted (turned toward
+* **A real kill, at last, on camera**: the test bots (`mp/huntbot.py`, a test build: NETBOT presses what
+  only a keyboard can) hunted (turned toward
   the other player and ran, wandered when stuck, fired only when aimed),
   started beside P1 so they met, and waited 4 s before SPACE.  The 486
   killed the V30 twice in five minutes: the V30's screen went red with no
