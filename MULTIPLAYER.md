@@ -482,6 +482,22 @@ seconds on and Y the fifth time, found both).
 * **More would come from the 486's `CONFIG.SYS`**, StevenC's to change:
   HIMEM is loaded and MEM says "The high memory area is available", but
   there is no `DOS=HIGH` -- DOS keeps 72 KB of conventional memory there.
+* **A deathmatch started unfairly**: a player in the game from its first
+  step kept id's 8 bullets, while one who joined after had a respawn's 50
+  (and every floor after the first gave everyone 50).  Now everyone starts
+  a deathmatch with 50.  Co-op still starts as id's game; the `MGEN`
+  demos are co-op, and still agree.  (A server recording of a deathmatch
+  made before this would not replay the same.)
+* **Dead, at a small view**, the top notice ("X killed Y") was written over
+  "Killed by X": only as many notices as fit above it are shown now.
+* **A real kill, at last, on camera**: the test bots hunted (turned toward
+  the other player and ran, wandered when stuck, fired only when aimed),
+  started beside P1 so they met, and waited 4 s before SPACE.  The 486
+  killed the V30 twice in five minutes: the V30's screen went red with no
+  gun, "Killed by QBOT486" and "Press SPACE to respawn", a bloodied face
+  at 0%; after SPACE, 100% and 50 bullets, the notice at the top and the
+  scores (TAB) sorted with the killer first, 2 frags to 2 deaths -- the
+  same on both machines, no desync.
 
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is

@@ -1185,11 +1185,17 @@ void MPSpawn (byte far *b)
 	MPAsm (1,&objlist[0]);			// the renderer: no pickups or waking, and
 									// PlaceActors from the list's head
 	InitAreas ();					// every player's area, now they all exist
+	if (mprules & RULE_DM)			// deathmatch: every door, and a respawn's
+		for (i=0;i<mpplayers;i++)	// 50 bullets -- a player in from the first
+		{							// step had id's 8 while one who joined
+			mpctx[i].gs.keys = 3;	// later had 50 (Join), and every floor
+			mpctx[i].gs.ammo = 50;	// after the first gave all of them 50
+		}
 	if (mprules & RULE_DM)
-		for (i=0;i<mpplayers;i++)
-			mpctx[i].gs.keys = 3;	// deathmatch: every door
-	if (mprules & RULE_DM)
+	{
 		gamestate.keys = 3;
+		gamestate.ammo = 50;
+	}
 	if (mprules & RULE_NOENEMIES)
 	{
 		objtype	*ob,*next;
@@ -2324,6 +2330,10 @@ void MPOverlay (void)
 	if (show > NOTES)
 		show = NOTES;
 	y = rows*2;
+	if (dead >= 0 && show > (((viewheight/2 - lh) & ~(rows-1)) - y)/lh)
+		show = (((viewheight/2 - lh) & ~(rows-1)) - y)/lh;	// dead: only as many
+										// as fit above "Killed by" (a small view
+										// wrote one over the other)
 	for (i=NOTES-show;i<NOTES && !mpshowscores;i++)	// not under the scores
 		if (Live (i))
 		{
