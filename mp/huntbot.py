@@ -7,18 +7,27 @@ some players with 8 bullets and some with 50.
     python mp/huntbot.py            patch, build on the 486, put the source
                                     back: stage/WOLF3DT.EXE
     python mp/huntbot.py --restore  only put the source back (after a failure)
+    python mp/huntbot.py --quit N   Y at the Nth ESC (a minute each), not the 5th
+                                    -- alone on a server, a repeatable benchmark
+                                    of the picture (the wander is mpbotrnd's)
+    python mp/huntbot.py --memonly  only the "mainmem N" line, the bot as it is:
+                                    what the real build leaves the 486 (run it
+                                    with TIMEDEMO MGEN 0 LOCAL 1), 60-odd bytes
+                                    under the truth for the printf
 
 The game reads the keyboard itself (INT 9), so neither KINJ nor KNET can
 press TAB, T, SPACE or ESC in it.  This build's NETBOT does instead:
 
   * hunts: turns toward the nearest other player and runs at them, wanders
     at random a while when it has got nowhere in half a second, fires only
-    when aimed and within 8 tiles;
+    when aimed, within 8 tiles and with nothing between (no wall, no shut
+    door -- without that it emptied its gun into a wall, 2026-10-08);
   * dead, waits 4 s (the death screen, for a camera) and presses SPACE;
   * presses ESC every 60 s of a floor and N 4 s later -- Y the fifth time
     if its NAME starts with Q, which is how a test run ends;
   * in deathmatch every start and respawn is BESIDE P1's start, not
-    scattered, so two bots meet (a straight-line hunt is lost in a maze).
+    scattered, so two bots meet (a straight-line hunt is lost in a maze);
+  * shows a typed chat line ("Say: ...") 5 s in every 20, for the camera.
 
 Also: the memory id's start-up check sees ("mainmem N", on stdout), with the
 check lowered to 150,000 so a build a little bigger than the real one runs.
@@ -63,6 +72,8 @@ def patch(name, pairs):
     raw = io.open(p, "rb").read().decode("latin-1")
     for a, b in pairs:
         a, b = a.replace("\n", "\r\n"), b.replace("\n", "\r\n")
+        if "ovnow" not in raw:          # a source before the overlay's clock
+            b = b.replace("ovnow", "TimeCount")
         assert raw.count(a) == 1, (name, a[:60])
         raw = raw.replace(a, b)
     io.open(p, "wb").write(raw.encode("latin-1"))
@@ -121,8 +132,19 @@ MP = [
 			dt = fx*dx + fy*dy;
 			if (dt > 0 && labs (cr) < dt/12)
 			{
+				long	sx = o->x, sy = o->y, ddx = (t->x - o->x)/16, ddy = (t->y - o->y)/16;
+				int		k, n, see = best < 8*65536l;
+
+				for (k=1;k<16 && see;k++)		// nothing between: a wall or a shut
+				{								// door, every 16th of the way
+					sx += ddx;
+					sy += ddy;
+					n = tilemap[(int)(sx>>16)][(int)(sy>>16)];
+					if (n && (!(n & 0x80) || doorposition[n & 0x7f] < 0xc000))
+						see = 0;
+				}
 				*x = 0;
-				*bits = 4 | (best < 8*65536l ? tog : 0);	// fire, pressed and let go
+				*bits = 4 | (see ? tog : 0);	// fire, pressed and let go
 			}
 			else
 			{
@@ -152,11 +174,20 @@ MP = [
 				Keyboard[sc_Escape] = 1;
 			}
 			if (asking && TimeCount / 70 == escat + 4)
-				Keyboard[(escs >= 5 && mpname[0] == 'Q') ? sc_Y : sc_N] = 1;
+				Keyboard[(escs >= QUITAT && mpname[0] == 'Q') ? sc_Y : sc_N] = 1;
 		}
 		if (Keyboard[sc_Escape] && !asking && !mpchatting)'''),
     # the real NETBOT's pretend death (MPDeadLook) would hide the real one
     ('''	if (mpbot && mpnet && (TimeCount / 350) % 4 == 2)''', '''	if (0)'''),
+    ('''	if (mpchatting)
+	{
+		Fmt (u,fsay''', '''	if (mpchatting || (mpbot && (ovnow / 350) % 4 == 3))	// TEST: a typed line
+	{
+		static char far tl[] = "testing the chat line, forty letters...";
+
+		if (!mpchatting)
+			_fstrcpy (chatline,tl);
+		Fmt (u,fsay'''),
     ('''DMStart (i,&sx,&sy);		// deathmatch: scattered, as DOOM''',
      '''Beside (i,&sx,&sy);		// TEST: start beside P1'''),
     ('''static void Respawn (objtype *ob, int i)
@@ -181,8 +212,11 @@ def main():
         return 0
     if any(os.path.exists(keep(f)) for f in FILES):
         raise SystemExit("stage/*.keep exist: a run did not finish -- check them, then --restore")
+    quit = sys.argv[sys.argv.index("--quit")+1] if "--quit" in sys.argv else "5"
+    mp = [(a, b.replace("QUITAT", quit)) for a, b in MP]
     try:
-        patch("WL_MP.C", MP)
+        if "--memonly" not in sys.argv:
+            patch("WL_MP.C", mp)
         patch("WL_MAIN.C", MAIN)
         rc = subprocess.call([sys.executable, os.path.join(ROOT, "w3dbuild.py"), "build"], cwd=ROOT)
     finally:

@@ -177,10 +177,12 @@ static void Notice (int color, char far *fmt, ...)
 	noteuntil[NOTES-1] = TimeCount + NOTETICS;
 }
 
+static long far ovnow;				// TimeCount, read once for the overlay
+
 static int Live (int i)				// TimeCount starts again each floor
 {
-	return notes[i][0] && TimeCount < noteuntil[i]
-		&& noteuntil[i] - TimeCount <= NOTETICS;
+	return notes[i][0] && ovnow < noteuntil[i]
+		&& noteuntil[i] - ovnow <= NOTETICS;
 }
 
 /*
@@ -1487,7 +1489,9 @@ int		far	mpwhy;				// why the level ended: 0 elevator, 1 frags, 2 time
 extern	int	ElevatorBackTo[];	// WL_GAME.C
 byte	far	mpstart[4+4*MAXPLAYERS];	// START's players, map, skill, rules, starts
 byte	far	mpring[RING][3*MAXPLAYERS];
-long	far	mpringstep[RING];
+unsigned far mpringstep[RING];	// the step each holds, its low 16 bits: a slot is
+								// written every 128 steps, and 16 bits repeat only
+								// in 65536 (the 486 needed the 256 bytes)
 long	far	mphave = -1;		// the highest step held with none missing
 long	far	mpplayed = -1;		// the highest step played
 unsigned far mpseq;
@@ -1584,10 +1588,10 @@ static void Take (byte far *d, unsigned len)
 			{
 				k = (unsigned)s & (RING-1);
 				_fmemcpy (mpring[k],d+10+(unsigned)(s-first)*3*players,3*players);
-				mpringstep[k] = s;
+				mpringstep[k] = (unsigned)s;
 			}
 		}
-		while (mpringstep[(unsigned)(mphave+1) & (RING-1)] == mphave+1)
+		while (mpringstep[(unsigned)(mphave+1) & (RING-1)] == (unsigned)(mphave+1))
 			mphave++;
 		break;
 	case 7:							// DESYNC
@@ -2152,11 +2156,51 @@ static void DeadTint (void)
 }
 
 //
-// Text over the view: the small font, with a shadow so it reads over any
+// Text over the play area: the small font, with a shadow so it reads over any
 // wall.  With LOWVERT shown only the even rows are, so each of the font's
 // rows goes to two (it is drawn twice as tall: the only way it can be read)
 //
+// It is laid out on the whole play area, 320 x 160, border and all -- not in
+// the view, where a small one (the V30 at VIEW 10 is 160 x 80, and LOWVERT's
+// text is twice as tall) left three lines and cut every notice short.  The
+// view is drawn again every frame, the border only when id draws it, so what
+// lands on the border must be taken off again: each of the three pages keeps
+// the rectangle and a sum of what was drawn on it, and when a frame's differ
+// the border under the old one is put back first (Unborder).  So a frame
+// draws its overlay twice, first only adding up (measure), then for real --
+// with the clock read once (ovnow), or the two could disagree.  And when a
+// page already has it all (the sums agree), only what falls in the view is
+// drawn again (clip): text is a port write a column and a test a pixel, and
+// drawing all of it every frame took the V30 from 11 pictures a second to 6.6
+//
 static int far rows;				// a font row in rows of the page
+static int far measure;				// 1: Text and Box only add up what they would draw
+static int far clip;				// 1: they draw only in the view (cx0,cy0 - cx1,cy1)
+static int far cx0, far cy0, far cx1, far cy1;
+static int far rx0, far ry0, far rx1, far ry1;	// ...the rectangle of it
+static int far bx0, far by0, far bx1, far by1;	// ...and of the black box (scores)
+static unsigned far rsum;			// ...and a sum of it all
+static int far drawn[3][5];			// each page: x0, y0, x1, y1, sum
+
+static void Redrawn (void)			// the whole border drawn again: every page's
+{									// text is gone, so none of it can be clipped
+	_fmemset (drawn,0xff,sizeof(drawn));
+}
+
+#define PLAYH	(200-STATUSLINES)	// the play area's height
+
+static void Mark (int x, int y, int w, int h, unsigned s)
+{
+	if (x < rx0)
+		rx0 = x;
+	if (y < ry0)
+		ry0 = y;
+	if (x+w > rx1)
+		rx1 = x+w;
+	if (y+h > ry1)
+		ry1 = y+h;
+	rsum = rsum*31 + s + x*7 + y;
+}
 
 static int Width (char far *s)
 {
@@ -2194,17 +2238,42 @@ static void Text1 (int x, int y, char far *s, int color)
 	byte		far *src, far *d;
 	byte		mask = 1 << (x&3), ch;
 	int			w,cw;
+	unsigned	r0 = 0, r1 = h;
 
+	if (measure)
+	{
+		for (w=0,r=color;*s;s++)
+		{
+			w += font->width[(byte)*s];
+			r = r*33 + (byte)*s;
+		}
+		Mark (x,y,w,h*rows,r);
+		return;
+	}
+	if (clip)						// the font's rows that land in the view
+	{
+		if (cy0 > y)
+			r0 = (cy0 - y + rows-1)/rows;
+		if (cy1 < y + (int)(h*rows))
+			r1 = cy1 > y ? (cy1 - y + rows-1)/rows : 0;
+		if (r0 >= r1)
+			return;
+		dest += r0*step;
+	}
 	while ((ch = *s++) != 0)
 	{
 		cw = w = font->width[ch];
 		src = (byte far *)font + font->location[ch];
 		while (w--)
 		{
-			outport (SC_INDEX,SC_MAPMASK | (mask << 8));
-			for (d = dest,r=0;r<h;r++,d += step)
-				if (src[r*cw])
-					*d = color;
+			if (!clip || (x >= cx0 && x < cx1))
+			{
+				outport (SC_INDEX,SC_MAPMASK | (mask << 8));
+				for (d = dest,r=r0;r<r1;r++,d += step)
+					if (src[r*cw])
+						*d = color;
+			}
+			x++;
 			src++;
 			if ((mask <<= 1) == 16)
 			{
@@ -2226,8 +2295,81 @@ static void Center (int y, char far *s, int color)
 {
 	char	t[64];
 
-	Fit (t,s,viewwidth-4);
-	Text ((viewwidth - Width ((char far *)t))/2,y,(char far *)t,color);
+	Fit (t,s,320-4);
+	Text ((320 - Width ((char far *)t))/2,y,(char far *)t,color);
+}
+
+static void Box (int x, int y, int w, int h)	// black, under the scores
+{
+	if (!measure)
+	{
+		if (clip)					// the view's part only
+		{
+			if (x < cx0)
+			{
+				w -= cx0 - x;
+				x = cx0;
+			}
+			if (y < cy0)
+			{
+				h -= cy0 - y;
+				y = cy0;
+			}
+			if (x+w > cx1)
+				w = cx1 - x;
+			if (y+h > cy1)
+				h = cy1 - y;
+		}
+		if (w > 0 && h > 0)
+			VL_Bar (x,y,w,h,0);
+		return;
+	}
+	Mark (x,y,w,h,0x5a5a);
+	bx0 = x;
+	by0 = y;
+	bx1 = x+w;
+	by1 = y+h;
+}
+
+static void Fill (int x0, int y0, int x1, int y1)	// the border's colour
+{
+	if (x0 < 0)
+		x0 = 0;
+	if (y0 < 0)
+		y0 = 0;
+	if (x1 > 320)
+		x1 = 320;
+	if (y1 > PLAYH)
+		y1 = PLAYH;
+	if (x1 > x0 && y1 > y0)
+		VL_Bar (x0,y0,x1-x0,y1-y0,127);
+}
+
+//
+// The border back under x0,y0 - x1,y1 (as DrawPlayBorder draws it): all of
+// it but the view and its edge, then the edge if that was touched
+//
+static void Unborder (int x0, int y0, int x1, int y1)
+{
+	int	xl = 160-viewwidth/2, yl = (PLAYH-viewheight)/2;
+	int	vx0 = xl-1, vy0 = yl-1, vx1 = xl+viewwidth+1, vy1 = yl+viewheight+1;
+
+	Fill (x0,y0,x1,y1 < vy0 ? y1 : vy0);			// above the view
+	Fill (x0,y0 > vy1 ? y0 : vy1,x1,y1);			// below
+	if (y0 > vy0)
+		vy0 = y0;
+	if (y1 < vy1)
+		vy1 = y1;
+	Fill (x0,vy0,x1 < vx0 ? x1 : vx0,vy1);			// left
+	Fill (x0 > vx1 ? x0 : vx1,vy0,x1,vy1);			// right
+	if (viewwidth < 320 && x0 < vx1 && x1 > vx0 && y0 < yl+viewheight+1 && y1 > yl-1)
+	{
+		VL_Hlin (xl-1,yl-1,viewwidth+2,0);
+		VL_Hlin (xl-1,yl+viewheight,viewwidth+2,125);
+		VL_Vlin (xl-1,yl-1,viewheight+2,0);
+		VL_Vlin (xl+viewwidth,yl-1,viewheight+2,125);
+		VL_Plot (xl-1,yl+viewheight,124);
+	}
 }
 
 static long Key (int i)
@@ -2240,7 +2382,6 @@ static void ScoreBoard (int lh)
 	static char far hdm[] = "DEATHMATCH", far hco[] = "CO-OP";
 	static char far flim[] = "%Fs to %u", far ftime[] = "%s  %u:%02u left";
 	static char far hf[] = "FRAGS", far hs[] = "SCORE", far hd[] = "DIED";
-	static char far sf[] = "F", far ss[] = "S", far sd[] = "D";
 	static char far fn[] = "%ld";
 	char		t[64], u[64];
 	int			order[MAXPLAYERS], n = 0, i, j, w, x0, y, bh, rd, rf, nw, title;
@@ -2258,16 +2399,14 @@ static void ScoreBoard (int lh)
 			order[j] = order[j-1];
 			order[j-1] = k;
 		}
-	w = viewwidth - 8;
-	if (w > 240)
-		w = 240;
-	x0 = (viewwidth - w)/2;
-	title = (n + 2)*lh + 4*rows <= viewheight - 2*rows;	// room for a title
+	w = 240;
+	x0 = (320 - w)/2;
+	title = (n + 2)*lh + 4*rows <= PLAYH - 2*rows;	// room for a title
 	bh = (n + 1 + title)*lh + 3*rows;
-	y = ((viewheight - bh)/2) & ~(rows-1);
+	y = ((PLAYH - bh)/2) & ~(rows-1);
 	if (y < 0)
 		y = 0;
-	VL_Bar (x0,y,w,bh > viewheight ? viewheight : bh,0);
+	Box (x0,y,w,bh > PLAYH ? PLAYH : bh);
 	y += rows*2;
 	if (title)
 	{
@@ -2288,11 +2427,6 @@ static void ScoreBoard (int lh)
 	}
 	lf = mprules & RULE_DM ? hf : hs;
 	ld = hd;
-	if (w < 150)
-	{
-		lf = mprules & RULE_DM ? sf : ss;
-		ld = sd;
-	}
 	rd = x0 + w - 4;				// the right edges of the two columns
 	rf = rd - Width (ld) - 10;
 	nw = rf - Width (lf) - 6 - (x0+4);
@@ -2311,38 +2445,33 @@ static void ScoreBoard (int lh)
 	}
 }
 
-void MPOverlay (void)
+static void Overlay (long dead)
 {
 	static char far fby[] = "Killed by %Fs", far fself[] = "You killed yourself",
 		far fdied[] = "You died", far fspace[] = "Press SPACE to respawn",
 		far fsay[] = "Say: %Fs%Fs", far fcur[] = "_", far fnone[] = "";
 	char		t[64], u[80];
 	int			i,y,lh,show,k;
-	long		dead = MPDeadLook ();
 
-	if (!grsegs[STARTFONT])
-		return;
-	rows = lowvert == 2 ? 2 : 1;
 	lh = (((fontstruct far *)grsegs[STARTFONT])->height + 1)*rows;
-	show = viewheight/(3*lh);		// notices: a third of the view at most
+	show = PLAYH/(3*lh);			// notices: a third of the play area at most
 	if (show < 1)
 		show = 1;
 	if (show > NOTES)
 		show = NOTES;
 	y = rows*2;
-	if (dead >= 0 && show > (((viewheight/2 - lh) & ~(rows-1)) - y)/lh)
-		show = (((viewheight/2 - lh) & ~(rows-1)) - y)/lh;	// dead: only as many
-										// as fit above "Killed by" (a small view
-										// wrote one over the other)
+	if (dead >= 0 && show > (((PLAYH/2 - lh) & ~(rows-1)) - y)/lh)
+		show = (((PLAYH/2 - lh) & ~(rows-1)) - y)/lh;	// dead: only as many
+										// as fit above "Killed by"
 	for (i=NOTES-show;i<NOTES && !mpshowscores;i++)	// not under the scores
 		if (Live (i))
 		{
-			Text (2,y,Fit (t,notes[i],viewwidth-6),notecol[i]);
+			Text (2,y,Fit (t,notes[i],320-6),notecol[i]);
 			y += lh;
 		}
 	if (dead >= 0)
 	{
-		y = (viewheight/2 - lh) & ~(rows-1);
+		y = (PLAYH/2 - lh) & ~(rows-1);	// the middle of the view, at any size
 		k = mpkiller[mplocal];
 		if (k == mplocal)
 			Fmt (u,fself);
@@ -2358,12 +2487,54 @@ void MPOverlay (void)
 		ScoreBoard (lh);
 	if (mpchatting)
 	{
-		Fmt (u,fsay,(char far *)chatline,(TimeCount & 16) ? (char far *)fcur : (char far *)fnone);
-		while (u[5] && Width ((char far *)u) > viewwidth-6)
+		Fmt (u,fsay,(char far *)chatline,(ovnow & 16) ? (char far *)fcur : (char far *)fnone);
+		while (u[5] && Width ((char far *)u) > 320-6)
 			memmove (u+5,u+6,strlen (u+5));	// too long: its end shows
-		y = (viewheight - lh - rows) & ~(rows-1);
+		y = (PLAYH - lh - rows) & ~(rows-1);
 		Text (2,y,(char far *)u,15);
 	}
+}
+
+void MPOverlay (void)
+{
+	unsigned	view = bufferofs;
+	int			pg, far *d;
+	long		dead;
+
+	if (!grsegs[STARTFONT])
+		return;
+	rows = lowvert == 2 ? 2 : 1;
+	ovnow = TimeCount;
+	dead = MPDeadLook ();
+	bufferofs -= screenofs;			// the page: the play area, border and all
+	for (pg=0;pg<2 && screenloc[pg] != bufferofs;pg++)
+		;
+	d = drawn[pg];
+	measure = 1;
+	rx0 = ry0 = bx0 = by0 = 0x7fff;
+	rx1 = ry1 = bx1 = by1 = rsum = 0;
+	Overlay (dead);
+	if (rx1 <= rx0)
+		rx0 = ry0 = rx1 = ry1 = 0;
+	clip = rx0 == d[0] && ry0 == d[1] && rx1 == d[2] && ry1 == d[3] && rsum == (unsigned)d[4];
+	if (!clip)
+	{
+		if (d[0] < bx0 || d[1] < by0 || d[2] > bx1 || d[3] > by1)	// not all
+			Unborder (d[0],d[1],d[2],d[3]);	// under this frame's box
+		d[0] = rx0;
+		d[1] = ry0;
+		d[2] = rx1;
+		d[3] = ry1;
+		d[4] = rsum;
+	}
+	measure = 0;
+	cx0 = 160-viewwidth/2;			// the view, on the page
+	cy0 = (PLAYH-viewheight)/2;
+	cx1 = cx0+viewwidth;
+	cy1 = cy0+viewheight;
+	Overlay (dead);
+	clip = 0;
+	bufferofs = view;
 }
 
 //
@@ -2404,6 +2575,7 @@ static void Picture (void)
 		NewViewSize (size);			// memory let go for the new scalers (and
 		PM_CheckMainMem ();			// their 20 KB to build in), then taken back
 		DrawAllPlayBorder ();
+		Redrawn ();
 	}
 	if (Keyboard[sc_F5])
 	{
@@ -2442,6 +2614,7 @@ static void NetLoop (void)
 	memset (buttonstate,0,sizeof(buttonstate));
 	ClearPaletteShifts ();
 	mpred = 0;
+	Redrawn ();						// DrawPlayScreen has just drawn the border
 	ClearMemory ();					// the small font, for notices and the scores:
 	CA_CacheGrChunk (STARTFONT);	// the page manager has the rest of memory,
 	PM_CheckMainMem ();				// so it lets go first (as id's messages)
@@ -2473,6 +2646,7 @@ static void NetLoop (void)
 			ProfStop ();
 			mpcatching = 0;
 			DrawAllPlayBorder ();
+			Redrawn ();
 			for (i=0;i<7;i++)
 				shown[i] = -1;
 		}
@@ -2590,6 +2764,7 @@ static void NetLoop (void)
 			IN_ClearKeysDown ();
 			DrawAllPlayBorder ();		// all of it: at a small view the box stands
 										// on the border above (Sides left it there)
+			Redrawn ();
 		}
 		if ((long)(TimeCount - mpheard) > DEAF)	// signed: id's first frame
 		{							// sets TimeCount back to 0 after a fade-in, and
@@ -2905,7 +3080,7 @@ void MPNetGame (void)
 	if (mpstate == 3)				// a BYE, not a START
 		NetQuit (mpbye == 1 ? full : mpbye == 2 ? other : ended);
 	for (i=0;i<RING;i++)
-		mpringstep[i] = -1;
+		mpringstep[i] = 0xffff;
 
 	mprules = mpstart[3];
 	NewGame (mpstart[2],mpstart[1]/10);

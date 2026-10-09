@@ -15,9 +15,10 @@
 // file named by %MTCPCFG%, then C:\AI\NET.CFG -- lines IPADDR, NETMASK,
 // GATEWAY and PACKETINT.  Everything here is far data: DGROUP is full.
 
-// The initialized far variables here in ONE segment, not one each rounded
-// up to 16 bytes (the uninitialized would need -Fc-, and a second -Fc-
-// module defines id's menuitems twice: BUILD86.BAT)
+// The far variables here in ONE segment, not one each rounded up to 16
+// bytes.  Only initialized ones join it (an uninitialized one would need
+// -Fc-, and a second -Fc- module defines id's menuitems twice: BUILD86.BAT),
+// so every one below is given its 0 -- 227 bytes back, for the 486
 #pragma option -zEWL_NET_FAR
 #include "WL_DEF.H"
 #pragma hdrstop
@@ -43,17 +44,17 @@ memptr		netmem;			// the ring: 8 KB, only when a network game starts
 							// memory manager keeps a near pointer to its owner, and
 							// a far one gave it only the offset -- the ring was 0:0,
 							// and the first frame in overwrote the vector table
-netshare_t	far * far ns;
-byte	far	nettx[1514];
-byte	far	netmyip[4], far netmask[4], far netgw[4], far netsrv[4];
-byte	far	netmymac[6], far nettomac[6];
-int		far	netvec;				// the driver's interrupt, 0 = none
-int		far	nethip, far nethar;	// the IP and ARP handles
-int		far	netopen;			// both handles held
-int		far	nethavemac;			// nettomac is the server's, or the gateway's
-unsigned far netport;			// ours and the server's
-unsigned far netident;
-long	far	netsentn, far netrecvn, far netframes;
+netshare_t	far * far ns = 0;
+byte	far	nettx[1514] = {0};
+byte	far	netmyip[4] = {0}, far netmask[4] = {0}, far netgw[4] = {0}, far netsrv[4] = {0};
+byte	far	netmymac[6] = {0}, far nettomac[6] = {0};
+int		far	netvec = 0;				// the driver's interrupt, 0 = none
+int		far	nethip = 0, far nethar = 0;	// the IP and ARP handles
+int		far	netopen = 0;			// both handles held
+int		far	nethavemac = 0;			// nettomac is the server's, or the gateway's
+unsigned far netport = 0;			// ours and the server's
+unsigned far netident = 0;
+long	far	netsentn = 0, far netrecvn = 0, far netframes = 0;
 
 void	NetSetShare (void far *share);	// WL_NETA.ASM
 void	far NetRecv (void);

@@ -17,8 +17,10 @@ REM WL_MP: no communal variables (-Fc-), so with its #pragma option -zE
 REM every far variable shares one segment, not one each rounded up to 16
 REM bytes (the 486 needs the memory).  One module only: id's WL_MENU.H
 REM defines a variable (menuitems), and a second -Fc- module defines it twice
-CALL CC86.BAT WL_MP -Fc-
-CALL CC86.BAT WL_NET
+REM WL_MP and WL_NET for size (-G-, and -k-: no stack frame unneeded):
+REM 991 bytes for the 486, and the V30 measured no slower (10.2 to 10.3)
+CALL CC86.BAT WL_MP -Fc- -G- -k-
+CALL CC86.BAT WL_NET -G- -k-
 IF EXIST BUILD.ERR GOTO FAILED
 C:\BCPP\BIN\TLINK.EXE @LINK86.RSP >> BUILD.LOG
 IF ERRORLEVEL 1 GOTO LINKBAD

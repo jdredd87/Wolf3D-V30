@@ -500,6 +500,55 @@ seconds on and Y the fifth time, found both).
   scores (TAB) sorted with the killer first, 2 frags to 2 deaths -- the
   same on both machines, no desync.
 
+**The text on the whole screen, not in the view -- 2026-10-09** (StevenC,
+from the V30: "the smaller it is, the more it's crammed").
+
+* **The notices, the scores, the chat line and "Killed by" are laid out on
+  the play area, 320 x 160, border and all** -- not inside the view.  At
+  VIEW 10 the V30's view is 160 x 80, and LOWVERT draws text twice as tall,
+  so it held three lines: the scores lost their title and shrank to "F" and
+  "D", and every notice was cut at 154 pixels.  Now at any size: notices
+  across the top, the chat line along the bottom, the scores in a 240-pixel
+  box with "DEATHMATCH" and the time left, "Killed by" in the middle.
+* **The border has to be cleaned up after, and only when it changed.**  The
+  view is drawn again every frame; the border only when id draws it.  So
+  each of the three pages keeps the rectangle and a sum of what was drawn on
+  it, and a frame lays its overlay out twice -- first only adding it up,
+  then for real.  If the sum differs from the page's, the border under the
+  old rectangle is put back first (`Unborder`: the border's colour outside
+  the view, then the view's edge); if it is the same, only the part that
+  lands IN the view is drawn again.  That second half matters on the V30:
+  the font is a port write a column and a test a pixel, and drawing it all
+  every frame took a live game from 11 pictures a second to 6.6.  The
+  clock is read once for both passes, and every `DrawAllPlayBorder`
+  forgets what the pages had (`Redrawn`).
+* **Measured, alone on a server** (`mp/huntbot.py --quit 3`, VIEW 10, the
+  same wander each time -- it ended on the same tile): the old overlay
+  9.1 pictures a second, the new 10.2.  Faster, because the top notice and
+  the chat line now sit on the border and cost nothing once drawn.
+* **Memory for the 486, again.**  The new overlay cost 1,456 bytes and its
+  clipping 576 more, and the 486 had 1.3 KB over id's check.  Back:
+  * `WL_MP` and `WL_NET` compiled for size (`-G-`, and `-k-`: no stack
+    frame a function does not need) -- 991 bytes (816 + 56 in `WL_MP`,
+    119 in `WL_NET`).  No speed lost: the
+    benchmark gave 10.3 built for speed and 10.2 for size.
+  * `WL_NET`'s uninitialized far variables each given a 0, so they join its
+    one far segment -- 224 bytes of padding.
+  * The step ring's step numbers are 16 bits, not 32 (a slot is written
+    every 128 steps; 16 bits repeat only in 65,536) -- 256 bytes.
+  Measured (`mp/huntbot.py --memonly`, which adds only the line that prints
+  it): **200,770 bytes**, 770 over the check.  The EXE is 334,318 bytes
+  (was 333,790).  `DOS=HIGH` is still the
+  real cure.
+* **Photographed on the V30 at VIEW 4, 10 and 19**, two bots hunting each
+  other: notices, the scores, a typed chat line (the test build shows one
+  5 s in 20), a kill, the death screen, ESC's box, and nothing left on the
+  border after any of them.  No desync; the 20 `MGEN` demos agree; single
+  player is IDENTICAL to id.
+* The test bot now fires only when nothing is between (no wall, no shut
+  door): without that it emptied its gun into a wall on 2026-10-08 and
+  nobody died.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
