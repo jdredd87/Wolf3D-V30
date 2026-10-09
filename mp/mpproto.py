@@ -7,9 +7,12 @@ import struct
 PORT = 31992
 VERSION = 1
 HELLO, WELCOME, START, INPUT, STEPS, SYNC, DESYNC, BYE, CHAT, CHATMSG, PLAYERS = range(1, 12)
+# HANG (2026-10-09): only a TEST build sends it (mp/huntbot.py's, WL_NET.C's
+# HANGDUMP) -- a text report from its hang watchdog, for the server to keep
+HANG = 12
 NAMES = {HELLO: "HELLO", WELCOME: "WELCOME", START: "START", INPUT: "INPUT", STEPS: "STEPS",
          SYNC: "SYNC", DESYNC: "DESYNC", BYE: "BYE", CHAT: "CHAT", CHATMSG: "CHATMSG",
-         PLAYERS: "NAMES"}
+         PLAYERS: "NAMES", HANG: "HANG"}
 STEPS_MAX = 64                  # steps in one STEPS packet
 # (the game's receive slots are 1024 bytes: 4 players x 3 x STEPS_MAX + 52 must fit)
 STEP_SECONDS = 4 / 70           # DEMOTICS of the 70 Hz clock

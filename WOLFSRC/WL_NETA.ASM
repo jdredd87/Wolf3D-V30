@@ -234,4 +234,57 @@ PUBLIC	_MPSwapIn
 	retf
 ENDP
 
+IFDEF HANGDUMP
+;
+; TEST builds only (mp/huntbot.py defines HANGDUMP): the hang watchdog's
+; INT 8 entry, in front of id's timer service and of DOS's.  DOS (STACKS=)
+; moves the BIOS tick onto a stack of its own, so by INT 1Ch, where the
+; watchdog runs, the game's stack is out of sight.  Here, first, its SS:SP
+; is noted -- the IP, CS and FLAGS of whatever the tick stopped are at
+; SP+4 -- and the tick goes on to id's service exactly as before.
+; StevenC & Claude (Anthropic), 2026-10-09.
+;
+DATASEG
+
+PUBLIC	_hang8ss, _hang8sp
+_hang8ss	dw	0
+_hang8sp	dw	0
+
+CODESEG
+
+hang8next	dd	0
+
+PROC	_Hang8 FAR
+PUBLIC	_Hang8
+	push	ds
+	push	ax
+	mov		ax,@data
+	mov		ds,ax
+	mov		[_hang8ss],ss
+	mov		[_hang8sp],sp
+	pop		ax
+	pop		ds
+	jmp		[DWORD PTR cs:hang8next]
+ENDP
+
+;
+; void HangNext8 (void interrupt (*isr)(void)) -- where Hang8 goes on to.
+; Both words at once: a tick between them would jump to half of each
+;
+PROC	_HangNext8 FAR
+PUBLIC	_HangNext8
+	push	bp
+	mov		bp,sp
+	pushf
+	cli
+	mov		ax,[bp+6]
+	mov		[WORD PTR cs:hang8next],ax
+	mov		ax,[bp+8]
+	mov		[WORD PTR cs:hang8next+2],ax
+	popf
+	pop		bp
+	retf
+ENDP
+ENDIF
+
 END

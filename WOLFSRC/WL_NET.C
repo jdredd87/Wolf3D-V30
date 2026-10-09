@@ -57,6 +57,9 @@ unsigned far netident = 0;
 long	far	netsentn = 0, far netrecvn = 0, far netframes = 0;
 
 void	NetSetShare (void far *share);	// WL_NETA.ASM
+#ifdef HANGDUMP
+static void HangStart (void), HangStop (void);	// the hang watchdog, below
+#endif
 void	far NetRecv (void);
 
 static byte far ethip[2] = {0x08,0x00}, far etharp[2] = {0x08,0x06};
@@ -293,6 +296,9 @@ int NetStart (byte far *server, unsigned port, char far * far *why)
 	int86x (netvec,&r,&r,&s);
 	nethavemac = 0;
 	netopen = 1;
+#ifdef HANGDUMP
+	HangStart ();
+#endif
 	return 1;
 }
 
@@ -300,6 +306,9 @@ void NetStop (void)
 {
 	if (!netopen)
 		return;
+#ifdef HANGDUMP
+	HangStop ();
+#endif
 	netopen = 0;
 	Release (nethip);
 	Release (nethar);
@@ -467,6 +476,449 @@ void NetSend (byte far *data, unsigned len)
 	SendFrame (14+20+8+len);
 }
 
+#ifdef HANGDUMP
+/*
+=============================================================================
+
+					THE HANG WATCHDOG (test builds only)
+
+=============================================================================
+*/
+//
+// mp/huntbot.py defines HANGDUMP; the real game has none of this.
+//
+// NetPump runs in every loop the game has while the network is up, so the
+// BIOS tick (INT 1Ch, 18.2 a second: whichever of id's three timer services
+// is in, it chains to the BIOS at that rate) counts how long it has not run.
+// 20 s of that is a game stuck -- or a floor that took 20 s to load: the
+// next NetPump says so.  Then, from the tick, on a stack of its own:
+//   * 384 bytes of the stack as it was -- every frame from here down to the
+//     stuck code; mp/hangtrace.py names them from the build's map;
+//   * the step, the floor, the counters, and where the packet driver, DOS
+//     and the disk BIOS live, to tell "stuck in them" from "stuck in us";
+// to the server as a HANG packet (three times, 5 s apart) and once into
+// HANG.LOG, if DOS was not in the middle of something.  And from NetPump:
+// the server going quiet while the game runs, and coming back.
+//
+// The stack reported is not the tick's own: DOS (STACKS=) moves the BIOS
+// tick onto a stack of its own before INT 1Ch, so Hang8 (WL_NETA.ASM), in
+// front of id's timer service on INT 8, notes the game's SS:SP every tick.
+//
+// The tick's work runs with SS on its own stack and DS on DGROUP, so it
+// never takes the address of a local: the packet driver and DOS are called
+// from inline asm, not int86x (whose REGS are near pointers, DS-relative).
+// StevenC & Claude (Anthropic), 2026-10-09.
+//
+#define HANGTICKS	(20*18)				// 20 s
+#define HANGWORDS	192					// the stack words reported (one datagram)
+
+extern	char	far	mpname[17];
+extern	long	far	mpplayed;
+extern	unsigned	hang8ss, hang8sp;	// WL_NETA.ASM: the game's stack at the tick
+void	interrupt	Hang8 (void);		// WL_NETA.ASM: INT 8, in front of id's
+void	HangNext8 (void interrupt (*isr)(void));
+
+unsigned	hangdss = 0, hangdsp = 0;	// the stack reported: Hang8's, at this tick
+unsigned	hangss = 0, hangsp = 0;		// NEAR: the tick's inline asm reads them
+unsigned	hangstkseg = 0, hangstktop = 0;	// with DS = DGROUP
+int			hangbusy = 0;
+static	void interrupt	(*hangold)(void);
+static	void interrupt	(*hangnext8)(void);	// id's service, behind Hang8
+static	byte	far	hangstack[1024];
+static	char	far	hangtxt[1440];		// the tick's report
+static	char	far	hangmsg[200];		// NetPump's (the tick's may be mid-way)
+static	char	far	hangwhat[48];
+static	byte	far	hangtx[1514];
+static	char	far	hanglog[] = "HANG.LOG";
+static	byte	far	* far hangindos;	// DOS's InDOS flag; the critical error flag before it
+static	unsigned far	hangtime;		// BIOS ticks since the network started
+static	unsigned far	hangpumps, far hangseen;	// NetPump runs, and the count last tick
+static	unsigned far	hangstill;		// ticks with no NetPump
+static	unsigned far	hangback;		// a stall ended: how long it was
+static	unsigned far	hangrecvat;		// when a datagram last came
+static	long	far	hangrecv;
+static	int		far	hangquiet;
+
+static char far *HStr (char far *s, char far *t)
+{
+	while (*t)
+		*s++ = *t++;
+	return s;
+}
+
+static char far *HHex (char far *s, unsigned v)
+{
+	static char far h[] = "0123456789ABCDEF";
+	int		i;
+
+	for (i=12;i>=0;i-=4)
+		*s++ = h[(v >> i) & 15];
+	return s;
+}
+
+static char far *HDec (char far *s, unsigned long v)
+{
+	do
+	{
+		*s++ = '0' + (int)(v % 10);
+		v /= 10;
+	} while (v);
+	return s;
+}
+
+//
+// A number, the right way round: HDec writes it backwards, this turns it
+//
+static char far *HNum (char far *s, unsigned long v)
+{
+	char	far *e = HDec (s,v), far *a = s, far *b = e-1;
+	char	c;
+
+	while (a < b)
+	{
+		c = *a;
+		*a++ = *b;
+		*b-- = c;
+	}
+	return e;
+}
+
+static char far *HVec (char far *s, int vec)
+{
+	unsigned far *v = (unsigned far *)MK_FP (0,vec*4);
+
+	s = HHex (s,v[1]);
+	*s++ = ':';
+	return HHex (s,v[0]);
+}
+
+//
+// Into HANG.LOG, appended; DOS from inline asm (see above)
+//
+static void HangFile (char far *buf, unsigned len)
+{
+	unsigned	no = FP_OFF (hanglog), ng = FP_SEG (hanglog);
+	unsigned	bo = FP_OFF (buf), bg = FP_SEG (buf);
+	unsigned	h = 0;
+
+asm	push	ds
+asm	mov	ax,ng
+asm	mov	ds,ax
+asm	mov	dx,no
+asm	mov	ax,3d01h
+asm	int	21h
+asm	jnc	hopened
+asm	xor	cx,cx
+asm	mov	ah,3ch
+asm	int	21h
+asm	jc	hfailed
+hopened:
+asm	mov	h,ax
+asm	mov	bx,ax
+asm	mov	ax,4202h
+asm	xor	cx,cx
+asm	xor	dx,dx
+asm	int	21h
+asm	mov	ax,bg
+asm	mov	ds,ax
+asm	mov	dx,bo
+asm	mov	cx,len
+asm	mov	bx,h
+asm	mov	ah,40h
+asm	int	21h
+asm	mov	bx,h
+asm	mov	ah,3eh
+asm	int	21h
+hfailed:
+asm	pop	ds
+}
+
+//
+// To the server: NetSend's frame, built in a buffer of its own (the main
+// loop may have stopped half way through nettx), sent from inline asm
+//
+static void HangDriver (unsigned len)
+{
+	void		far *v = *(void far * far *)MK_FP (0,netvec*4);
+	unsigned	o = FP_OFF (hangtx), g = FP_SEG (hangtx);
+
+asm	push	si
+asm	push	di
+asm	push	ds
+asm	push	bp
+asm	mov	cx,len
+asm	mov	si,o
+asm	mov	ax,g
+asm	mov	ds,ax
+asm	mov	ah,4
+asm	pushf
+asm	call	dword ptr v
+asm	pop	bp
+asm	pop	ds
+asm	pop	di
+asm	pop	si
+}
+
+static void HangSend (char far *data, unsigned len)
+{
+	byte		far *p = hangtx;
+	unsigned	i;
+	unsigned long s;
+
+	if (!netopen || !nethavemac || len > 1440)
+		return;
+	_fmemcpy (p,nettomac,6);
+	_fmemcpy (p+6,netmymac,6);
+	p[12] = 0x08;	p[13] = 0x00;
+	p += 14;
+	p[0] = 0x45;	p[1] = 0;
+	PutW (p+2,20+8+4+len);
+	PutW (p+4,netident++);
+	PutW (p+6,0);
+	p[8] = 64;	p[9] = 17;
+	PutW (p+10,0);
+	_fmemcpy (p+12,netmyip,4);
+	_fmemcpy (p+16,netsrv,4);
+	for (s = 0,i = 0;i < 20;i += 2)
+		s += GetW (p+i);
+	while (s >> 16)
+		s = (s & 0xffff) + (s >> 16);
+	PutW (p+10,~(unsigned)s);
+	p += 20;
+	PutW (p,netport);
+	PutW (p+2,netport);
+	PutW (p+4,8+4+len);
+	PutW (p+6,0);
+	p[8] = 'W';	p[9] = 'M';	p[10] = 1;	p[11] = 12;	// mpproto.HANG
+	_fmemcpy (p+12,data,len);
+	len += 14+20+8+4;
+	if (len < 60)
+	{
+		_fmemset (hangtx+len,0,60-len);
+		len = 60;
+	}
+	HangDriver (len);
+	netsentn++;
+}
+
+//
+// The first line of every report: who, when, and the counters
+//
+static char far *HangHead (char far *s, char far *what)
+{
+	static char far a[] = ": ", far b[] = "  step ", far c[] = "  floor ",
+		far d[] = "  sent ", far e[] = "  in ", far f[] = "  frames ",
+		far g[] = "  ring ", far h[] = "  drops ", far i[] = "  t ";
+
+	s = HStr (s,mpname);
+	s = HStr (s,a);
+	s = HStr (s,what);
+	s = HStr (s,b);
+	s = HNum (s,mpplayed);
+	s = HStr (s,c);
+	s = HNum (s,gamestate.mapon+1);
+	s = HStr (s,d);
+	s = HNum (s,netsentn);
+	s = HStr (s,e);
+	s = HNum (s,netrecvn);
+	s = HStr (s,f);
+	s = HNum (s,netframes);
+	s = HStr (s,g);
+	s = HNum (s,ns->head);
+	*s++ = '/';
+	s = HNum (s,ns->tail);
+	s = HStr (s,h);
+	s = HNum (s,ns->drops);
+	s = HStr (s,i);
+	s = HNum (s,hangtime);
+	*s++ = '\r';
+	*s++ = '\n';
+	return s;
+}
+
+//
+// From the tick, on hangstack: the report
+//
+static void far HangWork (void)
+{
+	static char far stuck[] = "STUCK, no NetPump for ", far secs[] = " s",
+		far l2[] = "netsend ", far l3[] = "  ss:sp ", far l4[] = "  pktdrv ",
+		far l5[] = "  int21 ", far l6[] = "  int13 ", far l7[] = "  indos ",
+		far l8[] = "stack:\r\n";
+	char	far *s;
+	unsigned far *st = (unsigned far *)MK_FP (hangdss,hangdsp);
+	void	(*ns_) (byte far *, unsigned) = NetSend;
+	int		i, dosfree = hangindos[0] == 0 && hangindos[-1] == 0;
+
+asm	mov	al,20h			// the BIOS has not acked IRQ 0 yet, and a
+asm	out	20h,al			// packet driver may want its own interrupt
+asm	sti
+	s = HStr (HNum (HStr (hangwhat,stuck),hangstill/18),secs);
+	*s = 0;
+	s = HangHead (hangtxt,hangwhat);
+	s = HStr (s,l2);
+	s = HHex (s,FP_SEG ((void far *)ns_));
+	*s++ = ':';
+	s = HHex (s,FP_OFF ((void far *)ns_));
+	s = HStr (s,l3);
+	s = HHex (s,hangdss);
+	*s++ = ':';
+	s = HHex (s,hangdsp);
+	s = HStr (s,l4);
+	s = HVec (s,netvec);
+	s = HStr (s,l5);
+	s = HVec (s,0x21);
+	s = HStr (s,l6);
+	s = HVec (s,0x13);
+	s = HStr (s,l7);
+	s = HHex (s,hangindos[-1]*256+hangindos[0]);
+	*s++ = '\r';
+	*s++ = '\n';
+	s = HStr (s,l8);
+	for (i=0;i<HANGWORDS;i++)
+	{
+		s = HHex (s,st[i]);
+		*s++ = (i & 15) == 15 ? '\r' : ' ';
+		if ((i & 15) == 15)
+			*s++ = '\n';
+	}
+	HangSend (hangtxt,s-hangtxt);
+	if (hangstill == HANGTICKS && dosfree)
+		HangFile (hangtxt,s-hangtxt);
+asm	cli
+}
+
+//
+// INT 1Ch
+//
+static void interrupt HangTick (void)
+{
+	hangold ();
+	hangtime++;
+	if (hangpumps != hangseen)
+	{
+		if (hangstill >= HANGTICKS)
+			hangback = hangstill;
+		hangseen = hangpumps;
+		hangstill = 0;
+		return;
+	}
+	if (hangstill < 0xffff)
+		hangstill++;
+	if (hangbusy || (hangstill != HANGTICKS && hangstill != HANGTICKS+5*18
+	&& hangstill != HANGTICKS+10*18))
+		return;
+	hangbusy = 1;
+	hangdss = hang8ss;			// IRQ 0 is not acked yet: no tick can change them
+	hangdsp = hang8sp;
+asm	mov	hangss,ss
+asm	mov	hangsp,sp
+asm	mov	ax,hangstkseg
+asm	cli
+asm	mov	ss,ax
+asm	mov	sp,hangstktop
+	HangWork ();
+asm	cli
+asm	mov	ss,hangss
+asm	mov	sp,hangsp
+	hangbusy = 0;
+}
+
+//
+// From NetPump, in the main loop: alive; a stall that ended; the server
+// gone quiet, and back
+//
+static void HangPump (void)
+{
+	static char far back[] = "BACK after a stall of ", far quiet[] = "NET QUIET for 20 s",
+		far loud[] = "NET BACK after ", far secs[] = " s";
+	char	far *s;
+	unsigned	t;
+
+	hangpumps++;
+	t = hangback;
+	if (t)
+	{
+		hangback = 0;
+		s = HStr (HNum (HStr (hangwhat,back),t/18),secs);
+		*s = 0;
+		s = HangHead (hangmsg,hangwhat);
+		HangSend (hangmsg,s-hangmsg);
+		HangFile (hangmsg,s-hangmsg);
+		hangrecvat = hangtime;		// nothing came in a stall: that was not the network
+	}
+	if (netrecvn != hangrecv)
+	{
+		if (hangquiet)
+		{
+			s = HStr (HNum (HStr (hangwhat,loud),(unsigned)(hangtime-hangrecvat)/18),secs);
+			*s = 0;
+			s = HangHead (hangmsg,hangwhat);
+			HangFile (hangmsg,s-hangmsg);
+			hangquiet = 0;
+		}
+		hangrecv = netrecvn;
+		hangrecvat = hangtime;
+	}
+	else if (netrecvn && !hangquiet && (unsigned)(hangtime-hangrecvat) >= HANGTICKS)
+	{
+		hangquiet = 1;
+		s = HangHead (hangmsg,quiet);
+		HangFile (hangmsg,s-hangmsg);
+	}
+}
+
+static void HangStart (void)
+{
+	static char far armed[] = "watchdog armed";
+	union REGS	r;
+	struct SREGS	s;
+	char	far *e;
+
+	r.h.ah = 0x34;
+	intdosx (&r,&r,&s);
+	hangindos = (byte far *)MK_FP (s.es,r.x.bx);
+	hangstkseg = FP_SEG (hangstack);
+	hangstktop = FP_OFF (hangstack) + sizeof(hangstack);
+	hangstill = hangback = hangquiet = 0;
+	hangrecv = netrecvn;
+	hangrecvat = hangtime;
+	e = HangHead (hangmsg,armed);
+	HangFile (hangmsg,e-hangmsg);
+	hangold = getvect (0x1c);
+	setvect (0x1c,HangTick);
+	hangnext8 = getvect (8);
+	HangNext8 (hangnext8);
+	setvect (8,Hang8);
+}
+
+//
+// id's SDL_SetTimerSpeed, in a test build, sets its timer service through
+// here (huntbot.py): behind Hang8 when Hang8 is in
+//
+void HangSet8 (void interrupt (*isr)(void))
+{
+	if (getvect (8) == Hang8)
+	{
+		hangnext8 = isr;
+		HangNext8 (isr);
+	}
+	else
+		setvect (8,isr);
+}
+
+static void HangStop (void)
+{
+	if (getvect (8) == Hang8)
+		setvect (8,hangnext8);
+	if (hangold)
+	{
+		setvect (0x1c,hangold);
+		hangold = 0;
+	}
+}
+#endif
+
 //
 // Every frame that has come in: ARP answered and learnt, and each UDP
 // datagram from the server to our port handed to take()
@@ -477,6 +929,9 @@ void NetPump (void (*take) (byte far *data, unsigned len))
 	unsigned	len;
 	int			ihl;
 
+#ifdef HANGDUMP
+	HangPump ();
+#endif
 	while (ns->tail != ns->head)
 	{
 		netframes++;

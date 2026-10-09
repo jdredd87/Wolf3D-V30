@@ -27,10 +27,21 @@ press TAB, T, SPACE or ESC in it.  This build's NETBOT does instead:
     if its NAME starts with Q, which is how a test run ends;
   * in deathmatch every start and respawn is BESIDE P1's start, not
     scattered, so two bots meet (a straight-line hunt is lost in a maze);
-  * shows a typed chat line ("Say: ...") 5 s in every 20, for the camera.
+  * shows a typed chat line ("Say: ...") 5 s in every 20, for the camera;
+  * named Q S..., stops for 24 s at its 2nd ESC (two minutes into a floor):
+    a stall for the hang watchdog to report (below), short of the server's
+    30 s drop, so the game goes on after it -- and leaves at its 3rd.
 
 Also: the memory id's start-up check sees ("mainmem N", on stdout), with the
 check lowered to 150,000 so a build a little bigger than the real one runs.
+
+And the hang watchdog (WL_NET.C, HANGDUMP; 2026-10-09): 20 s with the game's
+loop stopped sends the stack and the counters to the server as a HANG packet
+-- the server keeps it in stage/hang-<address>.log -- and into the machine's
+C:\\WOLF3D\\HANG.LOG; the network going quiet while the game runs goes into
+HANG.LOG too.  The build compiles with -y and links with /l, so its map
+(kept as stage/WOLF3DT.MAP) has line numbers: python mp/hangtrace.py names
+every frame of a report -- in the patched files, kept in stage/wolf3dt-src.
 
 Never commit a patched WOLFSRC: the real files wait in stage/*.keep and are
 copied back whatever happens.  Deploy stage/WOLF3DT.EXE beside WOLF3DM.EXE
@@ -51,7 +62,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "WOLFSRC")
 STAGE = os.path.join(ROOT, "stage")
-FILES = ("WL_MP.C", "WL_MAIN.C")
+FILES = ("WL_MP.C", "WL_MAIN.C", "WL_NET.C", "WL_NETA.ASM", "ID_SD.C", "TURBOC.CFG",
+         "LINK86.RSP")
 
 
 def keep(name):
@@ -172,9 +184,17 @@ MP = [
 				escat = TimeCount / 70;
 				escs++;
 				Keyboard[sc_Escape] = 1;
+				if (escs == 2 && mpname[1] == 'S')	// TEST: a stall, for the watchdog
+				{
+					long	t0 = TimeCount;
+
+					while (TimeCount < t0 + 24*70)
+						;
+				}
 			}
 			if (asking && TimeCount / 70 == escat + 4)
-				Keyboard[(escs >= QUITAT && mpname[0] == 'Q') ? sc_Y : sc_N] = 1;
+				Keyboard[(escs >= (mpname[1] == 'S' ? 3 : QUITAT) && mpname[0] == 'Q')
+				? sc_Y : sc_N] = 1;
 		}
 		if (Keyboard[sc_Escape] && !asking && !mpchatting)'''),
     # the real NETBOT's pretend death (MPDeadLook) would hide the real one
@@ -199,6 +219,29 @@ static void Respawn (objtype *ob, int i)
 		gamestate.keys = 3;'''),
 ]
 
+NET = [
+    ('''#pragma option -zEWL_NET_FAR
+''', '''#pragma option -zEWL_NET_FAR
+#define HANGDUMP				// TEST build: mp/huntbot.py
+'''),
+]
+
+NETA = [("MODEL\tMEDIUM\n", "MODEL\tMEDIUM\nHANGDUMP = 1\t\t\t\t; TEST build: mp/huntbot.py\n")]
+
+# id's timer service goes in behind the watchdog's INT 8 entry, not over it
+SD = [
+    ('''//	Imports from ID_SD_A.ASM
+''', '''void HangSet8 (void interrupt (*isr)(void));	// TEST build: WL_NET.C
+//	Imports from ID_SD_A.ASM
+'''),
+    ('''		setvect(8,isr);
+''', '''		HangSet8(isr);			// TEST build: behind the hang watchdog
+'''),
+]
+
+CFG = [("-w-aus\n", "-w-aus\n-y\n")]          # line numbers in the objects...
+RSP = [("/c /m /s C0.OBJ+", "/c /m /s /l C0.OBJ+")]    # ...and in the map
+
 MAIN = [
     ('''	if (mminfo.mainmem < 200000L)	// multiplayer''',
      '''	{ static char far f[] = "mainmem %ld\\n"; char s[16]; _fstrcpy ((char far *)s,f); printf (s,mminfo.mainmem); }
@@ -218,13 +261,26 @@ def main():
         if "--memonly" not in sys.argv:
             patch("WL_MP.C", mp)
         patch("WL_MAIN.C", MAIN)
+        if "--memonly" not in sys.argv:
+            patch("WL_NET.C", NET)
+            patch("WL_NETA.ASM", NETA)
+            patch("ID_SD.C", SD)
+            patch("TURBOC.CFG", CFG)
+            patch("LINK86.RSP", RSP)
+        # the patched sources, for reading a trace's line numbers against
+        keepsrc = os.path.join(STAGE, "wolf3dt-src")
+        os.makedirs(keepsrc, exist_ok=True)
+        for f in FILES:
+            if os.path.exists(keep(f)):
+                shutil.copyfile(os.path.join(SRC, f), os.path.join(keepsrc, f))
         rc = subprocess.call([sys.executable, os.path.join(ROOT, "w3dbuild.py"), "build"], cwd=ROOT)
     finally:
         restore()
     if rc:
         return rc
     shutil.copyfile(os.path.join(SRC, "WOLF3DV.EXE"), os.path.join(STAGE, "WOLF3DT.EXE"))
-    print("stage/WOLF3DT.EXE")
+    shutil.copyfile(os.path.join(SRC, "WOLF3DV.MAP"), os.path.join(STAGE, "WOLF3DT.MAP"))
+    print("stage/WOLF3DT.EXE, stage/WOLF3DT.MAP")
     return 0
 
 

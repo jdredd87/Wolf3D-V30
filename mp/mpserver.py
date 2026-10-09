@@ -222,6 +222,9 @@ class Server:
             self.stats["dropped"] += 1
             return
         self.stats["recv"] += 1
+        if kind == P.HANG:              # a test build's watchdog: keep it, whoever sent it
+            self.hang(b, addr)
+            return
         i = self.slot_of(addr)
         if i is not None:
             self.slots[i].heard = time.perf_counter()
@@ -398,6 +401,16 @@ class Server:
         else:
             self.log("ended with no game running; packets sent %d, received %d; %d desyncs"
                      % (self.stats["sent"], self.stats["recv"], self.desyncs))
+
+    def hang(self, b, addr):
+        """A HANG report (mp/huntbot.py's builds): its first line in the log,
+        all of it in stage/hang-<address>.log for mp/hangtrace.py."""
+        text = b.decode("latin-1").replace("\r\n", "\n")
+        self.log("HANG from %s: %s" % (addr[0], text.split("\n")[0]))
+        stage = os.path.join(HERE, "..", "stage")
+        os.makedirs(stage, exist_ok=True)
+        with open(os.path.join(stage, "hang-%s.log" % addr[0]), "a", encoding="latin-1") as f:
+            f.write("== %s\n%s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), text.rstrip("\n")))
 
     def write_record(self):
         n = len(self.history)
