@@ -549,6 +549,43 @@ from the V30: "the smaller it is, the more it's crammed").
   door): without that it emptied its gun into a wall on 2026-10-08 and
   nobody died.
 
+**Four hours, four players -- 2026-10-09** (StevenC: "Can we do a long
+play demo test?  For 4 hours?").  The V30 (`VIEW 10 LOWEST`) and the 486
+each ran `mp/huntbot.py --quit 240` (ESC and N every minute, Y at the
+240th); the server held the other two slots with its own bots:
+
+```
+python mp/mpserver.py --players 4 --bots 2 --mode dm --noenemies --timelimit 60 --itemrespawn 30
+```
+
+* **263,552 steps in 4 h 11 min (17.50 a second), no desync** -- the
+  server compares every machine's sum every 50 steps, and none differed
+  in the whole run.  Both bots left by ESC, Y and printed it.
+* **Past every 16-bit wrap**: the step ring holds the low 16 bits of a
+  step, and they went round four times (65,536 steps is 62 minutes).
+* **Four floors of 60 minutes, and into the fifth**: every machine left
+  each one on the time limit and loaded the next together, the V30 too,
+  with nobody dropped.  An hour of respawns and items coming back did not
+  fill anything.
+* **Joining late, three floors in**: the 486 came back 2 h 38 min in and
+  played all 167,828 steps from the first -- three floors, two floor
+  changes -- in 104 s (1,612 a second), 2 min 39 s with the loading, then
+  played live to the end.  Its sums agreed with every one already
+  reported for the steps it replayed.
+* **The 486 hung once**, 2 h 30 min in, 28 minutes into floor 3 (step
+  157,637): no packet, no answer to ARP for three minutes, the plug
+  reading **69-70 W against 64.4 running** (`docs/hardware.md` in the
+  bridge has it).  The server freed its slot after 30 s and the game went
+  on; a power cycle brought it back.  **Not explained** -- the 486 has no
+  capture stick, so nothing saw its screen, and nothing in the game writes
+  a log.  It was not at a floor change.  Open below.
+* **Pictures**: the V30 7.2 a second over the whole run (four players,
+  every one on screen at times; 10.2 alone), the 486 15.8 at `VIEW 19`.
+* The photos, one a minute: notices, chat, the scores, kills, ESC's box,
+  the red damage flash, all right on every floor.  On floor 1 nobody
+  scored for its last 43 minutes: the hunt bot runs in a straight line
+  at the nearest player and gets stuck in a maze -- the bot, not the game.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
@@ -909,6 +946,11 @@ the 386SX arrives.
    a recorded match, the same checksums on every machine.
 
 ## Open questions
+
+* **The 486 hung once in four hours of deathmatch** (2026-10-09, above):
+  2 h 30 min in, mid-floor, plug 69-70 W.  The game, the packet driver or
+  the PicoMEM 1's WiFi?  Next time: a camera on the 486, or the run
+  repeated to see whether it comes back at the same point.
 
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)
