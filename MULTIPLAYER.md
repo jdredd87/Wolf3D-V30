@@ -586,6 +586,48 @@ python mp/mpserver.py --players 4 --bots 2 --mode dm --noenemies --timelimit 60 
   scored for its last 43 minutes: the hunt bot runs in a straight line
   at the nearest player and gets stuck in a maze -- the bot, not the game.
 
+**The hang watchdog, and four hours again -- 2026-10-09** (StevenC: "Are
+we able to generate a stack trace on lockups?" -- then "run on both").
+The 486 has no camera and the game keeps no log, so the hang above left
+nothing to read.  Test builds (`mp/huntbot.py`) now carry a watchdog
+(`WL_NET.C`, `WL_NETA.ASM`, `#ifdef HANGDUMP`; the real EXE comes out
+byte-identical, md5 `c9cd91d1...`):
+
+* **20 s without `NetPump`** -- which every loop the game has calls while
+  the network is up -- and the BIOS tick (INT 1Ch) reports: the step, the
+  floor, the network counters, where the packet driver, DOS and the disk
+  BIOS live, and 384 bytes of the game's stack.  To the server as a
+  `HANG` packet (mpproto 12; kept in `stage/hang-<address>.log`), three
+  times 5 s apart, and once into `C:\WOLF3D\HANG.LOG` if DOS was not busy.
+  The server going quiet while the game runs goes into `HANG.LOG` too.
+* **The stack is the game's, not the tick's**: DOS (`STACKS=`) moves the
+  BIOS tick onto a stack of its own, so by INT 1Ch the game's is out of
+  sight -- the first trace read DOS's pool and named nonsense.  `Hang8`, an
+  INT 8 entry in front of id's timer service, notes the game's SS:SP every
+  tick and goes on; id's `SDL_SetTimerSpeed` sets its service behind it.
+* **`python mp/hangtrace.py stage/hang-<address>.log`** names the frames:
+  the test build compiles `-y` and links `/l`, so its map
+  (`stage/WOLF3DT.MAP`) has line numbers -- read against the patched
+  sources huntbot keeps in `stage/wolf3dt-src`.  It reports the frame the
+  tick interrupted and every far return whose bytes before it are a far
+  call; words left on the stack by older calls show up as well.
+* **Proven**: a bot named `QS...` stalls 24 s at its second ESC.  Both
+  machines sent the report and both traces named the stall's own line
+  (`wl_mp.c:2838`, the `while`), called from `NetLoop ()`.  (Then the
+  game's own rule ends it -- 15 s with nothing from the server -- because
+  nothing was read during the stall.)
+* **A useful fact on the way**: this stack answers ARP only from
+  `NetPump`.  A game stuck in a loop stops answering ARP just as a dead
+  machine does, so the 486's silence above said nothing about which.
+
+**The second four hours, with it**: 262,437 steps (4 h 10 min), the same
+four players and rules, both machines on the watchdog build -- **no hang,
+no desync, no `HANG` report, nothing in either `HANG.LOG` but its start
+line**.  The 486 16.3 pictures a second, the V30 7.2.  So the hang is one
+in eight hours of the 486's play and did not come back; the watchdog stays
+in every test build, to catch it if it does.  The 486's plug read 58.7 to
+76.7 W while it ran, so watts alone cannot tell a hang from play.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
@@ -948,9 +990,11 @@ the 386SX arrives.
 ## Open questions
 
 * **The 486 hung once in four hours of deathmatch** (2026-10-09, above):
-  2 h 30 min in, mid-floor, plug 69-70 W.  The game, the packet driver or
-  the PicoMEM 1's WiFi?  Next time: a camera on the 486, or the run
-  repeated to see whether it comes back at the same point.
+  2 h 30 min in, mid-floor.  The game, the packet driver or the PicoMEM
+  1?  Repeated with the hang watchdog the same day: four hours clean.  If
+  it comes again in a test build, the watchdog's report says where -- or,
+  if none comes, that the tick itself stopped (interrupts off, or the card
+  holding the bus), which is not our loop.
 
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)
