@@ -541,7 +541,16 @@ mmblocktype	far *savedmmnew;
 		Quit ("MM_GetPtr: Out of memory!");
 	}
 	else
+	{
+		// id's gave up here still holding the block handle GETNEWBLOCK took,
+		// one of MAXBLOCKS lost for every allocation allowed to fail -- and
+		// the page manager's PM_CheckMainMem makes them, after every message
+		// box: a 486 with no EMS ran out 6 h 31 min into a deathmatch,
+		// "MM_ClearBlock: No purgable blocks!".  StevenC & Claude, 2026-10-10
+		mmnew->next = mmfree;
+		mmfree = mmnew;
 		mmerror = true;
+	}
 }
 
 //==========================================================================
