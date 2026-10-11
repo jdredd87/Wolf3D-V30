@@ -628,6 +628,41 @@ in eight hours of the 486's play and did not come back; the watchdog stays
 in every test build, to catch it if it does.  The 486's plug read 58.7 to
 76.7 W while it ran, so watts alone cannot tell a hang from play.
 
+**Eight hours, and a leak in id's memory manager -- 2026-10-10**
+(StevenC: "If this worked fine for 4 hours, can we do 8 hours? both
+machines and 2 bots?").  The same four players and rules, bots quitting
+at their 480th ESC.  **Neither machine lasted**: the 486 quit 6 h 31 min
+in (step 411,265) and the V30 7 h 23 min in (step ~464,500), both with
+id's own **`MM_ClearBlock: No purgable blocks!`** -- not a hang, and not
+memory: the memory manager had run out of block *handles*, of which
+there are 700 (`MAXBLOCKS`).  No desync in the whole run.
+
+* **The cause is id's.**  `MM_GetPtr` takes a handle (`GETNEWBLOCK`)
+  before it searches, and an allocation allowed to fail
+  (`MM_BombOnError (false)`) that finds no room set `mmerror` and returned
+  still holding it.  The page manager's `PM_CheckMainMem`, which takes
+  its pages back after every message box, view change and floor load,
+  makes exactly those -- so each one could lose a handle for good.
+* **Counted**: the test build's chat line now ends in the free handles
+  (`"QBOT486 here, step 437059, 372 free"`, `MM_FreeBlocks`).  The 486
+  had 392 after loading, lost one or two per floor load, and in play
+  **one a minute -- one per bot ESC**: about 6 1/2 hours of handles,
+  which is when it quit.  The V30 has more to start with (436 in the
+  fixed build, against the 486's 396) and lasted longer.  The four-hour
+  runs were 240 ESCs: under the line.
+* **Fixed** (`ID_MM.C`): the handle goes back on the free list.  Real EXE
+  334,350 bytes, `ab.py --full` IDENTICAL to id, mpsweep 20/20 on the
+  486.  The fixed test build ran 17 minutes on both machines, 16 ESCs and
+  three floor loads: 396 -> 400 free on the 486, 436 -> 440 on the V30.
+  People playing lose handles the same way -- every ESC, every `<`/`>`
+  -- only more slowly than a bot.  id's single-player game has the same
+  bug (`v30-8086` is id-exact and keeps it).
+* **The 486's hang came once more, without the network**: the first
+  mpsweep of the fix (local demo playback, `TIMEDEMO MGEN`, no packet
+  driver in use) stopped between demos M6 and M7 and needed a power
+  cycle; M7 alone, and the whole sweep again, ran clean.  So whatever
+  hangs the 486 now and then is not the network code.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
@@ -994,7 +1029,10 @@ the 386SX arrives.
   1?  Repeated with the hang watchdog the same day: four hours clean.  If
   it comes again in a test build, the watchdog's report says where -- or,
   if none comes, that the tick itself stopped (interrupts off, or the card
-  holding the bus), which is not our loop.
+  holding the bus), which is not our loop.  **It came again on
+  2026-10-10 in local demo playback with no network in use** (above), so
+  it is not the network code.  (The 8-hour run's two endings were not it:
+  that was the handle leak, fixed.)
 
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)
