@@ -62,8 +62,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "WOLFSRC")
 STAGE = os.path.join(ROOT, "stage")
-FILES = ("WL_MP.C", "WL_MAIN.C", "WL_NET.C", "WL_NETA.ASM", "ID_SD.C", "TURBOC.CFG",
-         "LINK86.RSP")
+FILES = ("WL_MP.C", "WL_MAIN.C", "WL_NET.C", "WL_NETA.ASM", "ID_SD.C", "ID_MM.C",
+         "TURBOC.CFG", "LINK86.RSP")
 
 
 def keep(name):
@@ -208,6 +208,11 @@ MP = [
 		if (!mpchatting)
 			_fstrcpy (chatline,tl);
 		Fmt (u,fsay'''),
+    ('''	static char far f[] = "%Fs here, step %ld";''',
+     '''	static char far f[] = "%Fs here, step %ld, %d free";	// TEST: block handles
+	int MM_FreeBlocks (void);'''),
+    ('''		Fmt (s,f,(char far *)mpname,mpplayed);''',
+     '''		Fmt (s,f,(char far *)mpname,mpplayed,MM_FreeBlocks ());'''),
     ('''DMStart (i,&sx,&sy);		// deathmatch: scattered, as DOOM''',
      '''Beside (i,&sx,&sy);		// TEST: start beside P1'''),
     ('''static void Respawn (objtype *ob, int i)
@@ -239,6 +244,23 @@ SD = [
 '''),
 ]
 
+# the memory manager's block handles left (700 in all), in the bot's chat line
+MM = [('''void MML_ClearBlock (void)
+{
+''', '''int MM_FreeBlocks (void)		// TEST build: mp/huntbot.py
+{
+	mmblocktype far *s;
+	int		n = 0;
+
+	for (s = mmfree; s; s = s->next)
+		n++;
+	return n;
+}
+
+void MML_ClearBlock (void)
+{
+''')]
+
 CFG = [("-w-aus\n", "-w-aus\n-y\n")]          # line numbers in the objects...
 RSP = [("/c /m /s C0.OBJ+", "/c /m /s /l C0.OBJ+")]    # ...and in the map
 
@@ -265,6 +287,7 @@ def main():
             patch("WL_NET.C", NET)
             patch("WL_NETA.ASM", NETA)
             patch("ID_SD.C", SD)
+            patch("ID_MM.C", MM)
             patch("TURBOC.CFG", CFG)
             patch("LINK86.RSP", RSP)
         # the patched sources, for reading a trace's line numbers against
