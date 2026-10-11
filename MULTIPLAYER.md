@@ -678,11 +678,14 @@ and rules, started 22:56.
   into the ninth floor), with a message box up -- 413 free is what
   `ClearMemory` leaves, so most likely its 480th ESC, at about the time
   it was due.  No BYE packet reached the server, and the watchdog wrote
-  nothing but its "armed" line to `HANG.LOG`, although it was armed and
-  the network had gone quiet: **the timer interrupt itself had stopped.**
-  `PHASE.LOG` ends inside `WOLF3DT`.  A power cycle brought it back.  So
-  it is the same hang as 2026-10-09 and the `TIMEDEMO` one: the
-  machine, not the leak, and not our loop.
+  nothing but its "armed" line to `HANG.LOG`.  `PHASE.LOG` ends inside
+  `WOLF3DT`.  A power cycle brought it back.  So it is the same hang as
+  2026-10-09 and the `TIMEDEMO` one, not the leak.  **A silent watchdog
+  does not mean the tick stopped** (first written here as if it did): it
+  sends its report through the packet driver *before* it writes
+  `HANG.LOG`, so a game stuck inside the packet driver -- or inside the
+  PicoMEM's disk BIOS, which the file write would need -- silences it as
+  surely as interrupts left off.
 * **The blocky text at the V30's start** (StevenC: "8086 had a very hard
   to read text at the very begining... maybe said listening?"), filmed
   on 2026-10-11: id's signon screen ("One moment...", then "Working..."
@@ -1061,7 +1064,29 @@ the 386SX arrives.
   2026-10-10 in local demo playback with no network in use** (above), so
   it is not the network code; **and a third time 8 h 2 min into the
   retest of the leak fix, at a message box, with the watchdog silent**
-  -- the tick had stopped.  (The 8-hour run's two endings were not it:
+  (which does not settle whether the tick stopped: the watchdog reports
+  through the packet driver first).  So test builds now paint the answer
+  on the screen (below), where no driver is needed to read it.
+
+**The screen report -- 2026-10-11** (StevenC: "ok so we need to figure
+out the 486 issue").  Every BIOS tick, `Hang8` paints into the status
+bar's left corner, white on black, the CS and IP the tick interrupted,
+a where code and the tick's low byte; the where code is also painted
+immediately on the way into and out of every call that waits on
+hardware -- `11` the Sound Blaster's stop (`0D0h`), `12` its DMA start,
+`13` its `0D4h` (id waits on the DSP with interrupts off and no limit),
+`22` an XMS move, `31` the packet driver's send, `41` a DOS read (the
+PicoMEM's disk), `00` none.  Every VGA register it touches is read and
+put back, so it may interrupt the game anywhere.  A frozen 486 keeps its
+picture until the power goes, so the photo can wait for whoever gets to
+it first:
+* the tick still counting: interrupts are on and the game is stuck at
+  that CS:IP (`stage/WOLF3DT.MAP` names it);
+* the tick stopped: interrupts went off, or the machine froze -- in the
+  where code's call if it is not `00`, else shortly after that CS:IP.
+Verified on the V30 (the camera's machine): drawn in the joining box
+and in play, a game clean to the end.  `huntbot.py` also puts the real
+`WOLF3DV.EXE` back after a test build now.  (The 8-hour run's two endings were not it:
   that was the handle leak, fixed.)
 
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
