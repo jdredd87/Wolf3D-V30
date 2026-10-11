@@ -663,6 +663,34 @@ there are 700 (`MAXBLOCKS`).  No desync in the whole run.
   cycle; M7 alone, and the whole sweep again, ran clean.  So whatever
   hangs the 486 now and then is not the network code.
 
+**The eight hours again, with the fix -- 2026-10-10/11** (StevenC: "Ok
+with the changes, can we do this test again?").  The same four players
+and rules, started 22:56.
+* **The V30 played the whole run**: 8 h 22 min, ending itself at its
+  480th ESC with a Y.  527,798 steps (17.50 a second), **no desync**,
+  197,230 pictures in 29,122 s (6.7 a second, view 10), 260,881 packets
+  sent and 494,539 received.
+* **The leak is gone**: the free handles went 436 -> 443 on the V30 and
+  396 -> 413 on the 486, one or so up at some floor loads, and **never
+  down once** in eight hours of a bot pressing ESC every minute.  The
+  first run had lost one a minute.
+* **The 486 hung again, 8 h 2 min in** (28,920 s, step 505,998, a minute
+  into the ninth floor), with a message box up -- 413 free is what
+  `ClearMemory` leaves, so most likely its 480th ESC, at about the time
+  it was due.  No BYE packet reached the server, and the watchdog wrote
+  nothing but its "armed" line to `HANG.LOG`, although it was armed and
+  the network had gone quiet: **the timer interrupt itself had stopped.**
+  `PHASE.LOG` ends inside `WOLF3DT`.  A power cycle brought it back.  So
+  it is the same hang as 2026-10-09 and the `TIMEDEMO` one: the
+  machine, not the leak, and not our loop.
+* **The blocky text at the V30's start** (StevenC: "8086 had a very hard
+  to read text at the very begining... maybe said listening?"), filmed
+  on 2026-10-11: id's signon screen ("One moment...", then "Working..."
+  in the small font), then **our "Joining the server..." box** -- three
+  lines in the small font, `sent 1 in 4 drop 0` and `ARP yes MAC ...`,
+  on screen for about 1.5 s before the fade.  Nothing says "listening"
+  on a DOS machine; that word is only in the server's own window.
+
 id never shipped multiplayer for the DOS game.  The idea: up to four
 real DOS machines -- the NEC V30, the 486, and the 386SX/25 once it is
 back -- playing one game over UDP/IP, through the PicoMEMs' WiFi or any
@@ -1031,7 +1059,9 @@ the 386SX arrives.
   if none comes, that the tick itself stopped (interrupts off, or the card
   holding the bus), which is not our loop.  **It came again on
   2026-10-10 in local demo playback with no network in use** (above), so
-  it is not the network code.  (The 8-hour run's two endings were not it:
+  it is not the network code; **and a third time 8 h 2 min into the
+  retest of the leak fix, at a message box, with the watchdog silent**
+  -- the tick had stopped.  (The 8-hour run's two endings were not it:
   that was the handle leak, fixed.)
 
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
