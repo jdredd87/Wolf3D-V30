@@ -1089,6 +1089,58 @@ and in play, a game clean to the end.  `huntbot.py` also puts the real
 `WOLF3DV.EXE` back after a test build now.  (The 8-hour run's two endings were not it:
   that was the handle leak, fixed.)
 
+**Found: the floor's music was never let go -- 2026-10-11.**  The first
+run with the screen report hung the 486 at 8 h 2 min again, **at the
+same step as the run before** (506,006 against 505,998): not a random
+fault but the game, replayed the same way.  Its screen was black with
+green blocks, the PC speaker sounding one long tone (StevenC) -- and
+this machine plays nothing on the PC speaker (`CONFIG.WL6`: AdLib
+effects, AdLib music, Sound Blaster digitized), so the processor had
+run off into code that was not code.  The screen report could not show
+on it.  What found it was making it come sooner:
+* starting on the ninth floor (`--map 8`): five minutes, nothing --
+  it needs the floors before it;
+* **5-minute floors: the hang at the ninth floor, 42 minutes in**;
+  **2-minute floors from map 1: at the ninth floor (map 0), 17
+  minutes in, at step 17,689 -- twice, to the step**;
+* the bot's chat line given the memory figures (`huntbot.py`: block
+  handles, `MM_UnusedMemory`, `MM_TotalFree`, `MainPagesAvail`).  The
+  page manager's main-memory pages, floor by floor:
+
+  | floor | 1 | 2 | 3 | 4-7 | 8 |
+  |---|---|---|---|---|---|
+  | pages | 16 | 15 | 12 | 7 | 4 |
+
+  lost on exactly the floors whose song had not been heard yet, kept
+  on 5 to 7, which repeat 1 to 4.
+* **The cause** (`WL_MP.C`, `NextLevel`): id's `GameLoop` calls
+  `StopMusic` at every floor's end, which unlocks the song and makes it
+  purgeable; ours went straight to `StartMusic`.  Every song stayed
+  locked for good.  The V30 keeps its page cache in EMS and never felt
+  it; the 486 (XMS, no EMS -- 189,628 bytes for the game, 16 pages to
+  start) paid in cache pages until there were too few.
+* **Fixed**: `StopMusic ()` first thing in `NextLevel`.  The same
+  2-minute game, 14 floors past the old crash: the pages go 16, 18,
+  17, 15 and round again, never down; no desync on either machine.
+  `ab.py --full` IDENTICAL to id; mpsweep 20/20 on the 486.
+* **Still open**: a page manager that short of memory should stop with a
+  message, not crash -- it had 7 pages when it died.  That is a bug of
+  its own, now out of reach of the leak; to be found by starving the
+  cache on purpose.  The `TIMEDEMO` hang between M6 and M7 and the
+  2-hour-30 one of 10-09 may well be this too, unproved.
+
+**LOWEST's small font -- 2026-10-11** (StevenC: "the time limit screen
+on the v30 i couldnt read. all blocky blobs of text").  `LOWVERT`
+(part of `LOWEST`) sets the VGA to show the even rows only, all over the
+screen, until the next fade; the chat line and the scores draw every row
+twice and survive it, but the tally, the catching-up box and the joining
+box use id's small font, 5 to 7 rows a letter, and lost half of every
+one ("TIME LIMIT" read "IIMF IIMII").  `AllRows` (`WL_MP.C`) puts every
+row back before those boxes draw and blanks the view's odd rows, never
+drawn; the next 3-D frame sets `LOWVERT` again.  Photographed on the V30:
+the tally reads cleanly; the catching-up box takes the same call and has
+not been on camera since.
+
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)
 * Does the 486 smooth the view between steps, or just redraw?

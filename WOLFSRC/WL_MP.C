@@ -1726,10 +1726,29 @@ static void SendInput (void)
 	NetSend (mppkt,18);				// joiner in once it has caught up
 }
 
+//
+// Every row on the display, for a box in the small font.  LOWEST (LOWVERT)
+// shows the even rows only, and half of every letter with them (StevenC:
+// "all blocky blobs of text", 2026-10-11).  The next 3-D frame sets it
+// again; the view's odd rows, never drawn, are blanked meanwhile
+//
+static void AllRows (void)
+{
+	extern int lowvert;
+
+	if (lowvert == 2)
+	{
+		VL_LowVert (0);
+		lowvert = 1;
+		DrawPlayBorder ();
+	}
+}
+
 static void Say (char far *s)
 {
 	char	line[80];
 
+	AllRows ();
 	CenterWindow (28,5);
 	US_CPrint (s);
 	NetStatus (line);				// what the network is doing
@@ -2595,6 +2614,7 @@ static void Behind (long n)
 
 	_fstrcpy ((char far *)fmt,f);
 	sprintf (s,fmt,n);
+	AllRows ();
 	CenterWindow (28,3);
 	US_CPrint ((char far *)s);
 	VW_UpdateScreen ();
@@ -2855,6 +2875,7 @@ static void TallyDraw (int over)
 	gametype	far *g, far *g0 = Gs (0);
 	int			i,y,oldfont = fontnumber;
 
+	AllRows ();
 	fontnumber = 0;
 	CenterWindow (38,12);			// the small font: about 7 pixels a letter
 	SETFONTCOLOR (0,15);
@@ -2967,6 +2988,11 @@ static void NextLevel (void)
 	if ((mprules & RULE_DM) && gamestate.mapon > 8)
 		gamestate.mapon = 0;		// deathmatch: round the episode again
 
+	StopMusic ();					// as id's floor end (WL_GAME.C): the song unlocked
+									// and purgeable.  Without it every new song stayed
+									// locked, and on the 486 (XMS, no EMS) the page
+									// manager's main memory went 16 pages, 15, 12, 7,
+									// 4 ... until floor 9 crashed it (2026-10-11)
 	SendInput ();					// heard from, through the load: the server lets
 	VW_FadeOut ();					// a machine go after 30 s of nothing, and a V30
 	ClearMemory ();					// loading a floor is quiet for 15
