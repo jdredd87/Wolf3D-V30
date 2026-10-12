@@ -1123,11 +1123,9 @@ on it.  What found it was making it come sooner:
   2-minute game, 14 floors past the old crash: the pages go 16, 18,
   17, 15 and round again, never down; no desync on either machine.
   `ab.py --full` IDENTICAL to id; mpsweep 20/20 on the 486.
-* **Still open**: a page manager that short of memory should stop with a
-  message, not crash -- it had 7 pages when it died.  That is a bug of
-  its own, now out of reach of the leak; to be found by starving the
-  cache on purpose.  The `TIMEDEMO` hang between M6 and M7 and the
-  2-hour-30 one of 10-09 may well be this too, unproved.
+* **Still open** (then): a game that short of memory should stop with a
+  message, not crash -- it had 7 pages when it died.  Found the next
+  night, below.
 
 **LOWEST's small font -- 2026-10-11** (StevenC: "the time limit screen
 on the v30 i couldnt read. all blocky blobs of text").  `LOWVERT`
@@ -1140,6 +1138,60 @@ row back before those boxes draw and blanks the view's odd rows, never
 drawn; the next 3-D frame sets `LOWVERT` again.  Photographed on the V30:
 the tally reads cleanly; the catching-up box takes the same call and has
 not been on camera since.
+
+**Found: the crash itself was id's Quit -- 2026-10-12** (StevenC: "Lets
+figure out the crash as that is the most important").  The music leak
+only ran memory out; what turned "out of memory" into a black screen,
+garbage and a stuck PC speaker tone was id's own error path.  Found with
+the leak put back (`huntbot.py --leak`, the crash at floor 9 in 17
+minutes, the same step every time for a given build) and breadcrumbs:
+`huntbot.py --trace` sends one HANG packet per event from the ninth floor
+on -- pages fetched and given away, sprites, digitized sounds, the loop's
+stages, the floor load call by call -- each carrying SP and the stack's
+lowest point so far, with the interrupt vectors checked at every one.
+What did NOT do it, each tried and measured:
+* the memory manager's block list and the page manager's bookkeeping --
+  checked every pass of the loop (`MM_Check`, `PM_Check`), never wrong;
+* digitized sound -- a pistol shot started 0.3 s before two deaths, but
+  with none from floor 9 on (`--nodigi9`) it died at the same step;
+* the packet driver writing to 0:0 for a refused frame -- the PicoMEM
+  driver's receive (`8390.ASM`) honours the null;
+* the stack running into the near heap in play -- its low point stayed
+  at FBCE, 650 bytes above the near heap's top (F938), all game.
+
+**The chain**, as the breadcrumbs gave it on the floor-9 load:
+```
+L3                       ClearMemory done; DrawPlayScreen next
+HACK view 19 need 800    the status bar's 12.8 KB: no room, so id's
+                         MM_GetPtr "sizes the view down" ...
+SS 408 view 17           ... rebuilding the scalers -- no room for those
+QUIT MM_GetPtr: Out of memory!     x 40 and more, SP falling 66h a time:
+                         FD44 FCDE FC78 ... past the near heap's top
+                         (F930) ... EF52 ... through the data segment
+```
+id's `Quit` with a message first caches `ERRORSCREEN` -- memory, which
+there was none of -- so `MM_GetPtr` failed and called `Quit`, which
+cached it again: recursion until the stack had overwritten the game's
+data, and the machine ran wild.  It needed only a real out-of-memory,
+which the 486 (no EMS, 190 KB for the game) reached once the songs
+leaked.  The same chain may explain the 10-09 and `TIMEDEMO` hangs; not
+proved.
+
+**Fixed** (StevenC & Claude):
+* `Quit` (`WL_MAIN.C`): its screen only if there is room
+  (`MM_BombOnError (false)` around the cache) and only once (a re-entry
+  goes straight to the message); the message printed either way.
+* `CA_CacheGrChunk` (`ID_CA.C`): a big chunk's buffer that cannot be had
+  is given up on, not read into segment 0 (with bombing off it was).
+* `Picture` (`WL_MP.C`): a view the memory manager sized down is left so
+  -- before, it was put back half a second later, into the same
+  shortage.
+* Proved with the leak put back: at floor 9 the 486 printed
+  `MM_GetPtr: Out of memory!` once, went back to DOS by itself and was
+  polling the bridge -- no freeze, no power cycle.  Real EXE 334,510
+  bytes, `ab.py --full` IDENTICAL to id, mpsweep 20/20 on the 486, and
+  a live game on it, both machines, 1-minute floors: 13,000 steps (about
+  12 floors), no desync.
 
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)

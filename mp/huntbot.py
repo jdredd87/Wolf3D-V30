@@ -76,7 +76,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "WOLFSRC")
 STAGE = os.path.join(ROOT, "stage")
 FILES = ("WL_MP.C", "WL_MAIN.C", "WL_NET.C", "WL_NETA.ASM", "ID_SD.C", "ID_MM.C",
-         "ID_CA.C", "ID_PM.C", "TURBOC.CFG", "LINK86.RSP")
+         "ID_CA.C", "ID_PM.C", "WL_SC_A.ASM", "WL_SCALE.C", "TURBOC.CFG", "LINK86.RSP")
 
 
 def keep(name):
@@ -222,11 +222,12 @@ MP = [
 			_fstrcpy (chatline,tl);
 		Fmt (u,fsay'''),
     ('''	static char far f[] = "%Fs here, step %ld";''',
-     '''	static char far f[] = "%Fs %ld h%d u%ld t%ld p%d";	// TEST: handles, memory, pages
+     '''	static char far f[] = "%Fs %ld h%d u%ld p%d k%x";	// TEST: handles, memory, pages, stack
 	int MM_FreeBlocks (void);
+	unsigned StackLow (void);
 	extern int MainPagesAvail;'''),
     ('''		Fmt (s,f,(char far *)mpname,mpplayed);''',
-     '''		Fmt (s,f,(char far *)mpname,mpplayed,MM_FreeBlocks (),MM_UnusedMemory (),MM_TotalFree (),MainPagesAvail);'''),
+     '''		Fmt (s,f,(char far *)mpname,mpplayed,MM_FreeBlocks (),MM_UnusedMemory (),MainPagesAvail,StackLow ());'''),
     ('''DMStart (i,&sx,&sy);		// deathmatch: scattered, as DOOM''',
      '''Beside (i,&sx,&sy);		// TEST: start beside P1'''),
     ('''static void Respawn (objtype *ob, int i)
@@ -698,6 +699,60 @@ asm	pop	si
 PML_XMSCopy(boolean toxms,''', '''int HangMark (int where);		// TEST build: WL_NETA.ASM, the screen report
 void
 PML_XMSCopy(boolean toxms,'''),
+    ('''void
+PM_CheckMainMem(void)
+{''', '''//
+// TEST build: the main-memory pages, checked -- 0, or what is wrong, in s.
+// A used slot has a block and a page that says it is there; a page in main
+// memory names a used slot that names it back; the counts agree
+//
+int PM_Check (char *s)
+{
+	static char far f1[] = "PM slot %d pg %d seg %x", far f2[] = "PM pg %d slot %d lk %d",
+		far f3[] = "PM used %d/%u av %d/%d";
+	char			f[32];
+	int				i,p,u = 0,a = 0;
+	PageListStruct	far *page;
+
+	for (i = 0;i < PMMaxMainMem;i++)
+	{
+		if (MainMemUsed[i] & pmba_Allocated)
+			a++;
+		if (MainMemUsed[i] & pmba_Used)
+		{
+			u++;
+			p = mainOwner[i];
+			if (!MainMemPages[i] || p < 0 || p >= ChunksInFile || PMPages[p].mainPage != i)
+			{
+				_fstrcpy ((char far *)f,f1);
+				sprintf (s,f,i,p,(unsigned)MainMemPages[i]);
+				return 1;
+			}
+		}
+	}
+	for (p = 0,page = PMPages;p < ChunksInFile;p++,page++)
+	{
+		i = page->mainPage;
+		if (i != -1 && (i < 0 || i >= PMMaxMainMem || !(MainMemUsed[i] & pmba_Used)
+		|| mainOwner[i] != p || page->locked < 0 || page->locked > 2))
+		{
+			_fstrcpy ((char far *)f,f2);
+			sprintf (s,f,p,i,(int)page->locked);
+			return 1;
+		}
+	}
+	if (u != MainPagesUsed || a != MainPagesAvail)
+	{
+		_fstrcpy ((char far *)f,f3);
+		sprintf (s,f,u,MainPagesUsed,a,MainPagesAvail);
+		return 1;
+	}
+	return 0;
+}
+
+void
+PM_CheckMainMem(void)
+{'''),
 ]
 
 # the memory manager's block handles left (700 in all), in the bot's chat line
@@ -711,6 +766,42 @@ MM = [('''void MML_ClearBlock (void)
 	for (s = mmfree; s; s = s->next)
 		n++;
 	return n;
+}
+
+//
+// TEST build: the block list, checked -- 0, or what is wrong, in s.  In
+// order, not overlapping, and each block's owner still holding its start
+//
+int MM_Check (char *s)
+{
+	static char far f1[] = "MM loop", far f2[] = "MM %x+%x>%x n%d",
+		far f3[] = "MM own %x=%x not %x n%d";
+	char		f[32];
+	mmblocktype	far *scan;
+	int			n = 0;
+
+	for (scan = mmhead; scan; scan = scan->next)
+	{
+		if (++n > MAXBLOCKS)
+		{
+			_fstrcpy ((char far *)f,f1);
+			sprintf (s,f);
+			return 1;
+		}
+		if (scan->next && (long)scan->start + scan->length > scan->next->start)
+		{
+			_fstrcpy ((char far *)f,f2);
+			sprintf (s,f,scan->start,scan->length,scan->next->start,n);
+			return 1;
+		}
+		if (scan->useptr && *(unsigned *)scan->useptr != scan->start)
+		{
+			_fstrcpy ((char far *)f,f3);
+			sprintf (s,f,(unsigned)scan->useptr,*(unsigned *)scan->useptr,scan->start,n);
+			return 1;
+		}
+	}
+	return 0;
 }
 
 void MML_ClearBlock (void)
@@ -727,6 +818,374 @@ MAIN = [
 ]
 
 
+# TEST: the heap checked every pass of the game's loop; the first fault found
+# goes to the server at once as a chat line ("says: MM ..." / "PM ...")
+CHECK = [('''		UpdateSoundLoc ();
+		if (screenfaded)''', '''		{								// TEST: the heap, every pass (huntbot.py)
+			static int far told;
+			char	cs[64];
+			int		MM_Check (char *s), PM_Check (char *s);
+
+			if (!told && (MM_Check (cs) || PM_Check (cs)))
+			{
+				told = 1;
+				cs[40] = 0;
+				_fstrcpy (chatsend,(char far *)cs);
+				chatnum = chatnum % 255 + 1;
+				chatwait = chatnum;
+				chattries = 0;
+				ChatOut ();
+			}
+		}
+		UpdateSoundLoc ();
+		if (screenfaded)''')]
+
+# --leak: the music fix (3382761) taken out again, to bring the crash back
+LEAK = [('''	StopMusic ();					// as id's floor end''',
+         '''	if (0) StopMusic ();			// TEST --leak: as id's floor end''')]
+
+
+# --trace: breadcrumbs from the ninth floor on, each its own HANG packet the
+# moment it happens (stage/hang-<address>.log, and the server's log), so the
+# last one the server has is the last thing the machine did.  T<n> numbers
+# them; F/f a frame's start and end, S a sprite (shape, height) and s its
+# page's segment, M/m a page fetched from XMS or disk (page; page, segment),
+# X a page's memory given to another (old>new, segment), D/d digitized sound
+# (which; page, segment)
+TRACENET = [('''//
+// The first line of every report''', '''#include <stdarg.h>
+int		tracing;					// TEST --trace: from the ninth floor
+static unsigned far traceno;
+
+void Trace (char far *fmt, ...)
+{
+	static char far tf[] = "T%u %x %x ", far tv[] = "T%u V %d %x:%x>%x:%x";
+	unsigned StackLow (void);
+	static unsigned far ivt[512];
+	static int far ivtset, far ivttold;
+	unsigned far *v = (unsigned far *)MK_FP (0,0);
+	unsigned sp = _SP;
+	char	f[48], s[100];
+	int		n,k;
+	va_list	ap;
+
+	if (!tracing)
+		return;
+	if (!ivtset)
+	{
+		_fmemcpy (ivt,v,1024);
+		ivtset = 1;
+	}
+	else if (ivttold < 8)
+		for (k = 0;k < 256;k++)
+			if (v[2*k] != ivt[2*k] || v[2*k+1] != ivt[2*k+1])
+			{
+				_fstrcpy ((char far *)f,tv);
+				sprintf (s,f,traceno++,k,ivt[2*k+1],ivt[2*k],v[2*k+1],v[2*k]);
+				HangSend ((char far *)s,strlen (s));
+				ivt[2*k] = v[2*k];
+				ivt[2*k+1] = v[2*k+1];
+				ivttold++;
+			}
+	_fstrcpy ((char far *)f,tf);
+	n = sprintf (s,f,traceno++,sp,StackLow ());
+	_fstrcpy ((char far *)f,fmt);
+	va_start (ap,fmt);
+	vsprintf (s+n,f,ap);
+	va_end (ap);
+	HangSend ((char far *)s,strlen (s));
+}
+
+void far TraceShape (int shapenum, int height)
+{
+	static char far f[] = "S %d %d";
+	Trace (f,shapenum,height);
+}
+
+void far TraceSeg (unsigned seg)
+{
+	static char far f[] = "s %x";
+	Trace (f,seg);
+}
+
+//
+// The first line of every report''')]
+
+TRACEMP = [
+    ('''	VW_FadeOut ();					// a machine go after 30 s of nothing, and a V30
+''', '''	{ static char far f[] = "L1"; Trace (f); }
+	VW_FadeOut ();					// a machine go after 30 s of nothing, and a V30
+	{ static char far f[] = "L2"; Trace (f); }
+'''),
+    ('''	ClearMemory ();					// loading a floor is quiet for 15
+	SETFONTCOLOR (0,15);
+	DrawPlayScreen ();
+	VW_FadeIn ();
+	SendInput ();
+	SetupGameLevel ();
+	SendInput ();''', '''	ClearMemory ();					// loading a floor is quiet for 15
+	{ static char far f[] = "L3"; Trace (f); }
+	SETFONTCOLOR (0,15);
+	DrawPlayScreen ();
+	{ static char far f[] = "L4"; Trace (f); }
+	VW_FadeIn ();
+	{ static char far f[] = "L5"; Trace (f); }
+	SendInput ();
+	SetupGameLevel ();
+	{ static char far f[] = "L6"; Trace (f); }
+	SendInput ();'''),
+    ('''	StartMusic ();
+	PM_CheckMainMem ();
+	fizzlein = true;
+	DrawLevel ();
+}''', '''	{ static char far f[] = "L7"; Trace (f); }
+	StartMusic ();
+	{ static char far f[] = "L8"; Trace (f); }
+	PM_CheckMainMem ();
+	{ static char far f[] = "L9"; Trace (f); }
+	fizzlein = true;
+	DrawLevel ();
+	{ static char far f[] = "L10"; Trace (f); }
+}'''),
+    ('''#include <stdarg.h>
+''', '''#include <stdarg.h>
+void Trace (char far *fmt, ...);	// TEST --trace (WL_NET.C)
+'''),
+    ('''		mpsrc = ob;					// an enemy's sounds come from the enemy
+		DoActor (ob);''', '''		mpsrc = ob;					// an enemy's sounds come from the enemy
+		{
+			static char far f[] = "A %x %d %x %Fp %Fp";
+			Trace (f,(unsigned)ob,ob->obclass,(unsigned)ob->state,
+				(void far *)ob->state->think,(void far *)ob->state->action);
+		}
+		DoActor (ob);'''),
+    ('''		NetPump (Take);
+		if (TimeCount - lastsend >= 2)
+		{
+			lastsend = TimeCount;
+			SendInput ();
+		}
+		if (mphave - mpplayed > 35)''', '''		{ static char far f[] = "N"; Trace (f); }
+		NetPump (Take);
+		{ static char far f[] = "n"; Trace (f); }
+		if (TimeCount - lastsend >= 2)
+		{
+			lastsend = TimeCount;
+			SendInput ();
+		}
+		if (mphave - mpplayed > 35)'''),
+    ('''			madenoise = false;
+			MoveDoors ();
+			MovePWalls ();
+			MPDoActors ();
+			MPStep ();''', '''			madenoise = false;
+			{ static char far f[] = "G %ld"; Trace (f,mpplayed); }
+			MoveDoors ();
+			MovePWalls ();
+			{ static char far f[] = "g1"; Trace (f); }
+			MPDoActors ();
+			{ static char far f[] = "g2"; Trace (f); }
+			MPStep ();
+			{ static char far f[] = "g3"; Trace (f); }'''),
+    ('''			if (n)
+				Status ();''', '''			if (n)
+				Status ();
+			{ static char far f[] = "Z"; Trace (f); }'''),
+    ('''			if (mpbot)
+				BotShow ();''', '''			{ static char far f[] = "z"; Trace (f); }
+			if (mpbot)
+				BotShow ();
+			{ static char far f[] = "B"; Trace (f); }'''),
+    ('''			if (!asking && !mpchatting)
+				Picture ();
+		}''', '''			if (!asking && !mpchatting)
+				Picture ();
+			{ static char far f[] = "P"; Trace (f); }
+		}'''),
+    ('''		UpdateSoundLoc ();
+		if (screenfaded)''', '''		{ static char far f[] = "U"; Trace (f); }
+		UpdateSoundLoc ();
+		{ static char far f[] = "u"; Trace (f); }
+		if (screenfaded)'''),
+    ('''	gamestate.keys = 0;
+	gamestate.oldscore = gamestate.score;''', '''	{								// TEST --trace: on from the ninth floor
+		extern int tracing;
+		static int far floors;
+		static char far f[] = "FLOOR %d nh %x+%lx ss %x";
+		extern void *nearheap;
+
+		if (++floors >= 8)
+			tracing = 1;
+		Trace (f,floors+1,(unsigned)nearheap,mminfo.nearheap,_SS);
+	}
+	gamestate.keys = 0;
+	gamestate.oldscore = gamestate.score;'''),
+    ('''				MPCamera (true);
+				ThreeDRefresh ();
+				MPCamera (false);''', '''				{
+					static char far f1[] = "F %ld", far f2[] = "f";
+					Trace (f1,mpplayed);
+					MPCamera (true);
+					ThreeDRefresh ();
+					MPCamera (false);
+					Trace (f2);
+				}'''),
+]
+
+TRACEPM = [
+    ('''//	Main Mem specific variables''', '''void Trace (char far *fmt, ...);	// TEST --trace (WL_NET.C)
+//	Main Mem specific variables'''),
+    ('''		boolean mainonly = (pagenum >= PMSoundStart);
+if (!PMPages[pagenum].offset)	// JDC: sparse page''', '''		boolean mainonly = (pagenum >= PMSoundStart);
+		static char far tm[] = "M %d";
+		Trace (tm,pagenum);
+if (!PMPages[pagenum].offset)	// JDC: sparse page'''),
+    ('''	if (!addr)
+		Quit("PML_TransferPageSpace: Zero replacement");''', '''	{
+		static char far f[] = "X %d>%d %x";
+		Trace (f,orig,new,(unsigned)addr);
+	}
+	if (!addr)
+		Quit("PML_TransferPageSpace: Zero replacement");'''),
+]
+
+TRACESD = [
+    ('''static	boolean			DigiMissed,DigiLastSegment;''', '''void Trace (char far *fmt, ...);	// TEST --trace (WL_NET.C)
+static	boolean			DigiMissed,DigiLastSegment;'''),
+    ('''	DigiPage = DigiList[(which * 2) + 0];''', '''	{
+		static char far f[] = "D %d";
+		Trace (f,which);
+	}
+	DigiPage = DigiList[(which * 2) + 0];'''),
+    ('''	addr = PM_GetSoundPage(page);
+	PM_SetPageLock(PMSoundStart + page,pml_Locked);''', '''	addr = PM_GetSoundPage(page);
+	{
+		static char far f[] = "d %d %x";
+		Trace (f,page,(unsigned)addr);
+	}
+	PM_SetPageLock(PMSoundStart + page,pml_Locked);'''),
+]
+
+TRACESC = [
+    ('''EXTRN	PM_GetPage:FAR''', '''EXTRN	PM_GetPage:FAR
+EXTRN	TraceShape:FAR				; TEST --trace (WL_NET.C)
+EXTRN	TraceSeg:FAR'''),
+    ('''@@onceback:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+''', '''@@onceback:
+	push	bp
+	mov	bp,sp
+	push	si
+	push	di
+	push	[WORD bp+10]			; TEST --trace: height
+	push	[WORD bp+8]				; shapenum
+	call	TraceShape
+	add	sp,4
+'''),
+    ('''	mov	[shapeseg],ax
+	mov	[WORD linecmds+2],ax	; seg of shape''', '''	mov	[shapeseg],ax
+	push	ax						; TEST --trace: its segment
+	push	ax
+	call	TraceSeg
+	add	sp,2
+	pop	ax
+	mov	[WORD linecmds+2],ax	; seg of shape'''),
+]
+
+
+# --nodigi9: no digitized sound from the ninth floor on (with --trace, which
+# turns on there) -- everything else the same, for an A/B on the 486's crash
+NODIGI9 = [('''	if (!DigiMode)
+		return;
+
+	SD_StopDigitized();
+	if (which >= NumDigi)''', '''	if (!DigiMode)
+		return;
+	{								// TEST --nodigi9
+		extern int tracing;
+		static char far f[] = "D- %d";
+
+		if (tracing)
+		{
+			Trace (f,which);
+			return;
+		}
+	}
+
+	SD_StopDigitized();
+	if (which >= NumDigi)''')]
+
+
+# the stack's low-water mark (always in a test build)
+STACKMARK = [('''void		*nearheap;''', '''void		*nearheap;
+unsigned	stackfloor;				// TEST: the near heap's end (huntbot.py)'''),
+    ('''	MML_UseSpace (segstart,seglength);
+	mminfo.nearheap = length;''', '''	MML_UseSpace (segstart,seglength);
+	mminfo.nearheap = length;
+	{								// TEST: the stack's reserve, marked
+		byte	*p;
+
+		stackfloor = (segstart+seglength-_DS)*16;
+		for (p = (byte *)stackfloor;(unsigned)p < _SP-64;p++)
+			*p = 0xAA;
+	}'''),
+    ('''void MML_ClearBlock (void)
+{''', '''//
+// TEST: the lowest address the stack has reached since MM_Startup marked
+// its reserve (stackfloor itself: it got to the near heap's top)
+//
+unsigned StackLow (void)
+{
+	byte	*p = (byte *)stackfloor;
+
+	while (*p == 0xAA && (unsigned)p < _SP)
+		p++;
+	return (unsigned)p;
+}
+
+void MML_ClearBlock (void)
+{''')]
+
+
+# --trace: the out-of-memory paths -- id's "size the view down" in MM_GetPtr,
+# the scalers rebuilt, and Quit's message
+TRACEOOM_MM = [('''void		*nearheap;''', '''void Trace (char far *fmt, ...);	// TEST --trace (WL_NET.C)
+void		*nearheap;'''),
+    ('''			viewsize -= 2;''', '''			{
+				static char far f[] = "HACK view %d need %u";
+				Trace (f,viewsize,needed);
+			}
+			viewsize -= 2;''')]
+TRACEOOM_MAIN = [('''void Quit (char *error)
+{''', '''void Trace (char far *fmt, ...);	// TEST --trace (WL_NET.C)
+void Quit (char *error)
+{'''),
+    ('''	if (virtualreality)
+		geninterrupt(0x61);''', '''	{
+		static char far f[] = "QUIT %s";
+		Trace (f,error);
+	}
+	if (virtualreality)
+		geninterrupt(0x61);''')]
+TRACEOOM_SCALE = [('''void SetupScaling (int maxscaleheight)
+{''', '''void Trace (char far *fmt, ...);	// TEST --trace (WL_NET.C)
+void SetupScaling (int maxscaleheight)
+{'''),
+    ('''	insetupscaling = true;''', '''	insetupscaling = true;
+	{
+		static char far f[] = "SS %d view %d";
+		Trace (f,maxscaleheight,viewsize);
+	}'''),
+    ('''	insetupscaling = false;''', '''	{
+		static char far f[] = "ss";
+		Trace (f);
+	}
+	insetupscaling = false;''')]
+
+
 def main():
     if "--restore" in sys.argv:
         restore()
@@ -734,18 +1193,28 @@ def main():
     if any(os.path.exists(keep(f)) for f in FILES):
         raise SystemExit("stage/*.keep exist: a run did not finish -- check them, then --restore")
     quit = sys.argv[sys.argv.index("--quit")+1] if "--quit" in sys.argv else "5"
-    mp = [(a, b.replace("QUITAT", quit)) for a, b in MP]
+    mp = [(a, b.replace("QUITAT", quit)) for a, b in MP] + CHECK
+    if "--leak" in sys.argv:
+        mp += LEAK
+    trace = "--trace" in sys.argv
+    if trace:
+        mp += TRACEMP
     try:
         if "--memonly" not in sys.argv:
             patch("WL_MP.C", mp)
-        patch("WL_MAIN.C", MAIN)
+        patch("WL_MAIN.C", MAIN + (TRACEOOM_MAIN if "--trace" in sys.argv else []))
         if "--memonly" not in sys.argv:
-            patch("WL_NET.C", NET)
+            patch("WL_NET.C", NET + (TRACENET if trace else []))
             patch("WL_NETA.ASM", NETA)
-            patch("ID_SD.C", SD)
-            patch("ID_MM.C", MM)
+            patch("ID_SD.C", SD + (TRACESD if trace else [])
+                  + (NODIGI9 if "--nodigi9" in sys.argv else []))
+            patch("ID_MM.C", MM + STACKMARK + (TRACEOOM_MM if trace else []))
+            if trace:
+                patch("WL_SCALE.C", TRACEOOM_SCALE)
             patch("ID_CA.C", CA)
-            patch("ID_PM.C", PM)
+            patch("ID_PM.C", PM + (TRACEPM if trace else []))
+            if trace:
+                patch("WL_SC_A.ASM", TRACESC)
             patch("TURBOC.CFG", CFG)
             patch("LINK86.RSP", RSP)
         # the patched sources, for reading a trace's line numbers against

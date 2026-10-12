@@ -1730,7 +1730,10 @@ static void SendInput (void)
 // Every row on the display, for a box in the small font.  LOWEST (LOWVERT)
 // shows the even rows only, and half of every letter with them (StevenC:
 // "all blocky blobs of text", 2026-10-11).  The next 3-D frame sets it
-// again; the view's odd rows, never drawn, are blanked meanwhile
+// again; the view's odd rows, never drawn, are blanked meanwhile.  And the
+// small font, black: not whatever was set last -- after the ESC box that
+// was the big font, let go, and the V30's "Catching up" box was white with
+// nothing in it (StevenC, the same day)
 //
 static void AllRows (void)
 {
@@ -1742,6 +1745,8 @@ static void AllRows (void)
 		lowvert = 1;
 		DrawPlayBorder ();
 	}
+	fontnumber = 0;
+	SETFONTCOLOR (0,15);
 }
 
 static void Say (char far *s)
@@ -2572,11 +2577,13 @@ void MPOverlay (void)
 
 static void Picture (void)
 {
-	static int far size;
+	static int far size, far known;
 	static long far pressed;
 
-	if (!size)
-		size = viewsize;
+	if (!size || viewsize != known)	// first, or the memory manager's doing: id's
+		size = known = viewsize;	// MM_GetPtr sizes the view down when it runs
+									// short -- not put back here, into the same
+									// shortage (2026-10-12)
 	if (pressed > TimeCount)
 		pressed = TimeCount;			// NetLoop starts TimeCount again each floor
 	if (Keyboard[sc_Less] || Keyboard[sc_More])
@@ -2592,6 +2599,7 @@ static void Picture (void)
 	{
 		ClearMemory ();				// as id's Change View: the page manager's
 		NewViewSize (size);			// memory let go for the new scalers (and
+		known = viewsize;
 		PM_CheckMainMem ();			// their 20 KB to build in), then taken back
 		DrawAllPlayBorder ();
 		Redrawn ();
@@ -2768,6 +2776,7 @@ static void NetLoop (void)
 			ClearMemory ();				// as id's own in play (WL_PLAY.C): the page
 			Message (leave);			// manager lets go, so the box's big font has
 			UNCACHEGRCHUNK (STARTFONT+1);	// room (without it, MM_GetPtr: Out of
+			fontnumber = 0;				// [Message left the big font set, now gone]
 			PM_CheckMainMem ();			// memory), and takes it back AT ONCE: the
 		}								// game goes on under the box, and a sound
 										// from a page it had let go ended the 486

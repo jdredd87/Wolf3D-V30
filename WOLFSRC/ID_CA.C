@@ -1353,6 +1353,8 @@ void CA_CacheGrChunk (int chunk)
 	else
 	{
 		MM_GetPtr(&bigbufferseg,compressed);
+		if (mmerror)		// MM_BombOnError (false), and no room: none -- not
+			return;			// a read into segment 0 (StevenC & Claude, 2026-10-12)
 		MM_SetLock (&bigbufferseg,true);
 		CA_FarRead(grhandle,bigbufferseg,compressed);
 		source = bigbufferseg;
