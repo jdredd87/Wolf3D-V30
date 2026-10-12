@@ -1192,6 +1192,12 @@ proved.
   bytes, `ab.py --full` IDENTICAL to id, mpsweep 20/20 on the 486, and
   a live game on it, both machines, 1-minute floors: 13,000 steps (about
   12 floors), no desync.
+* **The overnight soak, 2026-10-12**: the fixed test build (heap checks
+  every pass), both machines and two bots, 2-minute floors for 8 hours
+  -- 505,155 steps, about 240 floor loads where the leak had died at the
+  ninth -- no drop, no desync, no heap fault.  The 486's page cache held
+  15 to 17 pages all night (the V30's 33 to 36) and its stack's lowest
+  point was FBA2, some 620 bytes clear of the near heap.
 
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)
