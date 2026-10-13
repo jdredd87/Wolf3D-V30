@@ -222,12 +222,12 @@ MP = [
 			_fstrcpy (chatline,tl);
 		Fmt (u,fsay'''),
     ('''	static char far f[] = "%Fs here, step %ld";''',
-     '''	static char far f[] = "%Fs %ld h%d u%ld p%d k%x";	// TEST: handles, memory, pages, stack
+     '''	static char far f[] = "%Fs %ld h%d u%ld p%d k%x m%d";	// TEST: handles, memory, pages, stack, map
 	int MM_FreeBlocks (void);
 	unsigned StackLow (void);
 	extern int MainPagesAvail;'''),
     ('''		Fmt (s,f,(char far *)mpname,mpplayed);''',
-     '''		Fmt (s,f,(char far *)mpname,mpplayed,MM_FreeBlocks (),MM_UnusedMemory (),MainPagesAvail,StackLow ());'''),
+     '''		Fmt (s,f,(char far *)mpname,mpplayed,MM_FreeBlocks (),MM_UnusedMemory (),MainPagesAvail,StackLow (),gamestate.episode*10+gamestate.mapon);'''),
     ('''DMStart (i,&sx,&sy);		// deathmatch: scattered, as DOOM''',
      '''Beside (i,&sx,&sy);		// TEST: start beside P1'''),
     ('''static void Respawn (objtype *ob, int i)
