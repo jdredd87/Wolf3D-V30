@@ -1198,6 +1198,19 @@ proved.
   ninth -- no drop, no desync, no heap fault.  The 486's page cache held
   15 to 17 pages all night (the V30's 33 to 36) and its stack's lowest
   point was FBA2, some 620 bytes clear of the near heap.
+* **The eight hours again, 2026-10-12** (StevenC: "can we do an 8 hour
+  test now?"): the setup that had died at 8 h 02 min twice -- both
+  machines, two bots, 60-minute floors, ESC every minute.  The first try
+  stopped at 1 h 50 min with no fault in the game: both machines went
+  silent to the server at the same moment for some 17 s and each ended
+  itself after 15 s, as it is built to (the 486's `PHASE.LOG`: the game
+  ended and its result was sent, never received; no plug cycled).  This
+  PC is wired; the two PicoMEMs share one WiFi access point, the likely
+  place.  **The second ran the whole way**: 8 h 13 min, 517,814 steps on
+  both, no desync, no heap fault.  The ninth floor loaded at step
+  ~504,860 and the 486 went on past 506,000, where it had died, for 11
+  minutes more; its cache 15 to 17 pages throughout, its stack's low point
+  FB6C.
 
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)
