@@ -1268,6 +1268,23 @@ page cache were what they were in the first hour:
 The 486's 368 bytes is the same figure the all-maps deathmatch stress
 found, so it is the tightest floor's need, not a slow leak.
 
+**A minute of silence is ridden out -- 2026-10-13** (StevenC: fix the
+WiFi dropouts).  A game used to end itself after 15 s with nothing from
+the server, and a 17-s dropout had ended the first eight-hour try.  Now:
+from 3 s the picture holds with **"No word from the server: N s"** over
+it, counting, and when the server is heard again the box goes and the
+missed steps are caught up as a joiner's are; only after **60 s** does the
+game end ("ended by 60 s with nothing from the server").  The server frees
+a silent player's slot after 60 s too (`--drop-after`, was 30).
+`mpserver --silence STEP:SECS[,...]` makes an outage on demand -- nothing
+heard or sent for SECS from that step, the clock running on.  Proved on
+the 486 and the V30, `--silence 1500:40,5000:70`: through the 40-s one
+both showed the box (photographed on the V30) and played on -- the 486
+caught up 704 steps -- and the 70-s one ended both at 60 s, the server
+freeing both slots the same moment; 0 desyncs.  mpsweep 20/20 against
+the accepted run.  The 486 has `DOS=HIGH` now: 626,336 bytes free, 63 KB
+more, for what comes next.
+
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)
 * Does the 486 smooth the view between steps, or just redraw?

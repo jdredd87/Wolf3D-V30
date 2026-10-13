@@ -1484,7 +1484,10 @@ int		far	mpend;				// why it ended: 0 the game, 1 ESC Y, 2 BYE, 3 silence,
 									// 4 dropped by the server
 int		far	mpbye;				// BYE's reason: 0 the end, 1 full, 2 another build,
 									// 3 this machine dropped
-#define DEAF	(15*70)			// silent this long: the server is gone
+#define DEAF	(60*70)			// silent this long: the server is gone.  It was
+								// 15 s, and a 17-s WiFi dropout ended an
+								// 8-hour test (2026-10-12): a minute now
+#define QUIET	(3*70)			// silent this long: say so, every second
 int		far	mpwhy;				// why the level ended: 0 elevator, 1 frags, 2 time
 extern	int	ElevatorBackTo[];	// WL_GAME.C
 byte	far	mpstart[4+4*MAXPLAYERS];	// START's players, map, skill, rules, starts
@@ -2628,11 +2631,29 @@ static void Behind (long n)
 	VW_UpdateScreen ();
 }
 
+//
+// No word from the server: the network has gone quiet (a WiFi dropout, most
+// likely).  The game holds still and waits -- up to DEAF -- and says so, so
+// a held picture is not mistaken for a hung machine (2026-10-13)
+//
+static void Silent (long secs)
+{
+	static char far f[] = "No word from the server: %ld s";
+	char	s[40], fmt[32];
+
+	_fstrcpy ((char far *)fmt,f);
+	sprintf (s,fmt,secs);
+	AllRows ();
+	CenterWindow (28,3);
+	US_CPrint ((char far *)s);
+	VW_UpdateScreen ();
+}
+
 static void NetLoop (void)
 {
 	static char far leave[] = "Leave the game?  Y or N";
-	long	lastsend = -100, lastsay = -100, catchfrom = 0;
-	int		n,i,asking = 0,limit;
+	long	lastsend = -100, lastsay = -100, catchfrom = 0, lastquiet = -100;
+	int		n,i,asking = 0,limit,quiet = 0;
 
 	playstate = TimeCount = lasttimecount = 0;
 	frameon = 0;
@@ -2745,6 +2766,21 @@ static void NetLoop (void)
 		}
 		else
 		{
+			if ((long)(TimeCount - mpheard) > QUIET && !asking && !mpchatting)
+			{
+				if (TimeCount - lastquiet >= 70 || TimeCount < lastquiet)
+				{
+					lastquiet = TimeCount;
+					Silent ((TimeCount - mpheard)/70);
+					quiet = 1;
+				}
+			}
+			else if (quiet)			// heard again: the box goes, and anything
+			{						// missed is caught up as a joiner's would be
+				quiet = 0;
+				DrawAllPlayBorder ();
+				Redrawn ();
+			}
 			if (n)
 				Status ();
 			if (!asking && !mpchatting && Keyboard[sc_T])
@@ -3187,7 +3223,7 @@ void MPNetGame (void)
 		{
 			static char far e[] = "net: ended by %Fs\n";
 			static char far e0[] = "the game", far e1[] = "this player (ESC, Y)",
-				far e2[] = "the server (BYE)", far e3[] = "15 s with nothing from the server",
+				far e2[] = "the server (BYE)", far e3[] = "60 s with nothing from the server",
 				far e4[] = "the server, which stopped hearing this machine";
 			static char far *far why[5] = {e0,e1,e2,e3,e4};
 

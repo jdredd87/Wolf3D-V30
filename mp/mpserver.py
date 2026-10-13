@@ -4,7 +4,7 @@
                           [--mode coop|dm] [--ff on|off] [--noenemies]
                           [--fraglimit N] [--timelimit MIN] [--itemrespawn SECS]
                           [--port 31992] [--bind 0.0.0.0] [--steps N] [--once]
-                          [--drop-after 30] [--record M50.DEM] [--drop 0.0] [--quiet]
+                          [--drop-after 60] [--record M50.DEM] [--drop 0.0] [--quiet]
 
 It keeps the clock and passes controls along; it knows nothing of the game.
 MULTIPLAYER.md, "Protocol, version 1", is what it speaks.
@@ -16,7 +16,8 @@ loaded the level; anyone else who joins while it runs gets every step from
 the first, plays them fast to catch up, and is let into the game -- the
 other machines see the player arrive -- once caught up.  A slot is free
 again when its player leaves (ESC, Y), or when its machine has not been
-heard from for --drop-after seconds (30: a V30 loading a floor is quiet for
+heard from for --drop-after seconds (60 -- a WiFi dropout of a minute is
+ridden out, and a V30 loading a floor is quiet for
 ten or so); the server tells it so.  A player who finds every slot taken is
 told the server is full.  When the last player has gone the game is over;
 the server waits for the next one, who starts a new game -- or, with --once,
@@ -48,7 +49,10 @@ its sum, and any other that differs is told DESYNC -- so a machine that
 joined late is checked against the ones that played those steps live.
 
 --record writes each game, when it ends, as an Mn.DEM for TIMEDEMO MGEN.
---drop P throws away that fraction of packets each way, for testing.  On
+--drop P throws away that fraction of packets each way, for testing.
+--silence STEP:SECS[,STEP:SECS...] is a network outage on demand: from that
+step the server hears and sends nothing for SECS seconds, while its clock
+runs on -- what a WiFi dropout looks like from both ends.  On
 Windows the port needs an inbound firewall rule (UDP 31992, local subnet).
 """
 import os
@@ -110,9 +114,12 @@ class Server:
         self.minutes = arg("--timelimit", 0, int)
         self.limit = arg("--steps", 0, int)
         self.once = "--once" in sys.argv
-        self.drop_after = arg("--drop-after", 30, float)
+        self.drop_after = arg("--drop-after", 60, float)
         self.record = arg("--record", "")
         self.drop = arg("--drop", 0.0, float)
+        self.silence = sorted(tuple(int(x) for x in w.split(":"))
+                              for w in arg("--silence", "").split(",") if w)
+        self.blackout = 0.0         # perf_counter() the outage ends at
         self.quiet = "--quiet" in sys.argv
         self.rnd = random.Random(1992)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -146,6 +153,9 @@ class Server:
             print("[%7.2f]" % (time.perf_counter() - T0), *a, flush=True)
 
     def send(self, data, addr):
+        if time.perf_counter() < self.blackout:
+            self.stats["dropped"] += 1
+            return
         if self.drop and self.rnd.random() < self.drop:
             self.stats["dropped"] += 1
             return
@@ -217,6 +227,9 @@ class Server:
     def handle(self, data, addr):
         kind, b = P.parse(data)
         if kind is None:
+            return
+        if time.perf_counter() < self.blackout:
+            self.stats["dropped"] += 1
             return
         if self.drop and self.rnd.random() < self.drop:
             self.stats["dropped"] += 1
@@ -369,6 +382,11 @@ class Server:
                     while now >= self.tick:
                         self.step()
                         self.tick += P.STEP_SECONDS
+                        if self.silence and len(self.history) >= self.silence[0][0]:
+                            at, secs = self.silence.pop(0)
+                            self.blackout = time.perf_counter() + secs
+                            self.log("--silence: nothing heard or sent for %d s from step %d"
+                                     % (secs, len(self.history)))
                         if self.limit and len(self.history) >= self.limit:
                             raise StopIteration
                 try:
