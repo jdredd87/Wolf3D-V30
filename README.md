@@ -1,41 +1,134 @@
 # Wolf3D-V30
 
-**Wolfenstein 3-D, from id Software's source, made to run -- and run as fast
-as it can -- on a NEC V30.** VGA, AdLib music, sound, the whole game: nothing
-removed, nothing simplified, every frame the same picture id's code draws.
+**Wolfenstein 3-D, from id Software's source, rebuilt for real DOS PCs --
+from an 8 MHz NEC V30 to a Pentium II -- made as fast as hand-written
+assembly can make it, and turned into a four-player network game.**  VGA,
+AdLib and Sound Blaster sound, the whole game: in its default mode every
+frame is the picture id's own code draws, checksum for checksum.
 
-Written by **StevenC** and **Claude** (Anthropic), 2026. StevenC set the goal
-and runs the hardware; Claude did the porting, the tools, the measurements and
-the optimisation, over [DOS Bridge](https://github.com/jdredd87/DOSBridge),
-which lets a Windows PC build and run programs on a real DOS machine as if it
-were a test suite.
+It started as "make Wolfenstein run on a V30" (the name stays), and that was
+done in the first week.  Since then:
 
-## Goals
+* **It is fast.** 98 measured optimisation steps -- most of them id's C
+  moved into hand-written 8086/80186 assembly -- take the V30 from 2.8 fps
+  (id's 1992 code, rebuilt for it) to **5.5 fps with id's exact picture**,
+  and past **10 fps** with the optional detail switches.  On a 486 at 66 MHz:
+  **100 fps**.
+* **It plays over a network.** Up to four players, **deathmatch or co-op**,
+  with or without enemies, DOOM's rules, server bots, chat, scores, and
+  people joining and leaving a game that keeps running -- lockstep over UDP,
+  so a V30 and a Pentium II play the same game step for step.
+* **It has a server you can drive.** A small Python server keeps the clock;
+  its console kicks, bans, pauses, sends messages to every screen, changes
+  the floor and the limits mid-game, and shows the scores.
+* **It adds to the game without changing it.** An automap (TAB), window
+  sizes, a launcher menu, a demo reel, and a second version built on a BSP
+  tree -- all optional, all switches.  Leave them off and it is id's game.
+* **It is proven, not assumed.** Every change is checked against id's
+  renderer over the whole attract loop and 240 generated demos on all sixty
+  maps; every multiplayer change against twenty four-player demos played from
+  every player's eyes; long runs of eight hours on three machines.
 
-1. **Run on the V30.** id's `WOLF3D.EXE` refuses to start on it -- its startup
-   code demands a 286 -- although the game only needs the 80186 instruction
-   set, which the V30 has. *Done.*
-2. **Keep everything.** VGA, AdLib, the menus, save games, the demos. An
-   optimisation that changes what you see or hear is not an optimisation.
-3. **As fast as the V30 allows.** Measure, find where the time goes, move it
-   to hand-written 8086/80186 assembly or remove it -- one change at a time,
-   each proven to draw exactly id's picture and each timed.
+Written by **StevenC** and **Claude** (Anthropic), 2026.  StevenC sets the
+goals and runs the hardware; Claude did the porting, the assembly, the
+network game, the tools and the measurements -- all over
+[DOS Bridge](https://github.com/jdredd87/DOSBridge), which lets a Windows PC
+build and run programs on a real DOS machine as if it were a test suite.
+
+## The three versions
+
+| program | branch | what it is |
+|---|---|---|
+| `WOLF3DV.EXE` | `v30-8086` (default) | **id's game exactly**, as fast as it goes.  The default picture is id's, pixel for pixel; every speed-for-picture trade is a switch you turn on |
+| `WOLF3DB.EXE` | `bsp` | **the BSP version**: allowed to change the game a little for speed -- far walls drawn in less detail by default, or the whole world from a BSP tree instead of id's rays (`BSP`) -- [BSPNOTES.md](https://github.com/jdredd87/Wolf3D-V30/blob/bsp/BSPNOTES.md) on that branch |
+| `WOLF3DM.EXE` | `multiplayer` | **the network game**: everything `WOLF3DV` is, plus up to four players over UDP -- [MULTIPLAYER.md](https://github.com/jdredd87/Wolf3D-V30/blob/multiplayer/MULTIPLAYER.md) on that branch |
+
+`WOLF3DO.EXE` is **id Software's own 1992 code**, rebuilt for the 8086 by
+`refsrc.py` with the same timing harness: the yardstick everything above is
+measured against.  Fixes go into `v30-8086` first and flow from there into
+the other two, never the other way.
+
+## What it runs on
+
+| machine | tested | sound |
+|---|---|---|
+| **NEC V30**, 8 MHz, 8087 | the target: everything, every day | PicoMEM 2's AdLib, and since 2026-10-13 its emulated **Sound Blaster 2.0** |
+| **486**, 66 MHz | builds the game, runs every check | Creative **AWE64** (Sound Blaster + OPL3) |
+| **Pentium II/III**, Intel 440BX | the third player | onboard **Yamaha YMF740C** (Sound Blaster Pro + OPL3) |
+
+It needs a **NEC V20/V30, an 80186, or anything from a 286 up**, a VGA,
+MS-DOS, and id's registered **1.4 WL6 data** (not included, and never will
+be).  id's own `WOLF3D.EXE` refuses an 8086-class machine outright; this one
+lets the V20/V30 and the 186 in, because the game only ever needed the 80186
+instruction set.  **A plain Intel 8086 or 8088 is still refused**: the code
+uses 186 instructions throughout, and those crash an 8088 rather than fail
+politely.  A separate 8086 build is possible -- about 240 instructions to
+rewrite -- but does not exist yet.
 
 ## Status
 
 | | |
 |---|---|
-| runs on the V30 | yes -- `WOLF3DV.EXE`, alongside the registered 1.4 WL6 data |
-| speed | **5.51 fps** over all four demos, **5.57 in play** (was 4.05 before steps 27-76); demo 0 in full **2.75 -> 5.17 fps, 1.88x**; the 200-frame benchmark 5.03 fps in play.  On the 486 at 66 MHz, 99.7 fps in play over all four demos.  The BSP version's default (`WOLF3DB`: id's rays, far walls in less detail) 6.15 on the V30, 105.5 on the 486; every option on both machines in [BENCHMARKS.md](BENCHMARKS.md) (2026-10-05) |
-| picture | identical to id's renderer over the whole attract loop -- all four demos, 5,386 frames, every 50th checksummed, the 3-D view and the whole screen (`ab.py --full`, on the 486) -- and over 240 generated demos on all sixty maps (`gendemo.py`, `allmaps.py`: TIMEDEMO GEN, against `refsrc.py`'s build of id's renderer) |
+| speed | **5.51 fps** over all four demos, **5.57 in play** on the V30 (id's code: 2.81); demo 0 in full **2.75 -> 5.17 fps, 1.88x**.  On the 486 at 66 MHz, 99.7 fps in play.  The BSP version's default 6.15 on the V30, 105.5 on the 486.  Every option on both machines: [BENCHMARKS.md](BENCHMARKS.md) |
+| picture | identical to id's renderer over the whole attract loop -- 5,386 frames, every 50th checksummed, the 3-D view and the whole screen (`ab.py --full`) -- and over 240 generated demos on all sixty maps (`gendemo.py`, `allmaps.py`) |
 | music | identical to id's: the same register writes on the same ticks (`MUSICLOG`) |
-| detail switches | optional, in any combination, none on by default: `LOWWALLS` casts one ray per two screen columns (walls in two-pixel columns), `LOWSPRITES` draws enemies and items in two-pixel columns, `LOWDETAIL` is both, and `FLATWALLS` draws every wall in one solid colour, each texture's average, kept apart from the floor and ceiling, with the artwork -- portraits, banners, signs, the walls secrets hide behind -- painted on a flat wall (`FLATART` makes the artwork solid too) (**6.01 fps over all four demos, 6.17 in play** on its own; 7.40 on the benchmark with `LOWDETAIL` too). `FARBLOBS` (step 93) draws distant sprites as flat shapes -- 11% on a 486, nothing on the V30. `LOWVERT` halves the vertical resolution -- the VGA shows every other row, each twice as tall, and the 3D view is drawn on those rows only (**6.41 fps over all four demos, 6.49 in play** on its own; the status bar and border are drawn as ever and lose every other row). With all four, 8.05 on the benchmark. With `LOWDETAIL`, **7.79 fps over all four demos, 7.91 in play**; on the benchmark 7.13 (`LOWDETAIL`), 6.69 (`LOWWALLS`), 5.65 (`FLATWALLS`), 5.81 (`LOWVERT`) and 5.16 (`LOWSPRITES`) against 5.03. Not id's picture: the weapon and status bar stay full resolution, and with `LOWWALLS` a narrow tile far off can go unseen for a frame, so an enemy there may notice you a little later |
-| optimisations | 98 steps so far, and two bigger ideas measured and set aside -- coherent rays (step 85, 27% slower) and a BSP, the SNES port's way (step 86, [bsp/](bsp/): 40-77% of the walk's time on the V30, but the walk decides which enemies are visible, which is game logic, so in the default mode it cannot go) -- see [V30NOTES.md](V30NOTES.md) |
-| multiplayer | planned, not started: lockstep over UDP with a small server (Python, and Free Pascal for DOS) -- see [MULTIPLAYER.md](MULTIPLAYER.md) |
+| multiplayer | **works**: deathmatch and co-op, up to four players, bots, chat, scores, drop-in and drop-out, a server console; eight hours on the 486, the Pentium II and the V30 together without a desync (2026-10-13) |
+| optimisations | 98 steps, each one measured, each one proven to draw id's picture -- [V30NOTES.md](V30NOTES.md) is the lab notebook, including the ideas that measured as nothing |
+| detail switches | optional, any combination, none on by default -- below |
+
+## Multiplayer
+
+On the `multiplayer` branch (`WOLF3DM.EXE`).  One PC runs the server; every
+player runs the game and joins it.  Machines of any speed play together: the
+server keeps the clock at 17.5 steps a second, every machine plays every
+step, and a slow one draws fewer pictures, not a different game.
+
+**Host** (Python 3, any PC on the network; open UDP 31992 in its firewall):
+
+```
+python mp/mpserver.py --players 4 --mode dm --noenemies --itemrespawn 30
+python mp/mpserver.py --players 4 --bots 1 --mode coop --skill 2 --map 0
+```
+
+`--mode coop|dm`, `--noenemies`, `--ff off`, `--fraglimit N`,
+`--timelimit MIN`, `--itemrespawn SECS`, `--bots N`, `--map N` (0-59),
+`--skill 0-3`.  The game starts when the first player has loaded the level;
+anyone who joins later replays the game so far at full speed, catches up,
+and walks in.
+
+**Play** (on each DOS machine, in `C:\WOLF3D` with the game data):
+
+```
+WOLF3DM NET 192.168.1.10 NAME STEVE
+```
+
+or `PLAY` and the menu's network page (`M`), which keeps the server and
+your name in `WOLF3DM.CFG`.  **T** chats, **TAB** shows the scores, **ESC**
+asks before leaving; dead, **SPACE** respawns.  A WiFi dropout of up to a
+minute is ridden out ("No word from the server: N s") and the game catches up
+when the link is back.
+
+**The server's console** -- typed into its window while it runs:
+
+| | |
+|---|---|
+| `status`, `scores` | every slot (who, from where, how far behind), and every player's frags and deaths |
+| `say TEXT` | a message on every player's screen, as SERVER |
+| `kick N reason`, `ban N`, `unban ADDR` | out of the game, and told why on their screen |
+| `pause`, `resume` | hold the game for everyone |
+| `map E L`, `nextfloor` | everyone to that floor now |
+| `timelimit MIN`, `fraglimit N` | change the limits mid-game |
+| `next map/mode/skill/bots/...` | settings for the next game |
+| `end`, `quit` | end the game; stop the server |
+
+Every machine applies a mid-game change at the same step, so the game stays
+in lockstep -- for anyone joining later too.
+[MULTIPLAYER.md](https://github.com/jdredd87/Wolf3D-V30/blob/multiplayer/MULTIPLAYER.md) has the design, the protocol and every
+test.
 
 ## Running it
 
-On the V30, in `C:\WOLF3D` beside the game data:
+In `C:\WOLF3D` beside the game data:
 
 ```
 WOLF3DV
@@ -92,7 +185,9 @@ python w3dbuild.py all       build there, deploy WOLF3DV.EXE to the V30
 
 | | |
 |---|---|
-| `v30-8086` | the work (default branch) |
+| `v30-8086` | `WOLF3DV`, id's game exactly (default branch) |
+| `bsp` | `WOLF3DB`, the BSP version |
+| `multiplayer` | `WOLF3DM`, the network game, and its server (`mp/`) |
 | `master` | id's source exactly as released, for diffing |
 | `upstream` remote | https://github.com/id-Software/wolf3d |
 
