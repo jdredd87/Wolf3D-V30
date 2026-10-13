@@ -1488,7 +1488,13 @@ int		far	mpbye;				// BYE's reason: 0 the end, 1 full, 2 another build,
 								// 15 s, and a 17-s WiFi dropout ended an
 								// 8-hour test (2026-10-12): a minute now
 #define QUIET	(3*70)			// silent this long: say so, every second
-int		far	mpwhy;				// why the level ended: 0 elevator, 1 frags, 2 time
+int		far	mpwhy;				// why the level ended: 0 elevator, 1 frags, 2 time, 3 the server
+int		far	mppaused;			// the server has paused the game (PAUSED, 2026-10-13)
+int		far	mpgoto = -1;		// the map the server sends everyone to (NextLevel)
+char	far	mpbyetext[41];		// why the server kicked this machine (BYE 4)
+byte	far	mpevent[RING];		// the server's event at each held step (STEPS'
+unsigned far mpeventarg[RING];	// tail): 1 next floor, 2 map N, 4 timelimit, 5 fraglimit
+static byte far saylast;		// the server's last message's number
 extern	int	ElevatorBackTo[];	// WL_GAME.C
 byte	far	mpstart[4+4*MAXPLAYERS];	// START's players, map, skill, rules, starts
 byte	far	mpring[RING][3*MAXPLAYERS];
@@ -1592,6 +1598,24 @@ static void Take (byte far *d, unsigned len)
 				k = (unsigned)s & (RING-1);
 				_fmemcpy (mpring[k],d+10+(unsigned)(s-first)*3*players,3*players);
 				mpringstep[k] = (unsigned)s;
+				mpevent[k] = 0;
+			}
+			{						// the server's events, after the rows: a
+				unsigned off = 10 + count*3*players, j;	// count, then step (4),
+										// event, argument (2) -- 2026-10-13
+				if (len > off)
+					for (j=0;j<d[off] && len >= off+1+7*(j+1);j++)
+					{
+						byte	far *e = d+off+1+7*j;
+						long	es = (long)GetL (e);
+
+						if (es >= lo && es <= hi)
+						{
+							k = (unsigned)es & (RING-1);
+							mpevent[k] = e[4];
+							mpeventarg[k] = e[5] | (e[6] << 8);
+						}
+					}
 			}
 		}
 		while (mpringstep[(unsigned)(mphave+1) & (RING-1)] == (unsigned)(mphave+1))
@@ -1604,10 +1628,32 @@ static void Take (byte far *d, unsigned len)
 	case 8:							// BYE
 		mpstate = 3;
 		mpbye = len >= 6 ? d[5] : 0;
+		if (mpbye == 4 && len >= 7)	// kicked, and why (2026-10-13)
+		{
+			n = d[6] > 40 ? 40 : d[6];
+			if (len < 7 + n)
+				n = 0;
+			_fmemcpy (mpbyetext,d+7,n);
+			mpbyetext[n] = 0;
+		}
 		if (!mpend)
-			mpend = mpbye == 3 ? 4 : 2;
+			mpend = mpbye == 3 ? 4 : mpbye == 4 ? 5 : 2;
 		break;
 	case 10:						// CHATMSG: anyone's, this player's too
+		if (len >= 7 && d[4] == 0xff && len >= 7 + d[6])	// the server's (say)
+		{
+			static char far f[] = "SERVER: %Fs";
+			char	line[52];
+
+			if (d[5] == saylast)
+				break;				// a copy sent again
+			saylast = d[5];
+			n = d[6] > 50 ? 50 : d[6];
+			_fmemcpy ((char far *)line,d+7,n);
+			line[n] = 0;
+			Notice (15,f,(char far *)line);
+			break;
+		}
 		if (len >= 7 && d[4] < MAXPLAYERS && len >= 7 + d[6])
 		{
 			static char far f[] = "%Fs: %Fs";
@@ -1624,6 +1670,9 @@ static void Take (byte far *d, unsigned len)
 			line[n] = 0;
 			Notice (pcol[k],f,Who (k),(char far *)line);
 		}
+		break;
+	case 14:						// PAUSED (2026-10-13): 1 held, 0 going again
+		mppaused = len >= 5 ? d[4] : 0;
 		break;
 	case 11:						// NAMES: count, then 16 bytes each
 		if (len >= 5)
@@ -2649,11 +2698,20 @@ static void Silent (long secs)
 	VW_UpdateScreen ();
 }
 
+static void Banner (char far *s)
+{
+	AllRows ();
+	CenterWindow (28,3);
+	US_CPrint (s);
+	VW_UpdateScreen ();
+}
+
 static void NetLoop (void)
 {
 	static char far leave[] = "Leave the game?  Y or N";
-	long	lastsend = -100, lastsay = -100, catchfrom = 0, lastquiet = -100;
-	int		n,i,asking = 0,limit,quiet = 0;
+	static char far held[] = "Paused by the server";
+	long	lastsend = -100, lastsay = -100, catchfrom = 0, lastquiet = -100, lastheld = -100;
+	int		n,i,asking = 0,limit,quiet = 0,paused = 0;
 
 	playstate = TimeCount = lasttimecount = 0;
 	frameon = 0;
@@ -2720,7 +2778,32 @@ static void NetLoop (void)
 				mppkt[5] = 0;
 				PutL (mppkt+6,mpsteps);
 				PutL (mppkt+10,mpsum);
-				NetSend (mppkt,14);
+				for (i=0;i<MAXPLAYERS;i++)	// and every player's frags and deaths,
+				{							// for the console's scores (2026-10-13)
+					mppkt[14+4*i] = mpctx[i].frags;
+					mppkt[15+4*i] = mpctx[i].frags >> 8;
+					mppkt[16+4*i] = mpctx[i].deaths;
+					mppkt[17+4*i] = mpctx[i].deaths >> 8;
+				}
+				NetSend (mppkt,14+4*MAXPLAYERS);
+			}
+			switch (mpevent[(unsigned)mpplayed & (RING-1)])	// the server's, at
+			{									// this step (its console)
+			case 1:							// next floor
+				playstate = ex_completed;
+				mpwhy = 3;
+				break;
+			case 2:							// a map of its choosing
+				mpgoto = mpeventarg[(unsigned)mpplayed & (RING-1)];
+				playstate = ex_completed;
+				mpwhy = 3;
+				break;
+			case 4:
+				mptimelimit = mpeventarg[(unsigned)mpplayed & (RING-1)];
+				break;
+			case 5:
+				mpfraglimit = mpeventarg[(unsigned)mpplayed & (RING-1)];
+				break;
 			}
 			if (!mpred)				// dead: the tint holds (DeadTint)
 				UpdatePaletteShifts ();
@@ -2766,7 +2849,22 @@ static void NetLoop (void)
 		}
 		else
 		{
-			if ((long)(TimeCount - mpheard) > QUIET && !asking && !mpchatting)
+			if (mppaused && !asking && !mpchatting)
+			{						// the server's console: pause (2026-10-13)
+				if (!paused || TimeCount - lastheld >= 70 || TimeCount < lastheld)
+				{					// every second: the scores, a chat line or
+					Banner (held);	// a notice can be drawn over it meanwhile
+					paused = 1;
+					lastheld = TimeCount;
+				}
+			}
+			else if (paused)
+			{
+				paused = 0;
+				DrawAllPlayBorder ();
+				Redrawn ();
+			}
+			if ((long)(TimeCount - mpheard) > QUIET && !asking && !mpchatting && !mppaused)
 			{
 				if (TimeCount - lastquiet >= 70 || TimeCount < lastquiet)
 				{
@@ -2842,6 +2940,25 @@ static void NetLoop (void)
 		if (mpstate == 3 || mpdropped)	// sends steps again
 			playstate = ex_abort;
 	} while (!playstate);
+	if (mpend == 5)					// kicked: say so, and why, before going
+	{
+		static char far k[] = "Kicked by the server", far nlf[] = "\n";
+		char	t[64];
+		long	t0 = TimeCount;
+
+		_fstrcpy ((char far *)t,k);
+		if (mpbyetext[0])
+		{
+			_fstrcat ((char far *)t,nlf);
+			_fstrcat ((char far *)t,mpbyetext);
+		}
+		AllRows ();
+		CenterWindow (36,4);
+		US_CPrint ((char far *)t);
+		VW_UpdateScreen ();
+		while (TimeCount - t0 < 3*70 && TimeCount >= t0)
+			;
+	}
 	if (mpchatting)
 		ChatEnd ();
 	if (mpred)						// dead as the floor ended: the tint goes
@@ -2911,6 +3028,7 @@ static int Pct (int n, int total)
 static void TallyDraw (int over)
 {
 	static char far t0[] = "FLOOR COMPLETE", far t1[] = "FRAG LIMIT", far t2[] = "TIME LIMIT";
+	static char far t3[] = "ENDED BY THE SERVER";
 	static char far h1[] = "KILLS", far h2[] = "ITEMS", far h3[] = "SECRET";
 	static char far h4[] = "FRAGS", far h5[] = "DIED";
 	static char far you[] = ">";
@@ -2925,7 +3043,7 @@ static void TallyDraw (int over)
 	CenterWindow (38,12);			// the small font: about 7 pixels a letter
 	SETFONTCOLOR (0,15);
 	PrintY = WindowY + 4;
-	US_CPrint (mpwhy == 1 ? t1 : mpwhy == 2 ? t2 : t0);
+	US_CPrint (mpwhy == 1 ? t1 : mpwhy == 2 ? t2 : mpwhy == 3 ? t3 : t0);
 	SETFONTCOLOR (0,15);
 	Col (78,20,h1);
 	Col (122,20,h2);
@@ -3024,14 +3142,23 @@ static void NextLevel (void)
 	}
 	gamestate.keys = 0;
 	gamestate.oldscore = gamestate.score;
-	if (gamestate.mapon == 9)
-		gamestate.mapon = ElevatorBackTo[gamestate.episode];	// back from the secret floor
-	else if (playstate == ex_secretlevel)
-		gamestate.mapon = 9;
+	if (mpgoto >= 0)				// the server's choice (its console, 2026-10-13)
+	{
+		gamestate.episode = mpgoto/10;
+		gamestate.mapon = mpgoto%10;
+		mpgoto = -1;
+	}
 	else
-		gamestate.mapon++;
-	if ((mprules & RULE_DM) && gamestate.mapon > 8)
-		gamestate.mapon = 0;		// deathmatch: round the episode again
+	{
+		if (gamestate.mapon == 9)
+			gamestate.mapon = ElevatorBackTo[gamestate.episode];	// back from the secret floor
+		else if (playstate == ex_secretlevel)
+			gamestate.mapon = 9;
+		else
+			gamestate.mapon++;
+		if ((mprules & RULE_DM) && gamestate.mapon > 8)
+			gamestate.mapon = 0;		// deathmatch: round the episode again
+	}
 
 	StopMusic ();					// as id's floor end (WL_GAME.C): the song unlocked
 									// and purgeable.  Without it every new song stayed
@@ -3149,11 +3276,14 @@ void MPNetGame (void)
 		}
 	}
 	if (mpstate == 3)				// a BYE, not a START
-		NetQuit (mpbye == 1 ? full : mpbye == 2 ? other : ended);
+		NetQuit (mpbye == 1 ? full : mpbye == 2 ? other : mpbye == 4 && mpbyetext[0]
+			? (char far *)mpbyetext : ended);
 	for (i=0;i<RING;i++)
 		mpringstep[i] = 0xffff;
 
 	mprules = mpstart[3];
+	mpgoto = -1;
+	mppaused = 0;
 	NewGame (mpstart[2],mpstart[1]/10);
 	gamestate.mapon = mpstart[1] % 10;
 	godmode = false;
@@ -3224,11 +3354,19 @@ void MPNetGame (void)
 			static char far e[] = "net: ended by %Fs\n";
 			static char far e0[] = "the game", far e1[] = "this player (ESC, Y)",
 				far e2[] = "the server (BYE)", far e3[] = "60 s with nothing from the server",
-				far e4[] = "the server, which stopped hearing this machine";
-			static char far *far why[5] = {e0,e1,e2,e3,e4};
+				far e4[] = "the server, which stopped hearing this machine",
+				far e5[] = "the server, which kicked this machine";
+			static char far *far why[6] = {e0,e1,e2,e3,e4,e5};
 
 			_fstrcpy ((char far *)s,e);
-			printf (s,why[mpend >= 0 && mpend <= 4 ? mpend : 0]);
+			printf (s,why[mpend >= 0 && mpend <= 5 ? mpend : 0]);
+			if (mpend == 5 && mpbyetext[0])
+			{
+				static char far kr[] = "net: the reason: %Fs\n";
+
+				_fstrcpy ((char far *)s,kr);
+				printf (s,(char far *)mpbyetext);
+			}
 			if (mpcaught)
 			{
 				static char far c[] = "net: caught up %ld steps in %ld s, %ld a second\n";

@@ -1,18 +1,25 @@
-"""The multiplayer server's console -- StevenC & Claude, 2026-10-12.
+"""The multiplayer server's console -- StevenC & Claude, 2026-10-12/13.
 
 Commands typed into the server's window while it runs (StevenC: "do we have
 options inside it? to kick users, send messages, change levels or episodes
-... make it a full fledged server to control everything?").  This is the
-first half, the server's own: nothing in it needs a new game build.
+... make it a full fledged server to control everything?").  The second half
+(say, a kick's reason, pause, map and the limits in play, scores) needs the
+WOLF3DM of 2026-10-13 or later on every machine.
 
     help                     this list
     status                   the game, and every slot: who, where from, how far
                              behind, inputs, how long since last heard
-    kick N [reason]          slot N (1-4) out of the game; its machine is told
+    say TEXT                 a message on every player's screen, as SERVER
+    scores                   every player's frags and deaths, as the game has them
+    kick N [reason]          slot N (1-4) out of the game; its screen says why
     ban N | ban ADDRESS      kick, and refuse that address from now on
     unban ADDRESS | bans     ... and back again; the list
     end [reason]             end the game for everyone; the server waits for
                              the next one (or stops, with --once)
+    pause | resume           hold the game for everyone, and let it go on
+    map E L | map N          everyone to that floor now (the tally first)
+    nextfloor                everyone to the next floor now
+    timelimit MIN | fraglimit N   change the game's limit now (0: none)
     next                     the settings the next game starts with
     next map E L | next map N    episode and floor (N = (E-1)*10 + L-1)
     next mode dm|coop        next skill 0-3      next bots N
@@ -23,6 +30,10 @@ first half, the server's own: nothing in it needs a new game build.
 
 "next" settings take effect when the next game starts -- at once if none is
 running -- since every machine in a game must be playing the same rules.
+map, nextfloor and the limits in play are events at a step the server
+names: every machine, and anyone who joins later and replays, applies them
+at that same step.  One that lands while the players are in a floor's tally
+is lost (all of them lose it alike); say it again once the floor is on.
 
 Lines are read on a thread of their own and carried out by the server's own
 loop (Console.poll), between packets, so nothing here races the game.  With
@@ -134,6 +145,10 @@ class Console:
             parts.append("timelimit %d" % s.minutes)
         if s.frags:
             parts.append("fraglimit %d" % s.frags)
+        for k, v in sorted(getattr(s, "live", {}).items()):
+            parts.append("%s %s in this game" % (k, v or "none"))
+        if getattr(s, "paused", False):
+            parts.append("PAUSED")
         return ", ".join(parts)
 
     def slot(self, word):
@@ -159,8 +174,23 @@ class Console:
                 if i is None:
                     self.say("kick: no person in slot %s" % (rest[0] if rest else "?"))
                 else:
-                    why = " ".join(rest[1:]) or "kicked"
-                    s.leave(i, "was kicked from the console (%s)" % why, P.BYE_DROPPED)
+                    why = " ".join(rest[1:])
+                    s.leave(i, "was kicked from the console (%s)" % (why or "no reason given"),
+                            P.BYE_KICKED, why)
+            elif cmd == "say":
+                if not rest:
+                    self.say("say: what?")
+                else:
+                    s.say_all(line.split(None, 1)[1][:60])
+            elif cmd == "scores":
+                self.scores()
+            elif cmd in ("pause", "resume"):
+                if s.state != "play":
+                    self.say("%s: no game is running" % cmd)
+                elif not s.pause(cmd == "pause"):
+                    self.say("already %s" % ("paused" if s.paused else "going"))
+            elif cmd in ("map", "nextfloor", "timelimit", "fraglimit"):
+                self.now(cmd, rest)
             elif cmd == "ban":
                 if not rest:
                     self.say("ban: a slot (1-4) or an address")
@@ -171,7 +201,8 @@ class Console:
                 self.say("banned %s" % addr)
                 for k in s.people():
                     if s.slots[k].addr[0] == addr:
-                        s.leave(k, "was banned from the console", P.BYE_DROPPED)
+                        s.leave(k, "was banned from the console", P.BYE_KICKED,
+                                "banned from this server")
             elif cmd == "unban":
                 if rest and rest[0] in self.banned:
                     self.banned.discard(rest[0])
@@ -244,6 +275,54 @@ class Console:
             self.apply_next()
         else:
             self.say("next game: %s %s" % (what, " ".join(w[1:])))
+
+    def map_number(self, w):
+        if len(w) >= 2:
+            e, l = int(w[0]), int(w[1])
+            if not (1 <= e <= 6 and 1 <= l <= 10):
+                raise ValueError("episode 1-6, floor 1-10")
+            return (e - 1) * 10 + (l - 1)
+        n = int(w[0])
+        if not 0 <= n <= 59:
+            raise ValueError("map 0-59")
+        return n
+
+    def now(self, cmd, w):
+        """map, nextfloor and the limits, in the game being played."""
+        s, P = self.s, self.P
+        if s.state != "play":
+            self.say("%s: no game is running -- for the next one, next %s" % (cmd, cmd))
+            return
+        if cmd == "map":
+            n = self.map_number(w)
+            at = s.event(P.EV_MAP, n)
+            what = "everyone to map %d (E%dL%d)" % (n, n // 10 + 1, n % 10 + 1)
+        elif cmd == "nextfloor":
+            at = s.event(P.EV_NEXTFLOOR)
+            what = "everyone to the next floor"
+        else:
+            v = int(w[0])
+            if not 0 <= v <= 65535:
+                raise ValueError("0-65535")
+            at = s.event(P.EV_TIMELIMIT if cmd == "timelimit" else P.EV_FRAGLIMIT, v)
+            s.live[cmd] = v
+            what = "%s %s" % (cmd, v or "none")
+        if s.paused:
+            what += " (when the game goes on)"
+        self.say("%s, at step %d" % (what, at))
+        s.log("console: %s at step %d" % (what, at))
+
+    def scores(self):
+        s = self.s
+        if s.scores is None:
+            self.say("scores: none yet -- the players send theirs every 50 steps")
+            return
+        step, sc = s.scores
+        self.say("scores at step %d:" % step)
+        for i, sl in enumerate(s.slots):
+            if sl is not None:
+                f, d = sc[i] if i < len(sc) else (0, 0)
+                self.say("  P%d  %-16s %4d frags  %4d deaths" % (i + 1, sl.name, f, d))
 
     def status(self):
         s, P = self.s, self.P

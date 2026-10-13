@@ -130,6 +130,7 @@ class Server:
         self.games = 0
         self.stats = dict(sent=0, recv=0, dropped=0)
         self.desyncs = 0
+        self.said = 0               # the console's say: its messages' number
         self.console = mpconsole.Console(self, P, RULE_DM, RULE_NOFF, RULE_NOENEMIES)
         self.reset()
 
@@ -149,6 +150,11 @@ class Server:
         self.sums = {}              # step -> (sum, slot) as first reported
         self.started_at = None
         self.next_start = 0
+        self.events = {}            # step -> (event, argument): the console's
+        self.paused = False         # pause: no steps until it goes on
+        self.next_paused = 0.0
+        self.scores = None          # (step, [(frags, deaths)]) from the last SYNC
+        self.live = {}              # limits changed in play, for status
         for k in range(self.bots):              # a new game's bots play anew
             self.slots[self.humans + k] = self.new_bot(k)
 
@@ -202,11 +208,11 @@ class Server:
         self.next_names = 0                     # everyone: who is here now
         return i
 
-    def leave(self, i, why, reason=None):
+    def leave(self, i, why, reason=None, text=""):
         s = self.slots[i]
         if reason is not None:
             for k in range(3):                  # UDP: it may be lost
-                self.send(P.bye(i, reason), s.addr)
+                self.send(P.bye(i, reason, text), s.addr)
         self.log("%s %s (%d inputs, had step %s)" % (self.who(i), why, s.inputs,
                  "none" if s.have == P.NOBODY else s.have))
         self.slots[i] = None
@@ -249,7 +255,7 @@ class Server:
             name, build, want = P.un_hello(b)
             if i is None and self.console.refused(addr):
                 self.log("refused %s from %s:%d: banned" % (name, addr[0], addr[1]))
-                self.send(P.bye(0xFF, P.BYE_DROPPED), addr)
+                self.send(P.bye(0xFF, P.BYE_KICKED, "banned from this server"), addr)
                 return
             if i is not None and self.slots[i].ready:
                 # a machine that is in the game says HELLO again: it was
@@ -291,6 +297,9 @@ class Server:
             s.inputs += 1
         elif kind == P.SYNC:
             slot, step, total = P.un_sync(b)
+            sc = P.un_sync_scores(b)
+            if sc and (self.scores is None or step >= self.scores[0]):
+                self.scores = (step, sc)
             first = self.sums.get(step)
             if first is None:
                 self.sums[step] = (total, i)
@@ -357,7 +366,8 @@ class Server:
             if first == s.sent_first and last == s.sent_last and now - s.sent_at < 0.25:
                 continue
             s.sent_first, s.sent_last, s.sent_at = first, last, now
-            self.send(P.steps(first, self.players, self.history[first:last + 1]), s.addr)
+            ev = [(k, e, a) for k, (e, a) in sorted(self.events.items()) if first <= k <= last]
+            self.send(P.steps(first, self.players, self.history[first:last + 1], ev), s.addr)
 
     def run(self):
         self.log("listening on UDP %d: %d slots (%d for people, %d bots), map %d, rules %d (%s%s, items %s)"
@@ -389,7 +399,12 @@ class Server:
                                    P.BYE_DROPPED)
                     elif not s.ready and quiet > JOIN_SILENT:
                         self.leave(i, "never loaded the level: its slot is free")
-                if self.state == "play":
+                if self.state == "play" and self.paused:
+                    if now >= self.next_paused:     # why no steps come, every half second
+                        self.next_paused = now + 0.5
+                        for i in self.people():
+                            self.send(P.paused(True), self.slots[i].addr)
+                if self.state == "play" and not self.paused:
                     while now >= self.tick:
                         self.step()
                         self.tick += P.STEP_SECONDS
@@ -414,6 +429,38 @@ class Server:
                 self.send(P.bye(i, P.BYE_END), self.slots[i].addr)
             time.sleep(0.05)
         self.finish()
+
+    # ---- the console's (2026-10-13)
+
+    def say_all(self, text):
+        """A message on every player's screen, as the server's."""
+        self.said = self.said % 255 + 1
+        packet = P.chat(P.SERVER_SLOT, self.said, text, P.CHATMSG)
+        for k in range(3):                      # UDP: the game drops the copies
+            for i in self.people():
+                self.send(packet, self.slots[i].addr)
+        self.log("SERVER says: %s" % text)
+
+    def pause(self, on):
+        if on == self.paused:
+            return False
+        self.paused = on
+        if on:
+            self.next_paused = 0.0
+            self.log("paused from the console at step %d" % len(self.history))
+        else:
+            self.tick = time.perf_counter()     # the clock goes on from now
+            for k in range(3):
+                for i in self.people():
+                    self.send(P.paused(False), self.slots[i].addr)
+            self.log("going again from the console at step %d" % len(self.history))
+        return True
+
+    def event(self, kind, arg=0):
+        """An event at the next step made: every machine applies it there."""
+        at = len(self.history)
+        self.events[at] = (kind, arg)
+        return at
 
     def finish(self):
         if self.state == "play":

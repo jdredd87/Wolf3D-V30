@@ -10,9 +10,17 @@ HELLO, WELCOME, START, INPUT, STEPS, SYNC, DESYNC, BYE, CHAT, CHATMSG, PLAYERS =
 # HANG (2026-10-09): only a TEST build sends it (mp/huntbot.py's, WL_NET.C's
 # HANGDUMP) -- a text report from its hang watchdog, for the server to keep
 HANG = 12
+# PAUSED (2026-10-13): the server's console paused the game (1) or let it go
+# on (0).  No steps come while it is paused; this says why, and keeps the
+# players' "No word from the server" box away
+PAUSED = 14
 NAMES = {HELLO: "HELLO", WELCOME: "WELCOME", START: "START", INPUT: "INPUT", STEPS: "STEPS",
          SYNC: "SYNC", DESYNC: "DESYNC", BYE: "BYE", CHAT: "CHAT", CHATMSG: "CHATMSG",
-         PLAYERS: "NAMES", HANG: "HANG"}
+         PLAYERS: "NAMES", HANG: "HANG", PAUSED: "PAUSED"}
+# the server's events (2026-10-13), in STEPS' tail: each at a step, so every
+# machine -- and every joiner, replaying -- applies it at the same one
+EV_NEXTFLOOR, EV_MAP, EV_TIMELIMIT, EV_FRAGLIMIT = 1, 2, 4, 5
+SERVER_SLOT = 0xFF              # CHATMSG from the server itself (its console's say)
 STEPS_MAX = 64                  # steps in one STEPS packet
 # (the game's receive slots are 1024 bytes: 4 players x 3 x STEPS_MAX + 52 must fit)
 STEP_SECONDS = 4 / 70           # DEMOTICS of the 70 Hz clock
@@ -78,9 +86,16 @@ def un_inp(b):
     return v + (played,)
 
 
-def steps(first, players, rows):
-    """rows: a list of `players*3`-byte steps."""
-    return head(STEPS) + struct.pack("<IBB", first, len(rows), players) + b"".join(rows)
+def steps(first, players, rows, events=()):
+    """rows: a list of `players*3`-byte steps.  events: (step, event,
+    argument) for steps among these -- a tail the game reads since
+    2026-10-13 (a count, then 7 bytes each); an older game ignores it."""
+    out = head(STEPS) + struct.pack("<IBB", first, len(rows), players) + b"".join(rows)
+    events = list(events)[:20]
+    if events:
+        out += bytes([len(events)]) + b"".join(struct.pack("<IBH", s, e, a & 0xFFFF)
+                                               for s, e, a in events)
+    return out
 
 
 def un_steps(b):
@@ -88,6 +103,16 @@ def un_steps(b):
     n = 3 * players
     rows = [bytes(b[6 + i * n:6 + (i + 1) * n]) for i in range(count)]
     return first, players, rows
+
+
+def un_steps_events(b):
+    """STEPS' tail: [(step, event, argument)]."""
+    first, count, players = struct.unpack_from("<IBB", b)
+    off = 6 + count * 3 * players
+    if len(b) <= off:
+        return []
+    return [struct.unpack_from("<IBH", b, off + 1 + 7 * i) for i in range(b[off])
+            if len(b) >= off + 1 + 7 * (i + 1)]
 
 
 def sync(slot, step, total):
@@ -99,6 +124,15 @@ def un_sync(b):
     return slot, step, total
 
 
+def un_sync_scores(b):
+    """Since 2026-10-13 a SYNC ends in every slot's frags and deaths, as
+    that machine has them -- [(frags, deaths)] x 4, or None from an older one."""
+    if len(b) < 10 + 16:
+        return None
+    v = struct.unpack_from("<8h", b, 10)
+    return [(v[2 * i], v[2 * i + 1]) for i in range(4)]
+
+
 def desync(step, mask):
     return head(DESYNC) + struct.pack("<IB", step, mask)
 
@@ -107,20 +141,29 @@ def un_desync(b):
     return struct.unpack_from("<IB", b)
 
 
-# BYE's reason (since 2026-10-07; a client older than that ignores it)
-BYE_END, BYE_FULL, BYE_BUILD, BYE_DROPPED = 0, 1, 2, 3
+# BYE's reason (since 2026-10-07; a client older than that ignores it).
+# BYE_KICKED (2026-10-13) is followed by its reason's length and text
+BYE_END, BYE_FULL, BYE_BUILD, BYE_DROPPED, BYE_KICKED = 0, 1, 2, 3, 4
 
 # a slot nobody is in, in a step: 0, -128, -128 -- id's PollControls clamps a
 # turn or a move to +-100 a tic, so no player's controls are ever this
 ABSENT = bytes([0, 0x80, 0x80])
 
 
-def bye(slot, reason=BYE_END):
-    return head(BYE) + bytes([slot, reason])
+def bye(slot, reason=BYE_END, text=""):
+    out = head(BYE) + bytes([slot, reason])
+    if reason == BYE_KICKED:
+        t = text.encode("latin-1", "replace")[:40]
+        out += bytes([len(t)]) + t
+    return out
 
 
 def un_bye(b):
     return b[0], (b[1] if len(b) >= 2 else BYE_END)
+
+
+def paused(on):
+    return head(PAUSED) + bytes([1 if on else 0])
 
 
 def chat(slot, number, text, kind=CHAT):
