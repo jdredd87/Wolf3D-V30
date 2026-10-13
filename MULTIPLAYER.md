@@ -1,8 +1,24 @@
 # Multiplayer
 
 Written by **StevenC** and **Claude** (Anthropic), 2026-10-06.  Started the
-same day on the V30 and the 486 (branch `multiplayer`); the 386SX joins
-when its network card arrives.
+same day on the V30 and the 486 (branch `multiplayer`); a third machine, a
+Pentium II, joined on 2026-10-13.  (The 386SX this file once waited for was
+retired.)  This file is the lab notebook, in the order things happened;
+the summary comes first.
+
+## At a glance (2026-10-13)
+
+| | |
+|---|---|
+| the game | `WOLF3DM.EXE`: id's Wolfenstein 3-D for up to **four players** -- **deathmatch or co-op**, each with or without enemies; DOOM's rules (no lives, respawn with SPACE, frags, items back after a time, one player's keys everyone's in co-op); BJ in four colours; chat (T), scores (TAB), ESC asks first |
+| the network | lockstep over UDP, port 31992: the server keeps the clock at 17.5 steps a second and passes controls along; every machine plays every step, so a V30 and a Pentium II play the same game.  Checksums every 50 steps catch any machine that differs |
+| joining | any time: a joiner replays the game so far at full speed and walks in when caught up; a leaver's slot is free at once.  A WiFi dropout of up to a minute is ridden out |
+| the server | `mp/mpserver.py` (Python), with **bots** and a **console**: status, scores, say, kick with a reason, ban, pause, map and next floor, the limits mid-game, the next game's settings -- "The server's console" below |
+| the machines | the NEC V30 (8 MHz; `LOWEST VIEW 10`, ~3-9 pictures a second), the 486 (66 MHz) and the Pentium II, all three with sound -- AdLib music and Sound Blaster effects |
+| proof | 20 generated 2- and 4-player demos give the same checksums from every player's eyes (`mp/mpsweep.py`); every change is run against the last accepted sweep.  **Eight hours, three machines and a bot, no desync** (2026-10-13); every deathmatch floor of all six episodes (`stage/logs/stress.py`); single player still id's picture exactly |
+| not yet | the Free Pascal server for DOS (phase 5); the co-op half of the all-floors stress run; recordings (`--record`) do not carry the console's mid-game events |
+
+Hosting and joining are in [README.md](README.md), "Multiplayer".
 
 ## Where it stands
 
@@ -1066,7 +1082,12 @@ the 386SX arrives.
   retest of the leak fix, at a message box, with the watchdog silent**
   (which does not settle whether the tick stopped: the watchdog reports
   through the packet driver first).  So test builds now paint the answer
-  on the screen (below), where no driver is needed to read it.
+  on the screen (below), where no driver is needed to read it.  **Found
+  and fixed on 2026-10-12** (below): id's memory manager running out on
+  the ninth floor, and id's `Quit` recursing on it.
+* Does the 486 smooth the view between steps, or just redraw?
+
+## The crash, a third machine, the console -- 2026-10-11 to 13
 
 **The screen report -- 2026-10-11** (StevenC: "ok so we need to figure
 out the 486 issue").  Every BIOS tick, `Hang8` paints into the status
@@ -1289,6 +1310,44 @@ freeing both slots the same moment; 0 desyncs.  mpsweep 20/20 against
 the accepted run.  The 486 has `DOS=HIGH` now: 626,336 bytes free, 63 KB
 more, for what comes next.
 
-* Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
-  as it is.)
-* Does the 486 smooth the view between steps, or just redraw?
+**The server's console -- 2026-10-12/13** (StevenC: "do we have options
+inside it? to kick users, send messages, change levels or episodes ...
+make it a full fledged server to control everything?").  Commands typed
+into the server's window while it runs (`mp/mpconsole.py`, read on a
+thread of its own and carried out by the server's loop between packets):
+
+| | |
+|---|---|
+| `help`, `status` | the commands; the game and every slot -- who, from where, how far behind, inputs, last heard |
+| `scores` | every player's frags and deaths this floor -- each SYNC carries them now |
+| `say TEXT` | "SERVER: TEXT" on every screen (CHATMSG from slot 255, sent three times, the copies dropped) |
+| `kick N [reason]` | BYE 4 with the reason: "Kicked by the server" and the reason on that screen for 3 s, and in its report |
+| `ban N`, `ban ADDR`, `unban ADDR`, `bans` | kick, and refuse the address's HELLO from now on -- "banned from this server" |
+| `pause`, `resume` | no steps while paused; PAUSED (type 14) every half second, so the game shows "Paused by the server" instead of the dropout box; the clock goes on from the resume |
+| `map E L` or `map N`, `nextfloor` | everyone to that floor: the floor ends with "ENDED BY THE SERVER" and the tally, then the server's map |
+| `timelimit MIN`, `fraglimit N` | the game's limits, changed in play |
+| `next map`/`mode`/`skill`/`bots`/`timelimit`/`fraglimit`/`itemrespawn`/`enemies`/`ff` | the next game's settings (at once if none is running) |
+| `end [reason]`, `quiet on/off`, `quit` | end the game; the log off and on; stop the server |
+
+**A change to the game must happen at the same step everywhere**, or the
+machines play different games.  So map, nextfloor and the limits are
+*events*: the server picks the next step it will make and puts the event in
+STEPS' tail (a count, then step, event, argument -- 7 bytes each) of every
+packet holding that step, and every machine applies it after playing it.
+A joiner who replays the game from the first step meets each event at its
+step too -- which is why WELCOME keeps the limits the game *started* with:
+a joiner told the new limit at the door would have ended the game earlier
+than everyone else did.  An event that lands while the players are in a
+floor's tally is lost, by all of them alike.  Older games ignore the tail,
+so every machine must have this `WOLF3DM`.
+
+Phase 1 (everything that needs no new game: status, kick, ban, end, next)
+was proved on loopback with `mpfake.py`.  Phase 2 live, the 486, the
+Pentium II and the V30 as bots, the console typed on a timer and the V30
+photographed at each step (`stage/logs/livecon.py`): say, scores, an 18-s
+pause, both limits, `map 1 3` (floor 3), `nextfloor` (floor 4) and a kick
+with its reason -- 3,936 steps, **0 desyncs**; the V30's report: "ended
+by the server, which kicked this machine / the reason: testing the kick".
+The first pause banner was drawn once and the bot's scoreboard drew over
+it; it is redrawn every second now (proved again, `livepause.py`).
+mpsweep 20/20 against the accepted run after each build.
