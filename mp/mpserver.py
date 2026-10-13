@@ -67,6 +67,7 @@ sys.path.insert(0, HERE)
 import mpproto as P                 # noqa: E402
 sys.path.insert(0, os.path.join(HERE, ".."))
 import gendemo                      # noqa: E402  (the bots' input)
+import mpconsole                    # noqa: E402  (typed commands: kick, end, next ...)
 
 RULE_DM, RULE_NOFF, RULE_NOENEMIES = 1, 2, 4
 CAUGHT_UP = 4                       # steps behind the newest: let it in
@@ -129,6 +130,7 @@ class Server:
         self.games = 0
         self.stats = dict(sent=0, recv=0, dropped=0)
         self.desyncs = 0
+        self.console = mpconsole.Console(self, P, RULE_DM, RULE_NOFF, RULE_NOENEMIES)
         self.reset()
 
     def new_bot(self, k):
@@ -141,6 +143,8 @@ class Server:
     def reset(self):
         """No game: waiting for a first player."""
         self.state = "wait"
+        if hasattr(self, "console"):
+            self.console.apply_next()           # the console's "next" settings
         self.history = []           # every step: players*3 bytes
         self.sums = {}              # step -> (sum, slot) as first reported
         self.started_at = None
@@ -243,6 +247,10 @@ class Server:
             self.slots[i].heard = time.perf_counter()
         if kind == P.HELLO:
             name, build, want = P.un_hello(b)
+            if i is None and self.console.refused(addr):
+                self.log("refused %s from %s:%d: banned" % (name, addr[0], addr[1]))
+                self.send(P.bye(0xFF, P.BYE_DROPPED), addr)
+                return
             if i is not None and self.slots[i].ready:
                 # a machine that is in the game says HELLO again: it was
                 # restarted.  Its old self leaves; it joins anew
@@ -357,8 +365,11 @@ class Server:
                     "deathmatch" if self.rules & RULE_DM else "co-op",
                     ", no enemies" if self.rules & RULE_NOENEMIES else "",
                     "back after %d s" % ((self.rules >> 3) * 5) if self.rules >> 3 else "do not come back"))
+        self.console.start()
         try:
             while True:
+                if not self.console.poll():
+                    raise StopIteration
                 now = time.perf_counter()
                 if now >= self.next_start:      # START again to any still loading
                     self.next_start = now + 0.5
