@@ -1230,7 +1230,7 @@ and AdLib music and effects:
 |---|---|---|---|
 | 486 | AWE64 (ISA PnP) | `PNPSB /I:9 /FM /Q`, then `AWEUTIL /S` | `A220 I2 D1 H5 P330 E620 T6` (IRQ 9 is "2" to the game) |
 | p3box | onboard Yamaha YMF740C (PCI, DS-XG) | `CD \YAMAHA`, `SETUPDS /S` (Yamaha's v3.14, `DS.INI` with `IRQMODE=0`) | `A220 I5 D1 T4 P330` |
-| V30 | the PicoMEM's AdLib only | -- | none |
+| V30 | the PicoMEM 2's emulated Sound Blaster 2.0 and OPL3 (since 2026-10-13) | `SET BLASTER`, then Freddy's `PMINIT /sb 1`; `SHELL ... /E:1024` in its `CONFIG.SYS` for the room | `A220 I5 D1 T3` |
 
 p3box's chip is PCI: its Sound Blaster Pro (DSP 3.1) and OPL3 exist only
 once Yamaha's `SETUPDS` turns its legacy side on, DMA through the 440BX's
@@ -1248,7 +1248,11 @@ off" -- and id's own `WOLF3D NOSB` sounds the same.  Without a Sound
 Blaster the game plays its AdLib versions of the shots, which id made from
 FM noise; multiplayer, with three or four players firing, makes them
 constant.  Nothing to fix.  The V30, with no Sound Blaster, always plays
-them; its PicoMEM 2 may emulate one, a setting in its own menu.
+them -- until 2026-10-13, when its PicoMEM 2's Sound Blaster went on (IRQ
+5, DMA 1, proven by SNDPROBE's silent transfer).  The game uses it once
+its Sound menu says Sound Blaster: `CONFIG.WL6` had been saved with no
+card, and is StevenC's to change.  Without `BLASTER` the game would take
+IRQ 7, which is the PicoMEM's own.
 
 **Eight hours on three machines -- 2026-10-13** (StevenC: "3 player 1 bot,
 8 hour test ... 486 and p3box with full sound").  The 486, p3box and the
