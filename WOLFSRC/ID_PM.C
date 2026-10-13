@@ -932,6 +932,34 @@ asm	out	dx,al
 #pragma warn +pia
 
 //
+//	PM_Keep() - NEC V30 build (StevenC & Claude, 2026-10-13): the page just
+//		fetched is not the next one given up.  For a caller that needs two
+//		pages at once (FlatPage, WL_DR_A.ASM: a wall's artwork and its plain
+//		twin): kept before the second is fetched, the first stays where it
+//		is -- in main memory, and in EMS in its frame -- and a fetch of it
+//		again is a hit that moves nothing.  Without it the first could be
+//		the one given up whenever every page or every EMS frame had been
+//		hit in this frame already (the oldest-first searches take the first
+//		of equals), and the second fetch would land over it.  The page's
+//		next fetch puts its hit time back to the frame's.
+//
+void
+PM_Keep(int pagenum)
+{
+	PageListStruct	far *page = &PMPages[pagenum];
+	int				i,emsbase;
+
+	page->lastHit = PMFrameCount + 1;
+	if (page->mainPage == -1 && page->emsPage != -1)
+	{
+		emsbase = page->emsPage - (page->emsPage & (PMEMSSubPage - 1));
+		for (i = 0;i < EMSFrameCount;i++)
+			if (EMSList[i].baseEMSPage == emsbase)
+				EMSList[i].lastHit = PMFrameCount + 1;
+	}
+}
+
+//
 //	PM_SetPageLock() - Sets the lock type on a given page
 //		pml_Unlocked: Normal, page can be purged
 //		pml_Locked: Cannot be purged
