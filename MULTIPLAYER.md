@@ -1212,6 +1212,42 @@ proved.
   minutes more; its cache 15 to 17 pages throughout, its stack's low point
   FB6C.
 
+**A third machine, p3box -- 2026-10-13.**  A Pentium II/III (Intel
+440BX), MS-DOS 6.22 with HIMEM and DOS high (612 KB free, 64 MB XMS), a
+D-Link DE-220PCT at 240h IRQ 3, at 192.168.50.71.  Its `C:\WOLF3D` has the
+game's data from the 486 (never committed), `WOLF3DM.EXE`, `PLAY.BAT`,
+`W3MENU.EXE`, and its own `WOLF3DM.CFG` (`NAME P3BOX`) and `W3RUN.BAT` at
+`VIEW 19`, full screen.  Three machines, 3,000 steps: no desync, p3box at
+17.4 pictures a second.  The play server now runs `--players 3`.
+
+**Sound: full on the 486 and p3box -- 2026-10-13** (StevenC: "on the 486
+and p3box we want full sound").  Both play Sound Blaster digitized effects
+and AdLib music and effects:
+
+| | card | how it is set up at boot | `BLASTER` |
+|---|---|---|---|
+| 486 | AWE64 (ISA PnP) | `PNPSB /I:9 /FM /Q`, then `AWEUTIL /S` | `A220 I2 D1 H5 P330 E620 T6` (IRQ 9 is "2" to the game) |
+| p3box | onboard Yamaha YMF740C (PCI, DS-XG) | `CD \YAMAHA`, `SETUPDS /S` (Yamaha's v3.14, `DS.INI` with `IRQMODE=0`) | `A220 I5 D1 T4 P330` |
+| V30 | the PicoMEM's AdLib only | -- | none |
+
+p3box's chip is PCI: its Sound Blaster Pro (DSP 3.1) and OPL3 exist only
+once Yamaha's `SETUPDS` turns its legacy side on, DMA through the 440BX's
+DDMA.  In Yamaha's own interrupt mode (`IRQMODE=1`) the Sound Blaster's
+interrupt came on the chip's PCI line, IRQ 10, which the game cannot use
+(2, 3, 5, 7); `IRQMODE=0` sends it as IRQ 5 -- proven by SNDPROBE `/T`
+(`projects/pnpnic` in the bridge): a silent DMA transfer ending in the
+interrupt.  The network card moved to IRQ 3 so 5 is the sound's alone.
+
+**The "static" was the AdLib gunshots** (StevenC: "some static noise on
+all 3 systems ... it started with multi player").  Six builds and switches
+run one after another on p3box (`TESTSND.BAT`, `TESTSN2.BAT`): with the
+Sound Blaster on, shots were clean; with it off (`NOSB`), shots "sound
+off" -- and id's own `WOLF3D NOSB` sounds the same.  Without a Sound
+Blaster the game plays its AdLib versions of the shots, which id made from
+FM noise; multiplayer, with three or four players firing, makes them
+constant.  Nothing to fix.  The V30, with no Sound Blaster, always plays
+them; its PicoMEM 2 may emulate one, a setting in its own menu.
+
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)
 * Does the 486 smooth the view between steps, or just redraw?
