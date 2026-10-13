@@ -84,6 +84,7 @@ extern	void	PM_Startup(void),
 				PM_Preload(boolean (*update)(word current,word total)),
 				PM_NextFrame(void),
 				PM_SetPageLock(int pagenum,PMLockType lock),
+				PM_Keep(int pagenum),
 				PM_SetMainPurge(int level),
 				PM_CheckMainMem(void);
 extern	memptr	PM_GetPageAddress(int pagenum),
