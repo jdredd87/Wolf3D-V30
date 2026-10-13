@@ -1219,6 +1219,8 @@ game's data from the 486 (never committed), `WOLF3DM.EXE`, `PLAY.BAT`,
 `W3MENU.EXE`, and its own `WOLF3DM.CFG` (`NAME P3BOX`) and `W3RUN.BAT` at
 `VIEW 19`, full screen.  Three machines, 3,000 steps: no desync, p3box at
 17.4 pictures a second.  The play server now runs `--players 3`.
+Renamed **P3** the same day (StevenC): `NAME P3` in its `WOLF3DM.CFG` and
+`W3RUN.BAT` (the old files kept as `.P3B`), and `--box p3` on the bridge.
 
 **Sound: full on the 486 and p3box -- 2026-10-13** (StevenC: "on the 486
 and p3box we want full sound").  Both play Sound Blaster digitized effects
