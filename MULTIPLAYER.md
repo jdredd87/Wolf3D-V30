@@ -1235,7 +1235,7 @@ once Yamaha's `SETUPDS` turns its legacy side on, DMA through the 440BX's
 DDMA.  In Yamaha's own interrupt mode (`IRQMODE=1`) the Sound Blaster's
 interrupt came on the chip's PCI line, IRQ 10, which the game cannot use
 (2, 3, 5, 7); `IRQMODE=0` sends it as IRQ 5 -- proven by SNDPROBE `/T`
-(`projects/pnpnic` in the bridge): a silent DMA transfer ending in the
+(`extras/hwprobe` in the bridge): a silent DMA transfer ending in the
 interrupt.  The network card moved to IRQ 3 so 5 is the sound's alone.
 
 **The "static" was the AdLib gunshots** (StevenC: "some static noise on
@@ -1247,6 +1247,24 @@ Blaster the game plays its AdLib versions of the shots, which id made from
 FM noise; multiplayer, with three or four players firing, makes them
 constant.  Nothing to fix.  The V30, with no Sound Blaster, always plays
 them; its PicoMEM 2 may emulate one, a setting in its own menu.
+
+**Eight hours on three machines -- 2026-10-13** (StevenC: "3 player 1 bot,
+8 hour test ... 486 and p3box with full sound").  The 486, p3box and the
+V30 with one server bot, deathmatch, no enemies, items back after 30 s,
+60-minute floors; the 486 and p3box on their Sound Blasters and AdLib, the
+V30 at `LOWEST VIEW 10`.  **Passed: 8 h 13 min, 517,500 steps on all
+three, nine floors (E1 M1 to M9), no desync, no drop, no heap fault.**
+Nothing drifted all night -- each machine's least free near heap and its
+page cache were what they were in the first hour:
+
+| | least free | page cache | stack low point |
+|---|---|---|---|
+| 486 | 368 bytes | 15 to 17 pages | FB6C |
+| p3box | 752 bytes | 30 to 33 pages | FBC2 |
+| V30 | 784 bytes | 33 to 36 pages | FBB6 |
+
+The 486's 368 bytes is the same figure the all-maps deathmatch stress
+found, so it is the tightest floor's need, not a slow leak.
 
 * Co-op first, or deathmatch?  (Co-op with enemies is closest to the game
   as it is.)
