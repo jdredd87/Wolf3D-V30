@@ -32,6 +32,7 @@ EXTRN	HitVertPWall:FAR
 EXTRN	ScaleShape:FAR
 EXTRN	PM_GetPage:FAR
 EXTRN	RunPage:FAR				; WL_BSP.C, for DrawRunA: a new tile's page
+EXTRN	PM_Keep:FAR					; FlatPage: the artwork stays while the twin comes
 EXTRN	GetBonus:FAR
 EXTRN	CalcRotate:FAR
 EXTRN	RemoveObj:FAR
@@ -6948,12 +6949,18 @@ PUBLIC	FlatPage
 	mov	bl,[cs:artbase+bx]
 	xor	bh,bh
 	push	bx
+	push	si
+	call	PM_Keep					; 2026-10-13: the artwork stays put while
+	add	sp,2					; the twin comes in -- it could have been
+	pop	bx						; the page given up for it, and then the
+	nop							; (even: what follows keeps its parity)
+	push	bx					; fetch below would have landed over the twin
 	call	PM_GetPage				; the twin
 	add	sp,2
 	mov	cx,ax
 	push	si
-	call	PM_GetPage				; the artwork again (it was used just before
-	add	sp,2					; the twin, so it is still in)
+	call	PM_GetPage				; the artwork again: a hit, which moves
+	add	sp,2					; nothing, so the twin stays where it is
 	pop	dx
 	pop	di
 	mov	bx,[cs:artold+di]		; the colour it was painted with, if any
