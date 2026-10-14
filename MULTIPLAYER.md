@@ -15,8 +15,8 @@ the summary comes first.
 | joining | any time: a joiner replays the game so far at full speed and walks in when caught up ("Catching up: N steps to go" -- README.md says why it has to, and how long: a 486 or the Pentium II under a minute for an hour's game, the V30 six to fifteen); a leaver's slot is free at once.  A WiFi dropout of up to a minute is ridden out |
 | the server | `mp/mpserver.py` (Python), with **bots** and a **console**: status, scores, say, kick with a reason, ban, pause, map and next floor, the limits mid-game, the next game's settings -- "The server's console" below |
 | the machines | the NEC V30 (8 MHz; `LOWEST VIEW 10`, ~3-9 pictures a second), the 486 (66 MHz) and the Pentium II, all three with sound -- AdLib music and Sound Blaster effects |
-| proof | 20 generated 2- and 4-player demos give the same checksums from every player's eyes (`mp/mpsweep.py`); every change is run against the last accepted sweep.  **Eight hours, three machines and a bot, no desync** (2026-10-13); every deathmatch floor of all six episodes (`stage/logs/stress.py`); single player still id's picture exactly |
-| not yet | the Free Pascal server for DOS (phase 5); the co-op half of the all-floors stress run; recordings (`--record`) do not carry the console's mid-game events |
+| proof | 20 generated 2- and 4-player demos give the same checksums from every player's eyes (`mp/mpsweep.py`); every change is run against the last accepted sweep.  **Eight hours, three machines and a bot, no desync** (2026-10-13); every deathmatch floor of all six episodes, and **every one of the sixty floors in co-op, with enemies, on all three machines, no desync** (2026-10-14, `stage/logs/stress.py`); single player still id's picture exactly |
+| not yet | the Free Pascal server for DOS (phase 5); recordings (`--record`) do not carry the console's mid-game events |
 
 Hosting and joining are in [README.md](README.md), "Multiplayer".
 
@@ -1561,3 +1561,42 @@ the test build answers Y at the 5th ESC unless built `--quit 600`.)
   live (`stage/logs/rejoin.py`): the 486 kicked at step 1,168, back into the
   same slot at 1,830, caught up through its own earlier session and the
   kick, and stayed in to the end -- 3,901 steps, no desync.  mpsweep 20/20.
+
+**Every co-op floor, three machines -- 2026-10-14, afternoon.**  All sixty
+floors in co-op with enemies, 1,400 steps each (80 s), the V30 joining
+first and playing every step live, the 486 and P3 catching up behind it, a
+bot, the hunting test build (`stage/logs/stress.py coop`).  **No desync on
+any floor, on any machine.**  The least free memory and page cache seen:
+
+| | least free | fewest cache pages | stack's low point |
+|---|---|---|---|
+| 486 | 1,056 bytes (E1L2) | 28 (E3L9) | FB98 (E1L3) |
+| P3 | 848 bytes (E1L2) | 26 (E3L9) | FBB8 (E3L1) |
+| V30 | 608 bytes (E6L10) | 31 (E3L9) | FBA8 (E3L4) |
+
+The V30's figures cover 59 floors: on E4L10, the heaviest, it was still
+behind (1,088 steps of 1,400) when the server ended the game on time --
+the slow machine catching up, not a fault; it came back and polled.
+
+* **The V30 locked up twice more on the way** -- on E1L5 at 12:08 and on
+  E3L4 at 13:33, both during play, the screen black, the machine drawing
+  its usual 36 W and polling nothing.  The first was in DOS again
+  (0032:758E), with no hang report.  StevenC found the V30's CH375 USB card
+  partly out of its ISA slot after the first and reseated it; the second
+  came after that, so the card was not the whole of it.
+* **The firmware is not it either**: P3 runs a PicoMEM 2 on the same
+  firmware (BIOS 2026-09-27) and played every floor clean.  What only the
+  V30 does is use the **PicoMEM's emulated Sound Blaster** -- the 486 has
+  a real AWE64, P3 the Yamaha with its PicoMEM's Sound Blaster off -- and
+  every hang has come since that went on (2026-10-13).  Its `CONFIG.WL6`
+  has digitized sound OFF, so no samples were playing; but the game finds
+  the Sound Blaster and sets it up regardless (the DSP reset, IRQ 5
+  hooked), and on the PicoMEM the Sound Blaster, the disk and the WiFi are
+  all one Pico.
+* **With `NOSB`** (id's own switch: the game leaves the Sound Blaster
+  alone) the V30 played E3L4 -- where it had just hung -- and every floor
+  after it, 37 floors in 78 minutes, clean.  The hangs had come 4, 20 and
+  90 minutes into a run, so that points at the Sound Blaster without proving
+  it: the next 8-hour run has the V30 on `NOSB`.  If it holds, the card's
+  Sound Blaster emulation and its WiFi do not mix on this machine, and
+  the V30 plays networked games with `NOSB` (or `PMINIT /sb 0`).
