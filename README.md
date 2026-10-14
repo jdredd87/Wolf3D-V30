@@ -96,6 +96,28 @@ python mp/mpserver.py --players 4 --bots 1 --mode coop --skill 2 --map 0
 anyone who joins later replays the game so far at full speed, catches up,
 and walks in.
 
+**What "Catching up: N steps to go" means.**  The network never sends the
+game itself -- no positions, no health, no map -- only every player's
+controls, 17.5 times a second: a *step*.  Each machine plays the steps for
+itself, and because Wolfenstein does exactly the same thing with the same
+controls, every machine arrives at the same game.  So a machine that joins
+late, or that missed steps, cannot be *told* where everyone is: it has to
+*play* there.  It plays every step since the first one, as fast as it can,
+without drawing a picture or making a sound, and the box counts the steps
+left; when it is within a few steps of the others it walks into the game,
+and the other players see it arrive.  Its checksums are compared with the
+ones the others reported for the same steps, so a machine that caught up
+wrong is caught.
+
+How long it takes is the length of the game so far over the machine's
+speed.  A 486 or a Pentium II replays 1,500 to 12,000 steps a second -- an
+hour of play (63,000 steps) in under a minute.  The V30 manages about 70 to
+180 a second, because every step means running every player, every door and
+every enemy on an 8 MHz CPU: joining a game an hour old takes it six to
+fifteen minutes.  The same happens, for a moment, after a WiFi dropout or a
+floor load: whatever a machine missed, it plays through quickly, the same
+way.
+
 **Play** (on each DOS machine, in `C:\WOLF3D` with the game data):
 
 ```
