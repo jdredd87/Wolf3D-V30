@@ -1618,3 +1618,16 @@ the V30 does now: Wolf3D's page cache in **EMS**, which its PicoMEM serves
 (PMEMMSC, and XMSSC's XMS out of that EMS), while the same Pico is the
 disk and the WiFi -- P3 runs HIMEM and no PicoMEM EMS, and the V30's eight
 clean hours were on its previous card.  Next: the V30 with `NOEMS NOXMS`.
+
+**The V30 with `NOEMS NOXMS` -- 2026-10-14, 16:06 to 18:19.**  The V30 power-
+cycled through its plug at StevenC's word (it came back by itself, no F1),
+then all sixty co-op floors again, the V30 on `NOSB NOEMS NOXMS` -- id's own
+switches, so its page cache is in main memory (32 to 35 pages, as before)
+and its PicoMEM serves no EMS while it plays.  **2 h 13 min, every floor,
+no hang and no desync** -- longer than any run of it since 10-13 (the hangs
+had come 4, 20, 60 and 90 minutes in).  The 486 hung once (E3L2, step 443,
+no report; power-cycled, and clean for the rest) -- it has no EMS at all,
+so that is a matter of its own.  The 8-hour run tonight
+(`stage/logs/long15.py`) has the V30 on the same switches: if it holds,
+the V30's PicoMEM 2 on the 09-27 firmware does not stand EMS, the disk and
+the WiFi together, and the V30 plays networked games with `NOEMS NOXMS`.
