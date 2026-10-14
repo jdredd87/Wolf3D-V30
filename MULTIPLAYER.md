@@ -16,7 +16,7 @@ the summary comes first.
 | the server | `mp/mpserver.py` (Python), with **bots** and a **console**: status, scores, say, kick with a reason, ban, pause, map and next floor, the limits mid-game, the next game's settings -- "The server's console" below |
 | the machines | the NEC V30 (8 MHz; `LOWEST VIEW 10`, ~3-9 pictures a second), the 486 (66 MHz) and the Pentium II, all three with sound -- AdLib music and Sound Blaster effects |
 | proof | 20 generated 2- and 4-player demos give the same checksums from every player's eyes (`mp/mpsweep.py`); every change is run against the last accepted sweep.  **Eight hours, three machines and a bot, no desync** (2026-10-13); every deathmatch floor of all six episodes, and **every one of the sixty floors in co-op, with enemies, on all three machines, no desync** (2026-10-14, `stage/logs/stress.py`); single player still id's picture exactly |
-| not yet | the Free Pascal server for DOS (phase 5); recordings (`--record`) do not carry the console's mid-game events |
+| not yet | the Free Pascal server for DOS (phase 5); a recording (`--record`) is one floor, so one the console ends early is cut where it ended |
 
 Hosting and joining are in [README.md](README.md), "Multiplayer".
 
@@ -1600,3 +1600,21 @@ the slow machine catching up, not a fault; it came back and polled.
   it: the next 8-hour run has the V30 on `NOSB`.  If it holds, the card's
   Sound Blaster emulation and its WiFi do not mix on this machine, and
   the V30 plays networked games with `NOSB` (or `PMINIT /sb 0`).
+
+**The console during a floor's tally, live -- 2026-10-14, evening.**  An
+event that landed while the players were in a floor's tally used to be
+lost; now every machine applies it in the tally (`map` picks the coming
+floor, the limits take effect).  The three machines as bots, the console
+driven through the control port (`stage/logs/livetally.py`, `mp/mpctl.py`):
+`nextfloor`, and 2 s later -- in the tally on every machine -- `map 1 5`,
+`timelimit 7`, `fraglimit 50`.  The V30 photographed 40 s on: **floor 5,
+"DEATHMATCH to 50, 6:21 left"** -- all three applied.  A second round
+(`map 1 1`) on the 486 and P3; 6,919 steps through both, no desync.
+
+**And the V30 hung again, with `NOSB`** -- a minute into that floor 5
+(E1L5, as at 12:08), the picture frozen, no hang report.  So it is not the
+game's use of the Sound Blaster; the 78 clean minutes were luck.  What only
+the V30 does now: Wolf3D's page cache in **EMS**, which its PicoMEM serves
+(PMEMMSC, and XMSSC's XMS out of that EMS), while the same Pico is the
+disk and the WiFi -- P3 runs HIMEM and no PicoMEM EMS, and the V30's eight
+clean hours were on its previous card.  Next: the V30 with `NOEMS NOXMS`.
