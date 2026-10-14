@@ -32,8 +32,9 @@ WOLF3DM of 2026-10-13 or later on every machine.
 running -- since every machine in a game must be playing the same rules.
 map, nextfloor and the limits in play are events at a step the server
 names: every machine, and anyone who joins later and replays, applies them
-at that same step.  One that lands while the players are in a floor's tally
-is lost (all of them lose it alike); say it again once the floor is on.
+at that same step -- in a floor's tally too (2026-10-14): map then picks the
+floor the tally leads to, and nextfloor has nothing to do.  A recording
+(--record) replays one floor, so it is cut where map or nextfloor ended it.
 
 Lines are read on a thread of their own and carried out by the server's own
 loop (Console.poll), between packets, so nothing here races the game.  With

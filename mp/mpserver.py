@@ -496,6 +496,12 @@ class Server:
             return
         per = 3 * self.players
         frames = min(n, (65535 - 4) // per)
+        # a recording replays one floor (TIMEDEMO MGEN, id's demo player):
+        # one the console ended (map, nextfloor) is cut where it ended
+        ends = [k for k, (e, a) in self.events.items() if e in (P.EV_MAP, P.EV_NEXTFLOOR)]
+        if ends and min(ends) < frames:
+            frames = min(ends)
+            self.log("the recording stops at step %d, where the console ended the floor" % frames)
         body = b"".join(self.history[:frames])
         demo = bytes([self.map]) + struct.pack("<H", 4 + per * frames) + b"\0" + body
         # P1's start's 4th byte: the skill + 1 (0 = id's demos' own, hard)

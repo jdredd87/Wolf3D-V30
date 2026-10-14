@@ -3111,6 +3111,18 @@ static int Tally (int over)
 			for (i=0;i<mpplayers;i++)
 				Presence (i,!Gone (row+3*i));
 			mpintally = 0;
+			switch (mpevent[(unsigned)mpplayed & (RING-1)])	// the server's console
+			{								// during the tally (2026-10-14): every
+			case 2:							// machine plays these steps too.  map
+				mpgoto = mpeventarg[(unsigned)mpplayed & (RING-1)];	// picks the
+				break;						// coming floor, the limits take
+			case 4:							// effect, and nextfloor needs nothing:
+				mptimelimit = mpeventarg[(unsigned)mpplayed & (RING-1)];	// the
+				break;						// next floor is coming anyway
+			case 5:
+				mpfraglimit = mpeventarg[(unsigned)mpplayed & (RING-1)];
+				break;
+			}
 			if (++steps >= TALLYMAX)
 				done = 1;
 			if (steps >= TALLYMIN)
