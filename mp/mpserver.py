@@ -267,7 +267,7 @@ class Server:
                 if i is None:
                     return
             self.send(P.welcome(i, self.players, self.map, self.skill, self.rules,
-                                self.frags, self.minutes), addr)
+                                self.frags, self.minutes, len(self.history)), addr)
             self.send(self.start_packet(), addr)
             return
         if i is None:

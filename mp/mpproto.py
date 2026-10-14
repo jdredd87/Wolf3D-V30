@@ -49,8 +49,11 @@ def un_hello(b):
     return name, build, want
 
 
-def welcome(slot, players, mapnum, skill, rules, frags=0, minutes=0):
-    return head(WELCOME) + struct.pack("<6BHH", slot, players, mapnum, skill, rules, 0, frags, minutes)
+def welcome(slot, players, mapnum, skill, rules, frags=0, minutes=0, joinstep=0):
+    """joinstep (2026-10-14): the step the machine joins at -- its slot's
+    presence before it belonged to whoever held the slot then"""
+    return head(WELCOME) + struct.pack("<6BHHI", slot, players, mapnum, skill, rules, 0, frags, minutes,
+                                       joinstep)
 
 
 def un_welcome(b):

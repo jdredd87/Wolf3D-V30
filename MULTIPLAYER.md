@@ -1532,3 +1532,32 @@ IRQ 5 and DMA jumpers came off -- CLAUDE.md in DOS Bridge has it).  Twenty
 minutes of deathmatch with the 486 and a bot, 10-minute floors: **21,000
 steps on both, no desync, no drop**; both at 17.4 pictures a second at
 `VIEW 19`, the step rate itself, so neither is the limit.
+
+**The second night, three machines on PicoMEM 2s -- 2026-10-14.**  The 486,
+P3 (the V30's old PicoMEM 2, onboard Yamaha) and the V30 (a PicoMEM 2 newly
+flashed to BIOS 2026-09-27, its Sound Blaster on), a bot, 60-minute floors,
+the hunting test build.  (The first start quit itself after five minutes:
+the test build answers Y at the 5th ESC unless built `--quit 600`.)
+
+* **The 486 and P3: 514,740 steps, nine floors, no desync**, 16.2 pictures
+  a second each; least free 1,136 and 928 bytes, page cache 29 to 32 and 27
+  to 30 -- `DOS=HIGH` gave the 486 twice the cache it had the night before.
+* **The V30 locked up at 1 h 30 min** (step 94,530), and stopped dead --
+  the watchdog's block frozen on screen, so the clock tick itself had
+  stopped.  Its report (`stage/hang-192.168.50.66.log`, `mp/hangtrace.py`):
+  inside DOS, in a disk read (the disk BIOS at 0070:07A1), the PicoMEM card
+  being the disk -- the card never answered.  The night before, on the old
+  firmware, it ran eight hours.  Then, with nothing else on the network:
+  300 reads of `VSWAP.WL6` through the card (450 MB, 20 minutes, a steady
+  40.6 s per ten) and the whole demo loop fifteen times (4 h 20 min of page
+  loads, sound and the timer together) -- **both clean**.  So far it has
+  only happened in a networked game; once is not yet a pattern.
+* **Rejoining it found a bug of ours**: back in the game, the V30 took slot
+  3 again -- the slot its hung session had held -- and while catching up it
+  replayed that session's presence and then its drop, and took the drop for
+  its own ("the server stopped hearing this machine"), at replayed step
+  95,600 of 111,000.  **Fixed**: WELCOME carries the step a machine joined
+  at, and the game ignores its slot's comings and goings before it.  Proved
+  live (`stage/logs/rejoin.py`): the 486 kicked at step 1,168, back into the
+  same slot at 1,830, caught up through its own earlier session and the
+  kick, and stayed in to the end -- 3,901 steps, no desync.  mpsweep 20/20.

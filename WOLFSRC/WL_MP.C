@@ -858,6 +858,11 @@ state changes; the next floor puts the world right.
 int		far	mpintally;			// the tally: presence noted, the world waits
 int		far	mplocalin;			// this machine's player has been in the game
 int		far	mpdropped;			// ... and the server has let it go
+extern long far mpplayed;		// (below: the highest step played)
+long	far	mpjoinstep;			// the step this machine joined at (WELCOME,
+									// 2026-10-14): its slot's comings and goings
+									// before it were someone else's -- a rejoin
+									// replays its own earlier, dropped session
 
 static byte far chatlast[MAXPLAYERS];	// each slot's last chat message's number
 static byte far mpseen[MAXPLAYERS];		// a step has had this slot in the game
@@ -906,7 +911,7 @@ static void Presence (int i, int present)
 		mpseen[i] = 1;
 	if (present == !c->absent)
 		return;
-	if (i == mplocal)
+	if (i == mplocal && mpplayed >= mpjoinstep)
 	{
 		if (present)
 			mplocalin = 1;
@@ -1566,6 +1571,7 @@ static void Take (byte far *d, unsigned len)
 				mpfraglimit = d[10] | (d[11] << 8);
 				mptimelimit = d[12] | (d[13] << 8);
 			}
+			mpjoinstep = len >= 18 ? (long)GetL (d+14) : 0;
 		}
 		break;
 	case 3:							// START
