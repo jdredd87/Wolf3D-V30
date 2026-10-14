@@ -100,7 +100,14 @@ and walks in.
 game itself -- no positions, no health, no map -- only every player's
 controls, 17.5 times a second: a *step*.  Each machine plays the steps for
 itself, and because Wolfenstein does exactly the same thing with the same
-controls, every machine arrives at the same game.  So a machine that joins
+controls, every machine arrives at the same game.  That property has a name
+-- the game is **deterministic**: the same start and the same inputs always
+give exactly the same result, on any machine; its own attract-mode demos
+are nothing but recorded key presses, played into the real game.  What it
+takes to keep a network game that way, what broke it and how every machine
+is checked, is in
+[MULTIPLAYER.md, "How it works"](https://github.com/jdredd87/Wolf3D-V30/blob/multiplayer/MULTIPLAYER.md#how-it-works-one-game-worked-out-on-every-machine).
+So a machine that joins
 late, or that missed steps, cannot be *told* where everyone is: it has to
 *play* there.  It plays every step since the first one, as fast as it can,
 without drawing a picture or making a sound, and the box counts the steps
