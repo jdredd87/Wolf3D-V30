@@ -1351,3 +1351,10 @@ by the server, which kicked this machine / the reason: testing the kick".
 The first pause banner was drawn once and the bot's scoreboard drew over
 it; it is redrawn every second now (proved again, `livepause.py`).
 mpsweep 20/20 against the accepted run after each build.
+
+**P3 on a PicoMEM 2 -- 2026-10-13, late.**  The V30's PicoMEM 2 went into
+P3 (its WiFi in place of the D-Link, onboard Yamaha sound once the card's
+IRQ 5 and DMA jumpers came off -- CLAUDE.md in DOS Bridge has it).  Twenty
+minutes of deathmatch with the 486 and a bot, 10-minute floors: **21,000
+steps on both, no desync, no drop**; both at 17.4 pictures a second at
+`VIEW 19`, the step rate itself, so neither is the limit.
