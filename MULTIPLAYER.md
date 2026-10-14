@@ -20,6 +20,180 @@ the summary comes first.
 
 Hosting and joining are in [README.md](README.md), "Multiplayer".
 
+## How it works: one game, worked out on every machine
+
+This is the idea everything else in this file rests on, written for someone
+who has never met it (StevenC asked, 2026-10-14: "what does it mean,
+deterministic -- describe this in great detail").
+
+### Deterministic: the same start and the same inputs, the same result
+
+A program is **deterministic** when, given the same starting point and the
+same inputs, it always produces exactly the same result -- not roughly the
+same, *exactly* the same, every time, on any machine.  Nothing is left to
+chance, to the clock, or to how fast the computer happens to be.
+
+Wolfenstein 3-D is like that.  Start a floor and press exactly the same
+keys at exactly the same moments, and everything happens identically: every
+guard walks the same path, every door opens on the same tick, every shot
+hits or misses the same way, the score comes out the same, to the last
+point.  The game proves it itself: **its attract-mode demos are not
+films.**  A demo file holds nothing but key presses -- which buttons were
+down, how far the player turned and moved, tic by tic -- and the game plays
+those presses into the real game engine.  The guards, the doors, the deaths
+are worked out afresh every time it plays, and they come out the same every
+time.  (This repository leans on that too: `ab.py` checks every change to
+the renderer by playing id's four demos and comparing the pictures, frame
+by frame, with id's own code.)
+
+Even the game's "random" numbers are not random.  id's `US_RndT` hands out
+the next byte of a fixed table of 256; only *where in the table it starts*
+can vary.  For a demo it always starts at the same place, so a guard's
+"random" decision to shoot, or a "random" miss, comes out the same on every
+playing.
+
+### What that buys a network game
+
+Because of that, the network never has to send *the game* -- where everyone
+is, how much health they have, which doors are open, which guard is
+chasing whom.  It only sends **what every player pressed**, and every
+machine works the game out for itself, exactly as it would play a demo.
+Four machines given the same presses in the same order arrive at the same
+game, step for step, without ever comparing notes.
+
+That is called **lockstep**, and it is how DOOM's network game worked too.
+It is also why the traffic is tiny: a player's presses for one step are
+three bytes, so four players come to 12 bytes a step -- about 210 bytes a
+second of game, however much is happening on screen.
+
+### A step
+
+The game's clock runs at 70 ticks a second, and id's demos record one
+entry every 4 ticks (`DEMOTICS`).  The network game does the same: **a step
+is 4 ticks, 57 milliseconds, 17.5 steps a second.**  For every step, each
+player's machine sends three bytes -- the buttons held (fire, use, run,
+strafe ...), how far it turned, how far it moved -- and the server packs
+every player's three bytes into one row: that row is the step.  An empty
+slot's three bytes are `0, -128, -128`, which no real controls can be, so a
+player arriving or leaving is part of the steps too, and every machine sees
+it happen at the same step.
+
+### The server keeps the clock and knows nothing of the game
+
+`mp/mpserver.py` never runs Wolfenstein.  It does not know where anyone
+is.  Seventeen and a half times a second it takes the newest presses it has
+from each player (or the last ones, if a player's packet is late), makes
+the next step, numbers it, keeps it, and sends it to everyone.  It never
+waits for a slow machine: the steps go out on time, and each machine plays
+them as fast as it can.  The server's bots are only more rows of presses --
+it makes them up, and every machine plays them exactly as it plays a
+person.
+
+### Each machine plays every step
+
+A machine plays the steps strictly in order -- step 1, step 2, step 3 ...
+-- feeding each player's presses into id's own movement, shooting and
+enemy code, then draws a picture of whatever its own player can see.  A
+fast machine draws a picture for every step; a slow one plays several steps
+and then draws once.  The V30 at its lowest detail draws three to nine
+pictures a second while the 486 draws seventeen -- but **both play every
+one of the 17.5 steps**, so both are in the same game.  What a machine
+shows is its own business; what happens is everyone's.
+
+That is why each machine can choose its own picture without anyone noticing:
+the V30 plays at `LOWEST VIEW 10`, the 486 and the Pentium II at full
+detail `VIEW 19`, one has a Sound Blaster and another only an AdLib -- and
+they are still in the same game.  **The picture, the window size, the
+detail switches and the sound are allowed to differ, because none of them
+may change what happens.**  Making sure of that took work.
+
+### What could break it -- and what did
+
+Anything that is not the same on every machine pulls the games apart: the
+machines start making different decisions, and from then on they are
+playing different games while each thinks it is playing the right one.
+That is a **desync**.  These are the real ones this project found and
+fixed, every one of them something id never needed to care about, because
+id's game only ever ran on one machine at a time:
+
+* **Random numbers seeded from the clock.**  `SetupGameLevel` starts the
+  random table at a place taken from the time of day -- unless a demo is
+  playing.  Two machines starting the same floor a second apart began with
+  different "random" numbers.  The network game seeds them as a demo does.
+* **The renderer deciding the game.**  id's renderer, while drawing the
+  one player's view, also picked up the items that player walked over,
+  woke the enemies that player could see, and decided whether that
+  player's shots hit -- from what had just been drawn.  The other machines
+  never draw your view, so they would have disagreed about all three.  In
+  the network game pickups happen where each player stands, nothing is
+  woken by a screen, and a shot is a sum -- the same cone of about 8
+  degrees id's screen test made, worked out from the shooter's position and
+  angle, for any window size.  (Bonus: that is exactly what lets every
+  machine pick its own window and detail.)
+* **Sound reaching the game.**  id's status-bar face skips its random
+  numbers while the gatling-gun pickup sound is playing -- and how long a
+  sound plays depends on the machine's sound card and speed.  So a sound
+  could shift the random table, and with it every later decision.  The face
+  now has random numbers of its own.  Likewise **five bosses' deaths last
+  longer with digitized sound** (they wait for the scream to finish); with
+  different sound cards the machines would have parted on any boss floor,
+  so in the network game every machine takes the longer one (`MPDIGI`).
+* **The recording's skill.**  A recorded game has to carry its skill level,
+  or a replay plays at id's demo skill and parts from the original at
+  once.
+* **A shortcut that looked harmless.**  Skipping the save of a value that
+  "could not have changed" (an enemy's target, while it was aiming) made
+  the sums differ by step 100 on one demo: some other code did change it.
+  Taken out again; the checksums are what caught it.
+
+### Checking: the checksum every 50 steps
+
+Nobody has to take it on trust.  Every 50 steps each machine adds up the
+state of its game into one 32-bit number, a **checksum**: for every actor
+-- each player, each enemy, each moving thing -- its position, angle,
+health, state, timer, flags and direction; every item lying on the floor;
+every door's position; and every player's health, ammo, keys, weapon,
+score, deaths and frags.  If anything at all differs between two machines,
+the two numbers differ.
+
+The machine sends its number to the server in a `SYNC` packet.  The first
+machine to report a step sets that step's number; any machine reporting a
+different one is told `DESYNC`, with the step -- and says so in its report
+at the end ("DESYNC reported" instead of "no desync").  A machine that
+joined late is checked against the numbers the others reported live, so
+catching up wrong is caught too.  (The sum is only made on the 50th steps,
+not every step: adding up 32-bit numbers is slow on an 8086, and every
+step it would have cost the V30 most of its time.)
+
+### Proving it before it goes on the network
+
+`mp/mpsweep.py` plays twenty recorded games -- two and four players, on
+each of episode 1's ten floors -- with no network at all
+(`WOLF3DM TIMEDEMO MGEN n LOCAL k`), from every player's eyes in turn, and
+compares the checksums.  They must all agree: P1's machine, P2's, P3's and
+P4's view of the same game must be the same game.  Every change to the
+network game is checked that way against the last accepted run ("20 of 20
+demos agree") before it goes near a live game; the V30 and the 486 have
+both run the sweep, and give the same numbers.  In live games the V30, the
+486 and the Pentium II -- from an 8 MHz 8086-class chip to a 32-bit
+Pentium -- agree to the bit.  And the long live runs end with every
+machine's report saying
+"no desync": eight hours, three machines and a bot, 518,791 steps, the
+same game on all three to the last one.
+
+### Catching up, which only works because of all this
+
+Because only presses travel, a machine that joins a game already running
+cannot be told where everyone is.  It has to *play* there: it takes every
+step from the first, plays them as fast as it can without drawing or
+sounding, and so arrives in exactly the game the others are in -- the box
+says "Catching up: N steps to go" while it does.  A 486 or the Pentium II
+replays 1,500 to 12,000 steps a second (an hour of play in under a minute);
+the V30 70 to 180, so an hour-old game takes it six to fifteen minutes.  A
+machine that misses steps -- a WiFi dropout, a floor loading slowly -- does
+the same thing for the few it missed.  None of it would work if the game
+were not deterministic: the replayed game would simply be a different one.
+
 ## Where it stands
 
 **Phase 1 -- up to four players in one game, no network -- works.**
