@@ -38,8 +38,15 @@ is lost (all of them lose it alike); say it again once the floor is on.
 Lines are read on a thread of their own and carried out by the server's own
 loop (Console.poll), between packets, so nothing here races the game.  With
 no console -- input from a pipe that ends, or none -- it simply does nothing.
+
+The same commands come from anywhere on this PC through the control port
+(2026-10-14): 127.0.0.1:31999 unless --control says otherwise (0: none), a
+command a datagram, the console's answer sent back -- `python mp/mpctl.py
+say hello`.  So a server started in the background, with no window to type
+in, can still be run.  Loopback only.
 """
 import queue
+import socket
 import sys
 import threading
 import time
@@ -55,8 +62,25 @@ class Console:
         self.lines = queue.Queue()
         self.pending = {}               # "next" settings, for the next game
         self.banned = set()
+        self.ctl = None                 # the control port's socket
+        self.answer = None              # a control command's answer, being gathered
 
     # ---- input, on its own thread
+
+    def control(self, port):
+        """Listen for console lines on 127.0.0.1:port."""
+        if not port:
+            return
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.bind(("127.0.0.1", port))
+        except OSError as e:              # another server has it: carry on without
+            self.say("no control port %d (%s) -- the console window only" % (port, e))
+            s.close()
+            return
+        s.setblocking(False)
+        self.ctl = s
+        self.say("control port 127.0.0.1:%d -- python mp/mpctl.py COMMAND" % port)
 
     def start(self, stream=None):
         stream = stream or sys.stdin
@@ -75,7 +99,24 @@ class Console:
     # ---- the server's loop calls these
 
     def poll(self):
-        """Carry out whatever has been typed.  Returns False on quit."""
+        """Carry out whatever has been typed, or sent to the control port.
+        Returns False on quit."""
+        while self.ctl is not None:
+            try:
+                data, addr = self.ctl.recvfrom(1024)
+            except (BlockingIOError, ConnectionResetError, OSError):
+                break
+            line = data.decode("latin-1", "replace").strip()
+            self.answer = []
+            go = self.do(line) if line else True
+            reply = "\n".join(self.answer) or "(done)"
+            self.answer = None
+            try:
+                self.ctl.sendto(reply.encode("latin-1", "replace")[:8000], addr)
+            except OSError:
+                pass
+            if not go:
+                return False
         while True:
             try:
                 line = self.lines.get_nowait()
@@ -131,6 +172,8 @@ class Console:
 
     def say(self, text):
         print("[console] " + text, flush=True)
+        if self.answer is not None:     # a control command's: send it back too
+            self.answer.append(text)
 
     def settings(self):
         s = self.s
@@ -167,6 +210,8 @@ class Console:
         try:
             if cmd in ("help", "?"):
                 print(HELP, flush=True)
+                if self.answer is not None:
+                    self.answer.append(HELP)
             elif cmd in ("status", "players", "st"):
                 self.status()
             elif cmd == "kick":

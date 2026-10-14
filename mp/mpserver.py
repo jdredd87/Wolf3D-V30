@@ -5,6 +5,7 @@
                           [--fraglimit N] [--timelimit MIN] [--itemrespawn SECS]
                           [--port 31992] [--bind 0.0.0.0] [--steps N] [--once]
                           [--drop-after 60] [--record M50.DEM] [--drop 0.0] [--quiet]
+                          [--control 31999]
 
 It keeps the clock and passes controls along; it knows nothing of the game.
 MULTIPLAYER.md, "Protocol, version 1", is what it speaks.
@@ -132,6 +133,7 @@ class Server:
         self.desyncs = 0
         self.said = 0               # the console's say: its messages' number
         self.console = mpconsole.Console(self, P, RULE_DM, RULE_NOFF, RULE_NOENEMIES)
+        self.console.control(arg("--control", 31999, int))     # loopback only
         self.reset()
 
     def new_bot(self, k):
