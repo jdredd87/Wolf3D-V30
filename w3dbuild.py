@@ -7,6 +7,8 @@ DOS programs.
 
     python w3dbuild.py bcpp          ship Borland C++ 3.1 (the subset we need) to the 486
     python w3dbuild.py build         ship WOLFSRC, build on the 486, pull WOLF3DV.EXE + .MAP back
+    python w3dbuild.py build8086     the same for a plain 8086/8088: to8086.py's copy of WOLFSRC,
+                                     built in C:\\W3D8, back as WOLFSRC\\WOLF3D8.EXE + .MAP
     python w3dbuild.py deploy        put WOLFSRC\\WOLF3DV.EXE into the V30's C:\\WOLF3D, with the
                                      switches menu (PLAY.BAT and W3MENU.EXE, built here)
                                      and the demo reel (SHOWCASE.BAT)
@@ -19,6 +21,7 @@ path it has on the V30).  The V30 only ever receives WOLF3DV.EXE, beside the
 game data in C:\\WOLF3D; nothing of id's there is touched.
 """
 import os
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -168,6 +171,23 @@ def build_launcher():
     return os.path.join(out, "w3menu.exe")
 
 
+def cmd_build8086():
+    """The plain 8086/8088 build (2026-10-14): to8086.py writes an 8086 copy of
+    WOLFSRC into stage/src8086, the 486 builds it in C:\\W3D8, and the EXE comes
+    back as WOLFSRC\\WOLF3D8.EXE -- WOLFSRC and C:\\W3D are not touched."""
+    global SRC, REMOTE
+    src8 = os.path.join(STAGE, "src8086")
+    r = subprocess.run([sys.executable, os.path.join(HERE, "to8086.py"), SRC, src8])
+    if r.returncode:
+        sys.exit("to8086.py failed")
+    home = SRC
+    SRC, REMOTE = src8, REMOTE + "8"
+    cmd_build()
+    for ext in ("EXE", "MAP"):
+        shutil.copyfile(os.path.join(SRC, "WOLF3DV." + ext), os.path.join(home, "WOLF3D8." + ext))
+    print("built:", os.path.join(home, "WOLF3D8.EXE"), "(the 8086 build)")
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -175,6 +195,8 @@ def main():
         cmd_bcpp()
     elif cmd == "build":
         cmd_build()
+    elif cmd == "build8086":
+        cmd_build8086()
     elif cmd == "deploy":
         cmd_deploy()
     elif cmd == "listings":

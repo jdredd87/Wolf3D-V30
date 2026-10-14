@@ -40,6 +40,7 @@ build and run programs on a real DOS machine as if it were a test suite.
 | program | branch | what it is |
 |---|---|---|
 | `WOLF3DV.EXE` | `v30-8086` (default) | **id's game exactly**, as fast as it goes.  The default picture is id's, pixel for pixel; every speed-for-picture trade is a switch you turn on |
+| `WOLF3D8.EXE` | `v30-8086` | **the same, for a plain 8086/8088**: `WOLF3DV` with every 186 instruction spelled the 8086 way, built by `w3dbuild.py build8086` -- below |
 | `WOLF3DB.EXE` | `bsp` | **the BSP version**: allowed to change the game a little for speed -- far walls drawn in less detail by default, or the whole world from a BSP tree instead of id's rays (`BSP`) -- [BSPNOTES.md](https://github.com/jdredd87/Wolf3D-V30/blob/bsp/BSPNOTES.md) on that branch |
 | `WOLF3DM.EXE` | `multiplayer` | **the network game**: everything `WOLF3DV` is, plus up to four players over UDP -- [MULTIPLAYER.md](https://github.com/jdredd87/Wolf3D-V30/blob/multiplayer/MULTIPLAYER.md) on that branch |
 
@@ -60,10 +61,21 @@ It needs a **NEC V20/V30, an 80186, or anything from a 286 up**, a VGA,
 MS-DOS, and id's registered **1.4 WL6 data** (not included, and never will
 be).  id's own `WOLF3D.EXE` refuses an 8086-class machine outright; this one
 lets the V20/V30 and the 186 in, because the game only ever needed the 80186
-instruction set.  **A plain Intel 8086 or 8088 is still refused**: the code
-uses 186 instructions throughout, and those crash an 8088 rather than fail
-politely.  A separate 8086 build is possible -- about 240 instructions to
-rewrite -- but does not exist yet.
+instruction set.  **`WOLF3DV` refuses a plain Intel 8086 or 8088**: the
+code uses 186 instructions throughout, and those crash an 8088 rather than
+fail politely.
+
+**`WOLF3D8.EXE` is the same game for a plain 8086 or 8088** (2026-10-14).
+`to8086.py` writes a copy of the source with every 186 instruction spelled
+the 8086 way -- 100 multi-bit shifts as single ones, `PUSHA`/`POPA`, one
+three-operand `IMUL`, one `REP OUTSB` -- the C compiler told to emit 8086
+code, and the CPU check opened; `python w3dbuild.py build8086` builds it.
+It draws id's picture exactly (`ab.py --full`, on the 486 and the Pentium
+II), and TASM assembles every file in 8086 mode, so a 186 instruction left
+anywhere in the assembler would have been a build error.  On a V20/V30, a
+186 or anything newer, use `WOLF3DV`: it uses the instructions those CPUs
+have.  Nobody here has an 8088 to run it on: if you have one, we would like
+to hear.
 
 ## Status
 
