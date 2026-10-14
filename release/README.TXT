@@ -4,18 +4,24 @@ Version 1.2, 2026-10-05
 
 id Software's Wolfenstein 3-D, rebuilt from id's released source to run
 as fast as an 8086, 8088, V20 or V30 PC allows -- and faster on anything
-better.  Three programs:
+better.  Four programs:
 
     WOLF3DV.EXE   id's game and id's picture exactly, from faster code:
                   every build is checked against id's renderer over the
                   attract-mode demos and generated demos on all sixty
-                  maps.  1.8 times id's speed on an NEC V30.
+                  maps.  1.8 times id's speed on an NEC V30.  Needs a
+                  V20/V30, an 80186/188, or a 286 or better.
+    WOLF3D8.EXE   the same game for a plain Intel 8086 or 8088, which
+                  WOLF3DV refuses: every 80186 instruction written the
+                  8086 way, id's picture exactly, the same switches.  On
+                  anything newer, use WOLF3DV.
     WOLF3DB.EXE   the faster version: far walls drawn in less detail,
                   near walls and every edge exact.  The BSP switch draws
                   the walls with a BSP tree, the way the SNES port did.
     WOLF3DO.EXE   id Software's own code -- id's renderer and game code,
-                  rebuilt for the 8086 (id's WOLF3D.EXE needs a 286) --
-                  for comparing speeds.  The same picture as WOLF3DV.
+                  rebuilt for the V20/V30 and 186 (id's WOLF3D.EXE needs
+                  a 286) -- for comparing speeds.  The same picture as
+                  WOLF3DV.
 
 On an NEC V30 (8086 class), demo 0 at full detail runs at 2.8 frames a
 second in id's code, 5.0 in WOLF3DV, 5.3 in WOLF3DB; the detail switches
@@ -35,7 +41,9 @@ WHAT YOU NEED
   *.WL6 files (VSWAP.WL6, VGAGRAPH.WL6, AUDIOT.WL6, GAMEMAPS.WL6 and the
   rest).  None of it is in this package; it is id's and you need your own.
   The shareware *.WL1 files will not work.
-* An 8086 or better, VGA, DOS.  A coprocessor is not used.
+* An 8086 or better, VGA, DOS.  A coprocessor is not used.  On a plain
+  Intel 8086 or 8088, run WOLF3D8; WOLF3DV, WOLF3DB and WOLF3DO need the
+  80186 instructions a V20/V30, a 186 or a 286 has.
 * The free conventional memory id's own game wants; any more than that
   becomes page cache, and fewer pauses.
 * XMS or EMS helps and is used if present (XMS first).
