@@ -3,6 +3,8 @@ stage/
 !WOLFSRC/OBJ/*.OBJ
 WOLFSRC/WOLF3DV.EXE
 WOLFSRC/WOLF3DV.MAP
+WOLFSRC/WOLF3D8.EXE
+WOLFSRC/WOLF3D8.MAP
 launcher/build/
 __pycache__/
 bsp/build/
