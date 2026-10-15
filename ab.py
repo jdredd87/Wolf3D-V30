@@ -16,8 +16,9 @@ tree).  CRC switches sound effects off, which is what makes a full run
 deterministic, so the 486 (dx486, ~2 minutes a run) gives the same numbers
 as the V30 (~25) and is the default box for it.
 
-Two BEEP ALERTs precede a V30 run, so whoever is at the machine knows the
-game is about to take the screen.
+--beep sounds two BEEP ALERTs first, so whoever is at the machine knows the
+game is about to take the screen.  Off unless asked for (StevenC, 2026-10:
+no alerts on the V30); it used to be on for every V30 run.
 """
 import os
 import re
@@ -56,6 +57,7 @@ def main():
     full = take(args, "--full", False, value=False)
     deploy = not take(args, "--no-deploy", False, value=False)
     box = take(args, "--box", "dx486" if full else "v30")
+    beep = take(args, "--beep", False, value=False)
     exes = [a.upper() for a in args]
     if not exes:
         sys.exit(__doc__)
@@ -65,7 +67,7 @@ def main():
             if "deployed" not in out:
                 sys.exit("deploy of %s failed:\n%s" % (e, out))
     cmds = ["CD C:\\WOLF3D"]
-    if box == "v30":
+    if beep:
         cmds = ["C:\\TOOLS\\BEEP.EXE ALERT", "C:\\TOOLS\\BEEP.EXE ALERT"] + cmds
 
     if full:
