@@ -104,6 +104,14 @@ python mp/mpserver.py --players 4 --mode dm --noenemies --itemrespawn 30
 python mp/mpserver.py --players 4 --bots 1 --mode coop --skill 2 --map 0
 ```
 
+**Or host on a DOS machine** (since 2026-10-15): `MPSRV.EXE` takes the same
+switches and the same console -- typed at its keyboard, or from any PC on
+its network with `python mp/mpctl.py --host ADDRESS status`.  It needs a
+packet driver and the machine's address in mTCP's config or
+`C:\AI\NET.CFG`, as the game does; XMS keeps a long game's history
+(without it, `MPSRV.HIS` on the disk).  Built for the plain 8086
+(`python mp/mkmpsrv.py`).  A DOS machine that serves cannot also play.
+
 `--mode coop|dm`, `--noenemies`, `--ff off`, `--fraglimit N`,
 `--timelimit MIN`, `--itemrespawn SECS`, `--bots N`, `--map N` (0-59),
 `--skill 0-3`.  The game starts when the first player has loaded the level;

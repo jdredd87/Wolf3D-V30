@@ -13,10 +13,10 @@ the summary comes first.
 | the game | `WOLF3DM.EXE`: id's Wolfenstein 3-D for up to **four players** -- **deathmatch or co-op**, each with or without enemies; DOOM's rules (no lives, respawn with SPACE, frags, items back after a time, one player's keys everyone's in co-op); BJ in four colours; chat (T), scores (TAB), ESC asks first |
 | the network | lockstep over UDP, port 31992: the server keeps the clock at 17.5 steps a second and passes controls along; every machine plays every step, so a V30 and a Pentium II play the same game.  Checksums every 50 steps catch any machine that differs |
 | joining | any time: a joiner replays the game so far at full speed and walks in when caught up ("Catching up: N steps to go" -- README.md says why it has to, and how long: a 486 or the Pentium II under a minute for an hour's game, the V30 six to fifteen); a leaver's slot is free at once.  A WiFi dropout of up to a minute is ridden out |
-| the server | `mp/mpserver.py` (Python), with **bots** and a **console**: status, scores, say, kick with a reason, ban, pause, map and next floor, the limits mid-game, the next game's settings -- "The server's console" below |
+| the server | `mp/mpserver.py` (Python), or **`MPSRV.EXE` on any DOS machine** (since 2026-10-15), each with **bots** and a **console**: status, scores, say, kick with a reason, ban, pause, map and next floor, the limits mid-game, the next game's settings -- "The server's console" below |
 | the machines | the NEC V30 (8 MHz; `LOWEST VIEW 10`, ~3-9 pictures a second), the 486 (66 MHz) and the Pentium II, all three with sound -- AdLib music and Sound Blaster effects |
 | proof | 20 generated 2- and 4-player demos give the same checksums from every player's eyes (`mp/mpsweep.py`); every change is run against the last accepted sweep.  **Eight hours, three machines and a bot, no desync** (2026-10-13); every deathmatch floor of all six episodes, and **every one of the sixty floors in co-op, with enemies, on all three machines, no desync** (2026-10-14, `stage/logs/stress.py`); single player still id's picture exactly |
-| not yet | the Free Pascal server for DOS (phase 5); a recording (`--record`) is one floor, so one the console ends early is cut where it ended |
+| not yet | a recording (`--record`) is one floor, so one the console ends early is cut where it ended |
 
 Hosting and joining are in [README.md](README.md), "Multiplayer".
 
@@ -1683,3 +1683,62 @@ clean hours of 2026-10-13 were on its old card and the 06-16 firmware.
 Until that is settled the V30 plays networked games with `NOAL`; the next
 step is the V30's card back on the 06-16 firmware, to see whether the
 AdLib is sound there (StevenC's call -- it has never been rolled back).
+
+## Phase 5: the server on DOS -- 2026-10-15
+
+**`MPSRV.EXE`** (`mp/mpsrv.pas`, `mp/srvnet.pas`; `python mp/mkmpsrv.py`)
+is `mp/mpserver.py` on a DOS machine, written in Free Pascal for the plain
+8086, and it runs on P3 -- StevenC's choice, the fastest of the three.  The
+same protocol, rules and behaviour as the Python server, which stays the
+reference: joining at any time and catching up, every machine's checksums
+compared step by step, bots, and the whole console -- typed at its keyboard,
+or sent over UDP 31999 from any machine on its subnet
+(`python mp/mpctl.py --host 192.168.1.30 status`, `mp/mpctl.py` grew
+`--host` for it).
+
+* **The network** is `mp/srvnet.pas`: the DOS Bridge's `net.pas` -- its
+  interrupt-time receiver byte for byte, its packet-driver calls, its
+  answering ARP for our own address -- made to serve many: it listens, takes
+  any datagram for our address, learns each player's MAC from its frames and
+  sends to any of them.  The bridge's own unit is not touched: `UGET` and
+  `UPUT` are built from it.
+* **The clock**: the PIT at 70 Hz while it serves, as the game's own is,
+  the BIOS's INT 8 still fed at 18.2; a step every 4 ticks, exactly the
+  game's.  Ctrl-C cannot leave it running (INT 23h is held), and every way
+  out puts the timer back.
+* **The history** -- every step of the game, for a machine joining late --
+  goes into XMS: 32 MB, 2.8 million steps, 44 hours of four players; the
+  newest 4,096 steps stay in memory too.  Without XMS, `MPSRV.HIS` on the
+  disk.
+* **A status line** on its screen moves with the clock (a spinner, the
+  step, how many are in, packets in and out, and what is being typed), so a
+  quiet server never looks hung.
+
+**What the first trials found: P3's PicoMEM WiFi garbles a frame sent
+hard on the heels of the last.**  Three fake players (`mp/mpfake.py`) on one
+PC against MPSRV on P3: the one in slot 2 got about 50 STEPS packets of
+800, and slot 3 got its copies -- slot 2's chat arrived at slot 3, twice.
+The server built every frame right (it counted them, and read back the
+port in each), the card refused none, and a ring of eight transmit buffers
+changed nothing; a 1 ms pause after each frame made it go away entirely.
+So the card's WiFi -- or the packet driver in front of it, `PM2000` 0.5-SC5,
+the faster rebuild P3 has from the V30's SD card -- loses or mangles a
+frame that follows another within about a millisecond.  On a PC the
+mangled ones fail their UDP checksum and are dropped; **the game's own
+stack does not check UDP checksums**, so the first real game on MPSRV took
+mangled STEPS for real rows and desynced (the V30 against the 486, 14
+times from 250 steps after a floor change).  MPSRV now pauses 1 ms after
+each frame (`--txgap`, microseconds, calibrated against its clock at
+start) and drops any datagram whose UDP checksum is wrong, as a PC would.
+Whether the driver or the card's firmware is to blame is still open: the
+original driver, `C:\DRIVERS\PM2000.ORG`, would answer it.
+
+**Proven on P3** after that: three fake players with 3% loss -- every
+row and every event the same for all three; and a real game, the 486 and
+a bot from the start and the V30 (`NOAL`) joining at step 5,730, catching
+up 7,040 steps in 52 s out of XMS, then the console from the PC -- status,
+say, scores, a pause, `nextfloor` with `map 1 3` and both limits during
+the tally, and a kick with its reason: **8,495 steps, 0 desyncs**, the
+card's 11,012 frames all sent.  The same script against `mpserver.py`:
+0 desyncs too.  Still to do: a long game on it, and every machine taking a
+turn as the server.
