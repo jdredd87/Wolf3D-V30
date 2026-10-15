@@ -222,6 +222,11 @@ python w3dbuild.py bcpp      once: ship the Borland C++ subset to the 486
 python w3dbuild.py all       build there, deploy WOLF3DV.EXE to the V30
 ```
 
+[PIPELINE.md](PIPELINE.md) draws the whole of it: the PC, the three DOS
+machines and what each one does, how a build is made, checked against id's
+picture, timed and deployed, how the branches feed each other, and the
+network game.
+
 ## This repository
 
 | | |
