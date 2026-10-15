@@ -22,10 +22,6 @@ Hosting and joining are in [README.md](README.md), "Multiplayer".
 
 ## How it works: one game, worked out on every machine
 
-This is the idea everything else in this file rests on, written for someone
-who has never met it (StevenC asked, 2026-10-14: "what does it mean,
-deterministic -- describe this in great detail").
-
 ### Deterministic: the same start and the same inputs, the same result
 
 A program is **deterministic** when, given the same starting point and the
