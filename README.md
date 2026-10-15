@@ -72,10 +72,12 @@ three-operand `IMUL`, one `REP OUTSB` -- the C compiler told to emit 8086
 code, and the CPU check opened; `python w3dbuild.py build8086` builds it.
 It draws id's picture exactly (`ab.py --full`, on the 486 and the Pentium
 II), and TASM assembles every file in 8086 mode, so a 186 instruction left
-anywhere in the assembler would have been a build error.  On a V20/V30, a
-186 or anything newer, use `WOLF3DV`: it uses the instructions those CPUs
-have.  Nobody here has an 8088 to run it on: if you have one, we would like
-to hear.
+anywhere in the assembler would have been a build error.  It costs little:
+on the V30, demo 0 plays in 738 ticks against `WOLF3DV`'s 722 from the same
+source -- **2.3% slower**, 4.90 frames a second against 5.01 (three rounds
+each, interleaved, `ab.py`; 2026-10-15).  On a V20/V30, a 186 or anything
+newer, use `WOLF3DV` all the same.  Nobody here has an 8088 to run it on: if
+you have one, we would like to hear.
 
 ## Status
 
