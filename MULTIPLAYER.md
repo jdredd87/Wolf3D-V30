@@ -1662,3 +1662,24 @@ The run ended at 02:25 on time: **504,380 steps in 8 h 0 min (17.50 a
 second), the 486 and P3 in it from first step to last, no desync, no drop,
 no packet dropped by the server**; both at 16.2 pictures a second at
 `VIEW 19`.  The V30 is left frozen for StevenC.
+
+**The V30 with `NOAL` -- 2026-10-15, 05:06 to 13:06: eight hours clean.**
+The same game as the night before (`stage/logs/long16.py`: deathmatch,
+60-minute floors, a bot, the hunting test build), the V30 power-cycled
+first and then exactly as it normally runs -- its page cache in EMS, its
+Sound Blaster on -- but with `NOAL`, id's own switch: no AdLib, the effects
+on the PC speaker, no music.  **503,905 steps, all three machines in from
+the first step to the last, no desync, nobody dropped, no packet dropped
+by the server**; the V30 played 503,903 of them (3.5 pictures a second at
+`LOWEST VIEW 10`), the 486 and P3 16.3 and 16.2.  **No freeze and no WiFi
+going deaf** -- the night before, with the AdLib on and everything else
+off, it froze once and went deaf three times in the same eight hours.
+
+So both of the V30's faults since 2026-10-13 go with **its PicoMEM 2's
+emulated AdLib**, on the 09-27 firmware that card has run since that day.
+The 486 and P3 have real OPL3 chips and never use a PicoMEM's AdLib, which
+is why the same firmware on P3's card never showed it.  The V30's eight
+clean hours of 2026-10-13 were on its old card and the 06-16 firmware.
+Until that is settled the V30 plays networked games with `NOAL`; the next
+step is the V30's card back on the 06-16 firmware, to see whether the
+AdLib is sound there (StevenC's call -- it has never been rolled back).
