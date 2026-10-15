@@ -1631,3 +1631,33 @@ so that is a matter of its own.  The 8-hour run tonight
 (`stage/logs/long15.py`) has the V30 on the same switches: if it holds,
 the V30's PicoMEM 2 on the 09-27 firmware does not stand EMS, the disk and
 the WiFi together, and the V30 plays networked games with `NOEMS NOXMS`.
+
+**The night of 2026-10-14/15: the V30's freeze is in the AdLib code.**  The
+8-hour run (`stage/logs/long15.py`; deathmatch, 60-minute floors, a bot)
+with the V30 on `NOSB NOEMS NOXMS`.  The 486 and P3 played it through with
+no desync and no drop.  The V30 dropped out four times:
+
+* **Three times its WiFi stopped receiving** (18:36, 21:36, 23:18) -- the
+  game's own report, pulled off the box afterwards: "ended by 60 s with
+  nothing from the server", no desync; the agent then failed 30 polls
+  ("no ARP reply" on its screen), `NETCHK` cold-booted it and it came back
+  by itself, 6 to 13 minutes on.  Sent back in by hand each time, it
+  caught up (up to 291,000 steps in an hour, 81 a second) and played on.
+  The same card's WiFi did this once in the morning too (07:08).  P3's
+  PicoMEM 2, the same model and firmware, has not.
+* **Once it froze** (00:36, catching up) -- the watchdog's corner block
+  stopped at CS:IP 3DB6:17FE, "where" 00, tick 3A, the tick no longer
+  moving: interrupts off, the machine stopped.  The game loads at 14CE on
+  the V30 (the overnight report), so that is **`SD_PlaySound`**
+  (id_sd.c:2155 in the test build) -- and what it does next, with
+  digitized sound off, is `SDL_ALPlaySound`: 22 writes to the AdLib's
+  registers **with interrupts off**.
+* So: the freezes came with EMS and without it, with the game's Sound
+  Blaster and without it, and the one caught red-handed was about to talk
+  to the AdLib.  **On the V30 the AdLib is the PicoMEM's emulation** --
+  the 486 has the AWE64's real OPL3, P3 the Yamaha's -- and since 10-13
+  that is a new PicoMEM 2 on the 09-27 firmware, the one machine where that
+  firmware's AdLib is used at all.  An I/O write the card does not finish
+  holds the ISA bus, and with interrupts off nothing else ever runs.  The
+  next test: the V30 with `NOAL` (effects on the PC speaker, no music) and
+  everything else as normal, EMS and Sound Blaster included.
