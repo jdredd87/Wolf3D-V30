@@ -1661,3 +1661,8 @@ no desync and no drop.  The V30 dropped out four times:
   holds the ISA bus, and with interrupts off nothing else ever runs.  The
   next test: the V30 with `NOAL` (effects on the PC speaker, no music) and
   everything else as normal, EMS and Sound Blaster included.
+
+The run ended at 02:25 on time: **504,380 steps in 8 h 0 min (17.50 a
+second), the 486 and P3 in it from first step to last, no desync, no drop,
+no packet dropped by the server**; both at 16.2 pictures a second at
+`VIEW 19`.  The V30 is left frozen for StevenC.
