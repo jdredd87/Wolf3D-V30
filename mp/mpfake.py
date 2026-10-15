@@ -59,6 +59,7 @@ class Fake:
         self.chats = []
         self.done = False
         self.stats = dict(steps_pkts=0, dup_rows=0)
+        self.ev = {}                # step -> (event, argument) from the packet that first gave its row
 
     def send(self, data):
         if self.rnd.random() < self.loss:
@@ -80,6 +81,7 @@ class Fake:
             self.loaded_at = time.perf_counter() + self.load
         elif kind == P.STEPS:
             first, players, rows = P.un_steps(b)
+            evs = {s: (e, a) for s, e, a in P.un_steps_events(b)}
             self.stats["steps_pkts"] += 1
             for i, r in enumerate(rows):
                 n = first + i
@@ -89,6 +91,8 @@ class Fake:
                 if n == 100 and self.corrupt == self.k:
                     r = bytes([r[0] ^ 1]) + r[1:]
                 self.rows[n] = r
+                if n in evs:        # as the game takes it: with the row's first delivery
+                    self.ev[n] = evs[n]
             while self.have + 1 in self.rows:
                 self.have += 1
             while self.synced + P.SYNC_EVERY <= self.have + 1:
@@ -155,6 +159,14 @@ def main():
               "desyncs %s, chat %s, %s" % (f.k + 1, f.slot, f.fps, f.have + 1, f.stats["steps_pkts"],
                                            f.stats["dup_rows"], f.desyncs, f.chats,
                                            "same steps as FAKE1" if same else "STEPS DIFFER"))
+    # the server's events (2026-10-15): the same ones, at the same steps, for everyone
+    ref_ev = sorted((n, e) for n, e in fakes[0].ev.items() if n < common)
+    for f in fakes:
+        mine_ev = sorted((n, e) for n, e in f.ev.items() if n < common)
+        if mine_ev != ref_ev:
+            ok = False
+        print("FAKE%d events: %s%s" % (f.k + 1, mine_ev or "none",
+                                       "" if mine_ev == ref_ev else "  -- NOT FAKE1's"))
     if "--out" in sys.argv:
         open(arg("--out", ""), "w").write("\n".join(r.hex() for r in ref) + "\n")
     print("%d common steps; %s" % (common, "all agree" if ok else "DISAGREE"))
