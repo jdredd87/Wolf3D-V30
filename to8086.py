@@ -34,7 +34,9 @@ gave id's own renderer's checksums over the whole attract loop on the 486
 and on the Pentium II (`ab.py --full`, 5,386 frames).  TASM assembled every
 file under P8086, and BCC without -1 refused the one 186 instruction this
 script first missed (VL_SetPalette's REP OUTSB) -- the two checks that stand
-in for the 8088 nobody here has.
+in for the 8088 nobody here has.  On the V30 (2026-10-15) it played demo 0
+in 738 ticks against WOLF3DV's 722 from the same source: 2.3% slower, and
+pixel-identical there too.
 """
 import os
 import re
