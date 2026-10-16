@@ -120,7 +120,8 @@ PLAYING
 
 PLAY's menu: a letter turns a switch on or off (D is FARBLOBS, O is
 FASTOPL, 4 is LOWWALLS4), T picks WOLF3DV or WOLF3DB, and for WOLF3DB
-K is BSP and L is NOLOD.  + and - pick the window size (0 leaves it to
+K is BSP and L is NOLOD.  On a plain 8086 or 8088 the menu runs
+WOLF3D8 by itself.  + and - pick the window size (0 leaves it to
 the game), P plays, B runs the benchmark, Q quits.  Quitting the game
 comes back to the menu.  It remembers your choices in W3MENU.CFG, and
 quits by itself after 30 seconds with no key (PLAY /T:60 changes that,

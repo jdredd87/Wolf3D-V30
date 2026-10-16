@@ -9,6 +9,8 @@
   exactly) or WOLF3DB, the faster one -- far walls in less detail -- whose
   own switches are BSP (K: the BSP tree finds the walls, not id's rays) and
   NOLOD (L: far walls at full detail).  Every other switch works with either.
+  On a plain Intel 8086 or 8088 (no 80186 instructions) the version is
+  WOLF3D8, when WOLF3D8.EXE is here: WOLF3DV and WOLF3DB refuse such a CPU.
   P (or Enter) writes W3RUN.BAT -- the version and the switches -- and exits
   0, and PLAY.BAT runs that and comes back here; B does the same for the
   200-frame benchmark; Q or Esc exits 1, which ends PLAY.BAT.  So nothing
@@ -22,6 +24,7 @@
                                  timeout start the game instead of quitting
     W3MENU /CPU                  print this PC's processor and coprocessor
                                  on one line, and exit (SHOWCASE.BAT's)
+    W3MENU /8086                 act as on an 8086 or 8088 (to test that)
 
   No Crt (it would take over the screen and stdout): text goes through
   DOS, keys come from the BIOS (INT 16h), the time from the BIOS tick.
@@ -54,6 +57,8 @@ var
   SwOn: array[1..NSW] of Boolean;
   ViewSz: Integer;            { 4..19, or 0: the game's own setting }
   HaveBsp: Boolean;           { WOLF3DB.EXE is here }
+  Plain8086: Boolean;         { an 8086/8088, and WOLF3D8.EXE is here }
+  Force8086: Boolean;         { /8086 }
   UseBsp: Boolean;            { T: run it rather than WOLF3DV }
   BspTree: Boolean;           { K: BSP, the tree rather than id's rays }
   BspNoLod: Boolean;          { L: NOLOD, far walls at full detail }
@@ -98,7 +103,8 @@ end;
 
 function Prog: string;
 begin
-  if UseBsp and HaveBsp then Prog := 'WOLF3DB' else Prog := 'WOLF3DV';
+  if Plain8086 then Prog := 'WOLF3D8'
+  else if UseBsp and HaveBsp then Prog := 'WOLF3DB' else Prog := 'WOLF3DV';
 end;
 
 function Args: string;
@@ -125,7 +131,10 @@ begin
   UseBsp := False;
   BspTree := False;
   BspNoLod := False;
-  HaveBsp := FSearch('WOLF3DB.EXE', '') <> '';
+  { WOLF3DV and WOLF3DB need the 80186 instructions; WOLF3D8 is the plain
+    8086's build of the same game (2026-10-16) }
+  Plain8086 := (Force8086 or not Has186) and (FSearch('WOLF3D8.EXE', '') <> '');
+  HaveBsp := (FSearch('WOLF3DB.EXE', '') <> '') and not Plain8086;
   Assign(f, CfgName);
   {$I-} Reset(f); {$I+}
   if IOResult <> 0 then Exit;
@@ -201,7 +210,9 @@ begin
     if SwOn[i] then Write('X') else Write(' ');
     WriteLn('] ', Pad(SwName[i], 10), '  ', SwText[i]);
   end;
-  if HaveBsp then
+  if Plain8086 then
+    WriteLn('       version:   WOLF3D8, for this 8086/8088: id''s picture exactly')
+  else if HaveBsp then
   begin
     Write('    T  version:   ');
     if UseBsp then
@@ -318,6 +329,7 @@ var i, code, v: Integer; s: string;
 begin
   Timeout := 30;
   TimeoutPlays := False;
+  Force8086 := False;
   for i := 1 to ParamCount do
   begin
     s := ParamStr(i);
@@ -332,7 +344,9 @@ begin
       Halt(0);
     end
     else if (UpCase(s[2]) = 'P') then
-      TimeoutPlays := True;
+      TimeoutPlays := True
+    else if s[2] = '8' then
+      Force8086 := True;
   end;
 end;
 
