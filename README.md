@@ -92,6 +92,8 @@ you have one, we would like to hear.
 
 ## Multiplayer
 
+**Setting it up:** [SETUP.md](https://github.com/jdredd87/Wolf3D-V30/blob/multiplayer/SETUP.md) walks through it step by step -- each DOS machine onto the network, the game, a server on DOS, Windows or Python, joining, and what to do when something doesn't work.  The download has it as `SETUP.TXT`.
+
 On the `multiplayer` branch (`WOLF3DM.EXE`); the download is `W3DMP.ZIP` on
 the [releases page](https://github.com/jdredd87/Wolf3D-V30/releases).  One
 machine runs the server; every player runs the game and joins it.  Machines
