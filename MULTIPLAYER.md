@@ -1771,3 +1771,33 @@ the start, a bot, the V30 (`NOAL`) joining at step 5,300-odd and catching up
 7,612 steps in 76 s, then pause, `nextfloor` with `map 1 3` and both limits
 in the tally, and a kick -- **9,185 steps, 0 desyncs**, the 486 and P3 at
 17.0 pictures a second, 21,493 frames sent and none lost.
+
+**Every machine a turn as the server -- 2026-10-16** (StevenC: "can we try
+the 486 as the server? then the 8086 as the server? ... run the tests with
+all the systems and a bot or bots as needed").  `stage/logs/livesrv2.py`:
+MPSRV on one DOS machine, the other two playing -- one from the start, one
+joining after step 5,300 so its catching up comes out of the server's XMS --
+the four slots filled with bots, then the console from this PC: say,
+scores, a pause, `nextfloor` with `map 1 3` and both limits in the tally,
+and a kick of the late machine.
+
+| server | players | steps | desyncs | frames dropped coming in |
+|---|---|---|---|---|
+| P3 (Pentium II) | 486, V30 late, 1 bot | 8,495 (and 8 hours: 504,246) | 0 | 0 (7 in 8 h) |
+| 486 | P3, V30 late, 1 bot | 8,501 | 0 | 1 |
+| 486 | P3, V30 late, 2 bots | 9,029 | 0 | 0 |
+| V30 | 486, P3 late, 2 bots | 7,603 | 0 | 518 |
+| V30, flushing its log once a second, 16-slot ring | 486, P3 late, 2 bots | 7,597 | 0 | 205 |
+| this PC (`MPSRVW`) | 486, P3, V30 late, 1 bot | 9,185 | 0 | 0 |
+
+The 8 MHz V30 serves a full game at the step rate -- 17.5 a second -- and
+catches a fast machine up out of XMS that is itself served from its
+PicoMEM's EMS (P3: 5,800 steps in under a second).  What it cannot quite do
+is empty the packet driver's receive ring as fast as two players fill it:
+the 486 sends its controls at its own frame rate, 17 times a second.  Its
+first run dropped 518 frames; half of that was MPSRV writing `MPSRV.LOG` to
+the disk after every line -- the V30's disk is its PicoMEM's, and slow -- so
+the log now goes to the disk once a second, and the ring has 16 slots (8 of
+the transmit ring's buffers gave the room: they were never the cure).  205
+then, and it costs nothing: a lost INPUT is replaced by the next, which
+comes a step later.

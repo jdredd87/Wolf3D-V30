@@ -163,7 +163,8 @@ var
   Replying: Boolean;
   StopNow: Boolean;
   LogF: Text;
-  LogOpen: Boolean;
+  LogOpen, LogDirty: Boolean;
+  LastFlush: LongInt;
   LastSpin: LongInt;
   StatusText: ShortString;
 
@@ -362,12 +363,25 @@ begin
   if LogOpen then
   begin
     WriteLn(LogF, L);
-    Flush(LogF);
+    LogDirty := True;              { written out by LogTick, once a second }
   end;
   if Quiet then Exit;
   ClearStatus;
   WriteLn(L);
   LastSpin := -1;
+end;
+
+{ MPSRV.LOG to the disk at most once a second (2026-10-16): a flush on every
+  line cost the V30 -- whose disk is its PicoMEM's -- long enough that the
+  frames arriving meanwhile overflowed the receive ring (518 in a run) }
+procedure LogTick;
+begin
+  if LogOpen and LogDirty and (Ticks - LastFlush >= T_SEC) then
+  begin
+    Flush(LogF);
+    LogDirty := False;
+    LastFlush := Ticks;
+  end;
 end;
 
 { the console's own lines: to the screen, and back to a remote console }
@@ -379,7 +393,7 @@ begin
   if LogOpen then
   begin
     WriteLn(LogF, '[console] ', S);
-    Flush(LogF);
+    LogDirty := True;
   end;
   if Replying then
     for I := 1 to Length(S) + 1 do
@@ -2149,6 +2163,7 @@ begin
       if StopNow then Break;
     end;
     ShowStatus(False);
+    LogTick;
     if not Busy and not StopNow then SnWait(1);   { Windows: a millisecond's sleep; DOS: nothing }
   until StopNow;
 

@@ -26,7 +26,7 @@ interface
 
 const
   SN_MAXPKT  = 1520;
-  SN_SLOTS   = 8;                { the receive ring: a power of two }
+  SN_SLOTS   = 16;               { the receive ring: a power of two (8 until 2026-10-16) }
   SN_SLOTSZ  = 2048;
   OFS_RHEAD  = 12 + SN_MAXPKT;
   OFS_RING   = OFS_RHEAD + 2;
@@ -113,12 +113,14 @@ var
   FiltA   : packed array[0..1] of Byte;   { the ARP handle's }
   Handler : packed record O, S: Word; end;
   TxBuf   : TPkt;
-  { The frames go out from a ring, not from TxBuf (2026-10-15): the PicoMEM's
-    packet driver returns from send_pkt before the card has read the frame,
-    so a second frame built straight after it in the same buffer went out in
-    the first one's place -- slot 2's packets reached slot 3, and slot 2
-    starved.  Eight buffers, used in turn, are long since sent before reuse. }
-  TxRing  : array[0..7] of TPkt;
+  { The frames go out from a ring, not from TxBuf (2026-10-15).  It was put
+    in on the theory that the PicoMEM's driver returns from send_pkt before
+    the card has read the frame, so the next frame built in the same buffer
+    went out in its place -- slot 2's packets were reaching slot 3.  It did
+    NOT cure that; a pause after each frame did (SnGapLoops), so the card's
+    WiFi is what garbles frames sent back to back.  The ring stays, being
+    harmless and cheap, at four. }
+  TxRing  : array[0..3] of TPkt;   { 8 until 2026-10-16: four, for a 16-slot receive ring's room }
   TxCur   : Byte;
   Handle, IpHnd, ArpHnd: Word;
   HaveIp, HaveArp, HaveDrv: Boolean;
@@ -538,7 +540,7 @@ procedure SendFrame(Len: Word);
 var
   T0, Tries: Word;
 begin
-  TxCur := (TxCur + 1) and 7;
+  TxCur := (TxCur + 1) and 3;
   Move(TxBuf, TxRing[TxCur], Len);
   Tries := 0;
   while not SendOnce(Len) do
