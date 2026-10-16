@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D FOR 8086-CLASS PCs  --  optimized by StevenC and Claude
 =======================================================================
-Version 1.2, 2026-10-05
+Version 1.5, 2026-10-16
 
 id Software's Wolfenstein 3-D, rebuilt from id's released source to run
 as fast as an 8086, 8088, V20 or V30 PC allows -- and faster on anything
@@ -33,6 +33,18 @@ an NEC V30 and a 486):
                                               version on branch bsp)
 id Software's original source:
     https://github.com/id-Software/wolf3d
+
+New in 1.5: WOLF3D8.EXE, for a plain Intel 8086 or 8088 (WOLF3DV needs
+the 80186 instructions a V20/V30 has) -- id's picture exactly, about 2%
+slower than WOLF3DV on a V30.  Two fixes: a far call in the sprite
+scaler that worked only by luck (it froze a 486 once), and, with
+FLATWALLS, a wall's artwork kept in memory while its plain twin is
+fetched.  WOLF3DV, WOLF3D8 and WOLF3DB were checked again over the
+whole attract loop.
+
+The network game -- up to four players, deathmatch or co-op, a server
+for DOS, Windows or Python -- is its own download, W3DMP.ZIP, on the
+same releases page; SETUP.md (in the repository) sets it up step by step.
 
 
 WHAT YOU NEED
@@ -104,10 +116,12 @@ PLAYING
     WOLF3DB BSP               4.5     the map (TAB) up     7.1
     LOWWALLS                  6.7     LOWVERT              5.8
     FLATWALLS                 5.6     LOWSPRITES           5.2
+    WOLF3D8 (plain 8086)      4.9
 
 PLAY's menu: a letter turns a switch on or off (D is FARBLOBS, O is
 FASTOPL, 4 is LOWWALLS4), T picks WOLF3DV or WOLF3DB, and for WOLF3DB
-K is BSP and L is NOLOD.  + and - pick the window size (0 leaves it to
+K is BSP and L is NOLOD.  On a plain 8086 or 8088 the menu runs
+WOLF3D8 by itself.  + and - pick the window size (0 leaves it to
 the game), P plays, B runs the benchmark, Q quits.  Quitting the game
 comes back to the menu.  It remembers your choices in W3MENU.CFG, and
 quits by itself after 30 seconds with no key (PLAY /T:60 changes that,
