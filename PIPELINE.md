@@ -19,7 +19,7 @@ flowchart LR
         GIT[("git: this repository<br/>WOLFSRC, mp/, launcher/")]
         TOOLS["w3dbuild.py · ab.py · to8086.py<br/>refsrc.py · gendemo.py · mkrelease.py"]
         DOSD["dosd.py -- DOS Bridge daemon<br/>jobs + files: UDP 8069 (TFTP)<br/>HTTP 8080 · results 8081 · pulls 8082"]
-        SRV["mp/mpserver.py -- game server<br/>UDP 31992 · console 127.0.0.1:31999"]
+        SRV["game server: mpserver.py or MPSRVW.EXE<br/>(or MPSRV.EXE on a DOS machine)<br/>UDP 31992 · console 127.0.0.1:31999"]
         GIT --> TOOLS --> DOSD
     end
 
@@ -97,6 +97,12 @@ of them disturbs another:
 | branch `bsp` | -- | `C:\W3D` | `WOLF3DB.EXE` |
 | branch `multiplayer` | -- | `C:\W3D` | `WOLF3DM.EXE` (and `mp/huntbot.py`'s test build `WOLF3DT.EXE`) |
 
+The game's two Free Pascal servers are built on the PC, not the 486 -- FPC
+cross-compiles for DOS, and is a Windows program itself:
+`python mp/mkmpsrv.py` makes `MPSRV.EXE` for DOS (the plain 8086, with the
+DOS Bridge's units), `--windows` makes `MPSRVW.EXE`, both from
+`mp/mpsrv.pas` (branch `multiplayer`).
+
 ## The branches
 
 ```mermaid
@@ -113,7 +119,7 @@ Fixes flow from `v30-8086` into the other two, never the other way.
 
 ```mermaid
 flowchart TB
-    S["mp/mpserver.py on the PC<br/>keeps the clock: 17.5 steps a second<br/>passes every player's controls to everyone<br/>bots · console · control port (mp/mpctl.py)"]
+    S["the server: mpserver.py or MPSRVW.EXE on the PC,<br/>or MPSRV.EXE on any of the DOS machines<br/>keeps the clock: 17.5 steps a second<br/>passes every player's controls to everyone<br/>bots · console · control port (mp/mpctl.py)"]
     S <-->|"controls up, steps down"| A["486<br/>WOLF3DM NET pc"]
     S <-->|UDP 31992| V["V30<br/>WOLF3DM NET pc LOWEST VIEW 10"]
     S <--> P["Pentium II<br/>WOLF3DM NET pc VIEW 19"]
@@ -128,6 +134,13 @@ steps must agree, and a machine that differs is caught at once.
 [MULTIPLAYER.md](https://github.com/jdredd87/Wolf3D-V30/blob/multiplayer/MULTIPLAYER.md)
 on that branch explains why that works, and how a machine joining late
 catches up.
+
+Any of three servers can be in the middle of that picture, all with the same
+switches and console: `mp/mpserver.py` (Python, the reference), `MPSRVW.EXE`
+on Windows, or `MPSRV.EXE` on a DOS machine -- which then serves instead of
+playing, so the other two DOS machines play.  Each machine here has had its
+turn: the Pentium II (eight hours), the 486, the 8 MHz V30, and this PC
+serving all three DOS machines at once (v1.4, 2026-10-15/16).
 
 The long tests drive the same machines unattended -- every floor of every
 episode, or eight hours at a stretch -- with small scripts kept out of the
