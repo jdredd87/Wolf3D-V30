@@ -1818,3 +1818,6 @@ The DOS build's data segment had no room for the text: the transmit ring
 went from four buffers to two (it was never the cure for the garbled
 frames; the pause after each frame was).  MPSRV `FB578572` on all three DOS
 machines, MPSRVW `993964A3`.
+
+**v1.4.2 -- 2026-10-16**: the release with that help -- MPSRV.EXE `FB578572`,
+MPSRVW.EXE `993964A3`; the game, `WOLF3DM.EXE` `86B78D6C`, is v1.3's.
