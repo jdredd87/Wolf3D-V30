@@ -1,4 +1,11 @@
-# Multiplayer -- a plan, not yet started
+# Multiplayer -- the first plan (2026-10-06)
+
+> **This is the plan as it was written, kept for the record.  It was
+> built:** the network game is on the `multiplayer` branch (`WOLF3DM.EXE`),
+> released from v1.3 on, with servers in Python, for DOS (`MPSRV.EXE`) and
+> for Windows (`MPSRVW.EXE`).  The live account -- the design, the protocol
+> and every test -- is
+> [MULTIPLAYER.md on that branch](https://github.com/jdredd87/Wolf3D-V30/blob/multiplayer/MULTIPLAYER.md).
 
 Written by **StevenC** and **Claude** (Anthropic), 2026-10-06.  Parked
 until the 386SX's network card arrives; nothing here is built yet.
