@@ -1821,3 +1821,6 @@ machines, MPSRVW `993964A3`.
 
 **v1.4.2 -- 2026-10-16**: the release with that help -- MPSRV.EXE `FB578572`,
 MPSRVW.EXE `993964A3`; the game, `WOLF3DM.EXE` `86B78D6C`, is v1.3's.
+
+**v1.4.3 -- 2026-10-16**: [SETUP.md](SETUP.md), the network game set up step by
+step, and in the download as `SETUP.TXT`; the same EXEs as v1.4.2.
