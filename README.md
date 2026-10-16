@@ -86,7 +86,7 @@ you have one, we would like to hear.
 | speed | **5.51 fps** over all four demos, **5.57 in play** on the V30 (id's code: 2.81); demo 0 in full **2.75 -> 5.17 fps, 1.88x**.  On the 486 at 66 MHz, 99.7 fps in play.  The BSP version's default 6.15 on the V30, 105.5 on the 486.  Every option on both machines: [BENCHMARKS.md](BENCHMARKS.md) |
 | picture | identical to id's renderer over the whole attract loop -- 5,386 frames, every 50th checksummed, the 3-D view and the whole screen (`ab.py --full`) -- and over 240 generated demos on all sixty maps (`gendemo.py`, `allmaps.py`) |
 | music | identical to id's: the same register writes on the same ticks (`MUSICLOG`) |
-| multiplayer | **works**: deathmatch and co-op, up to four players, bots, chat, scores, drop-in and drop-out, a server console; eight hours on the 486, the Pentium II and the V30 together without a desync (2026-10-13) |
+| multiplayer | **works**: deathmatch and co-op, up to four players, bots, chat, scores, drop-in and drop-out, a server console; eight hours on the 486, the Pentium II and the V30 together without a desync (2026-10-13), every floor in co-op (2026-10-14); **the server on DOS or Windows too** (`MPSRV.EXE`, `MPSRVW.EXE`; v1.4, 2026-10-15/16), each DOS machine serving in turn -- the V30 as well -- without a desync |
 | optimisations | 98 steps, each one measured, each one proven to draw id's picture -- [V30NOTES.md](V30NOTES.md) is the lab notebook, including the ideas that measured as nothing |
 | detail switches | optional, any combination, none on by default -- below |
 
