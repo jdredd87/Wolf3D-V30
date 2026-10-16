@@ -191,25 +191,86 @@ E1L1 is 0, E2L1 is 10 and E6L10 is 59.
 
 ### The console
 
-Type these into the server while it runs:
+While a server runs it takes commands: type one and press Enter.  All
+three servers have the same ones, and `help` lists them.
+
+**Seeing what is going on**
 
 | command | does |
 |---|---|
-| `status` | who is playing, how far behind each one is |
+| `help` (or `?`) | lists the commands |
+| `status` | the game, and every slot: who, from what address, how far behind, how long since they were last heard |
 | `scores` | everyone's frags and deaths |
-| `say TEXT` | a message on every player's screen |
-| `kick N reason` | puts slot N out of the game; their screen says why |
-| `ban N` / `unban ADDRESS` | keeps a machine out |
-| `pause` / `resume` | holds the game for everyone |
-| `map E L` / `nextfloor` | everyone to that floor now |
-| `timelimit MIN` / `fraglimit N` | changes the limits mid-game |
-| `next ...` | settings for the next game (`next map 2 1`, `next mode coop` ...) |
+
+**The players**
+
+| command | does |
+|---|---|
+| `say TEXT` | a message on every player's screen, from SERVER |
+| `kick N [reason]` | puts slot N (1-4) out of the game; their screen shows the reason |
+| `ban N` or `ban ADDRESS` | kicks them, and refuses that address from then on |
+| `unban ADDRESS` | lets that address back in |
+| `bans` | lists the banned addresses |
+
+**The game in progress**
+
+| command | does |
+|---|---|
+| `pause` / `resume` | holds the game for everyone, then lets it go on |
+| `map E L` (or `map N`) | everyone to episode E, floor L now -- after the floor's tally |
+| `nextfloor` | everyone to the next floor now |
+| `timelimit MIN` | changes the time limit now (`0`: none) |
+| `fraglimit N` | changes the frag limit now (`0`: none) |
+| `end [reason]` | ends the game for everyone; the server waits for the next one |
+
+**The next game**
+
+These settings take effect when the next game starts -- straight away
+if none is running -- because every machine in a game must play by the
+same rules.
+
+| command | does |
+|---|---|
+| `next` | shows the settings now, and any waiting for the next game |
+| `next map E L` (or `next map N`) | the floor it starts on |
+| `next mode dm` / `next mode coop` | deathmatch or co-op |
+| `next skill 0-3` | the difficulty, as the game's own menu |
+| `next bots N` | how many slots the server plays itself |
+| `next timelimit MIN` / `next fraglimit N` | the limits |
+| `next itemrespawn SECS` | how long before a taken item comes back |
+| `next enemies on\|off` | enemies, or an empty map |
+| `next ff on\|off` | friendly fire in co-op |
+
+**The server itself**
+
+| command | does |
+|---|---|
+| `quiet on\|off` | stops (or restarts) the log lines scrolling past |
 | `quit` | ends the game and stops the server |
 
-From another machine, `python SERVER\mp\mpctl.py status` sends the same
-commands.  Add `--host ADDRESS` to reach a DOS server from a PC on its
-network.  The Windows and Python servers only take commands from the PC
-they run on.
+**An example**, during a deathmatch:
+
+```
+scores
+say On to E2L1 -- 15 minutes a floor from here
+map 2 1
+timelimit 15
+```
+
+Everyone sees the message at once; after the tally everyone goes to
+E2L1, and from then on a floor ends after 15 minutes (a time limit
+counts from the start of the floor).
+
+**From another window or another PC.**  `python SERVER\mp\mpctl.py
+COMMAND` sends one command to a running server and prints its answer --
+`mpctl.py status`, `mpctl.py say Back in 5`, any of the above.  For the
+Windows and Python servers it works on the PC the server runs on.  The DOS
+server listens on its own address, so any PC on its network can reach it
+with `--host`:
+
+```
+python SERVER\mp\mpctl.py --host 192.168.1.30 status
+```
 
 ## Troubleshooting
 

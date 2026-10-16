@@ -55,7 +55,7 @@ def setup_txt():
             continue
         line = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", lambda m: m.group(1) if m.group(2).endswith(".md")
                       else "%s (%s)" % (m.group(1), m.group(2)), line)
-        line = line.replace("**", "").replace("`", "")
+        line = line.replace("**", "").replace("`", "").replace(r"\|", "|")
         m = re.match(r"^(#+) (.*)$", line)
         if m:
             text = m.group(2).upper() if len(m.group(1)) <= 2 else m.group(2)
