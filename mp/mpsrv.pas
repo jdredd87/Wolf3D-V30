@@ -1,5 +1,5 @@
-{ MPSRV -- the Wolf3D multiplayer server, for DOS.  Written by StevenC and
-  Claude (Anthropic), 2026-10-15.
+{ MPSRV -- the Wolf3D multiplayer server, for DOS and for Windows.  Written
+  by StevenC and Claude (Anthropic), 2026-10-15.
 
   The same server as mp/mpserver.py (the reference -- MULTIPLAYER.md,
   "Protocol, version 1"), on any DOS machine with a packet driver: it keeps
@@ -21,13 +21,24 @@
   and the BIOS clock is still fed at 18.2 -- a step is 4 of those ticks,
   exactly the game's.  The history (every step, for machines joining late)
   goes into XMS, or into MPSRV.HIS when there is none.  A status line on
-  the screen moves with the clock, so a quiet server never looks hung. }
+  the screen moves with the clock, so a quiet server never looks hung.
+
+  The same source builds MPSRVW.EXE for Windows (python mp/mkmpsrv.py
+  --windows): WinSock for the network (mp/winnet.pas), the performance
+  counter for the 70 Hz clock, the history in memory, the console read from
+  its window a line at a time (or from a pipe), the status in the window's
+  title -- and the console port on 127.0.0.1 only, as mpserver.py's. }
 
 program MpSrv;
 
 {$MODE OBJFPC}{$H-}
 
+{$IFDEF WINDOWS}
+{$APPTYPE CONSOLE}
+uses WinNet;
+{$ELSE}
 uses About, SrvNet, Dos;
+{$ENDIF}
 
 const
   VERSION = 1;
@@ -47,6 +58,11 @@ const
   MAXSUMBLK = 256;
   MAXEV = 256;
   T_SEC = 70;                     { ticks of the 70 Hz clock in a second }
+{$IFDEF WINDOWS}
+  NETNAME = 'the sockets';
+{$ELSE}
+  NETNAME = 'the card';
+{$ENDIF}
   PITDIV = 17045;                 { 1193182 / 70 }
   SPIN: array[0..3] of Char = '|/-\';
 
@@ -153,6 +169,7 @@ var
 
 { ---------------------------------------------------------------- the clock }
 
+{$IFNDEF WINDOWS}
 { INT 8 at 70 Hz: counts, and passes the BIOS its 18.2 Hz.  +3/+5 are patched
   with the BIOS's handler, +11 with our data segment, +16 with Ofs(Timer). }
 procedure Int8Isr; assembler; nostackframe;
@@ -270,6 +287,36 @@ begin
   TimerOn := False;
 end;
 
+{$ELSE}
+function QueryPerformanceCounter(var C: Int64): LongBool; stdcall; external 'kernel32.dll';
+function QueryPerformanceFrequency(var F: Int64): LongBool; stdcall; external 'kernel32.dll';
+
+var
+  QpcFreq, QpcBase: Int64;
+
+{ the same 70 Hz count as the DOS build's, out of the performance counter }
+function Ticks: LongInt;
+var C: Int64;
+begin
+  QueryPerformanceCounter(C);
+  Ticks := ((C - QpcBase) * T_SEC) div QpcFreq;
+end;
+
+function TimerStart: Boolean;
+begin
+  QueryPerformanceFrequency(QpcFreq);
+  QueryPerformanceCounter(QpcBase);
+  TimerOn := QpcFreq > 0;
+  TimerStart := TimerOn;
+end;
+
+procedure TimerStop;
+begin
+  TimerOn := False;
+end;
+
+{$ENDIF}
+
 { ---------------------------------------------------------------- the log }
 
 function I2S(L: LongInt): ShortString;
@@ -302,7 +349,9 @@ end;
 
 procedure ClearStatus;
 begin
+{$IFNDEF WINDOWS}
   Write(StdErr, #13, '':79, #13);
+{$ENDIF}
 end;
 
 procedure Log(const S: ShortString);
@@ -344,6 +393,7 @@ end;
 
 { ------------------------------------------------------------ the history }
 
+{$IFNDEF WINDOWS}
 { XMove and XmsEntry are in the data segment DS already points at (checked
   at start-up), so DS:SI is the move structure for function 0Bh }
 function XmsCall(Fn: Byte; DXv: Word; var AXr, DXr, BXr: Word): Boolean;
@@ -494,6 +544,59 @@ begin
     BlockRead(HisFile, Dst, Count * ROWB);
   end;
 end;
+
+{$ELSE}
+const
+  HBLK = 65536;                   { steps a block: 768 KB }
+type
+  THBlk = array[0..HBLK - 1] of TRow;
+  PHBlk = ^THBlk;
+var
+  HBlks: array[0..1023] of PHBlk; { 67 million steps: a thousand hours of four }
+
+procedure XmsInit;
+begin
+  UseXms := False;
+end;
+
+procedure XmsDone;
+begin
+end;
+
+function HistCapacity: LongInt;
+begin
+  HistCapacity := 1024 * LongInt(HBLK);
+end;
+
+procedure HistReset;
+begin
+  Newest := -1;                   { the blocks stay, for the next game }
+end;
+
+procedure HistAdd(var Row: TRow);
+var B: LongInt;
+begin
+  Inc(Newest);
+  B := Newest div HBLK;
+  if HBlks[B] = nil then New(HBlks[B]);
+  HBlks[B]^[Newest mod HBLK] := Row;
+end;
+
+procedure HistGet(First, Count: LongInt; var Dst);
+var
+  P: ^TRow;
+  K, S: LongInt;
+begin
+  P := @Dst;
+  for K := 0 to Count - 1 do
+  begin
+    S := First + K;
+    P^ := HBlks[S div HBLK]^[S mod HBLK];
+    Inc(P);
+  end;
+end;
+
+{$ENDIF}
 
 { ------------------------------------------------------------ checksums }
 
@@ -1175,7 +1278,7 @@ begin
   if Pending <> '' then Say('next game:' + Pending);
   { the counters (2026-10-15): so a long run can be watched from afar }
   Say('  net: ' + I2S(Desyncs) + ' desyncs; packets sent ' + I2S(SentN) + ', received ' + I2S(RecvN)
-      + '; the card: ' + I2S(SnTxFail) + ' refused, ' + I2S(SnRxBadSum) + ' bad checksums, '
+      + '; ' + NETNAME + ': ' + I2S(SnTxFail) + ' refused, ' + I2S(SnRxBadSum) + ' bad checksums, '
       + I2S(SnDropped) + ' dropped (no room)');
 end;
 
@@ -1576,8 +1679,10 @@ var
   Ok: Boolean;
 begin
   Ok := True;
+{$IFNDEF WINDOWS}
   for I := 0 to 3 do
     if (SnFromIP[I] and SnMask[I]) <> (SnMyIP[I] and SnMask[I]) then Ok := False;
+{$ENDIF}
   if not Ok then Exit;
   Line := '';
   for K := 0 to RxLen - 1 do
@@ -1600,6 +1705,7 @@ begin
   if not Go then StopNow := True;
 end;
 
+{$IFNDEF WINDOWS}
 procedure ShowStatus(Force: Boolean);
 var
   T, Ppl: LongInt;
@@ -1664,6 +1770,95 @@ begin
   until False;
 end;
 
+{$ELSE}
+function SetConsoleTitleA(T: PChar): LongBool; stdcall; external 'kernel32.dll';
+function GetStdHandle(N: LongWord): PtrUInt; stdcall; external 'kernel32.dll';
+function ReadFile(H: PtrUInt; var Buf; N: LongWord; var Got: LongWord; Ov: Pointer): LongBool;
+  stdcall; external 'kernel32.dll';
+function SetConsoleCtrlHandler(H: Pointer; Add: LongBool): LongBool; stdcall; external 'kernel32.dll';
+
+{ the status in the window's title, so it never gets in the way of typing }
+procedure ShowStatus(Force: Boolean);
+var
+  T, Ppl: LongInt;
+  I: Integer;
+  S: ShortString;
+begin
+  T := Ticks div T_SEC;
+  if (T = LastSpin) and not Force then Exit;
+  LastSpin := T;
+  Ppl := 0;
+  for I := 0 to Players - 1 do if IsPerson(I) then Inc(Ppl);
+  if Playing then S := 'step ' + I2S(Newest + 1) else S := 'waiting';
+  if Paused then S := S + ' PAUSED';
+  S := 'MPSRV ' + SPIN[T and 3] + ' ' + S + ', ' + I2S(Ppl) + ' in, rx ' + I2S(RecvN) + ' tx '
+       + I2S(SentN) + ', ' + I2S(Desyncs) + ' desyncs' + #0;
+  SetConsoleTitleA(@S[1]);
+end;
+
+{ the console's lines: a thread reads them (from the window, or a pipe) and
+  the server's loop carries them out, between packets }
+const
+  KQ = 16;
+var
+  KLines: array[0..KQ - 1] of ShortString;
+  KHead, KTail: LongInt;
+  KLock: TRTLCriticalSection;
+
+function KeyReader(P: Pointer): PtrInt;
+var
+  Ch: Char;
+  Got: LongWord;
+  L: ShortString;
+  H: PtrUInt;
+begin
+  H := GetStdHandle(LongWord(-10));        { STD_INPUT_HANDLE }
+  L := '';
+  while ReadFile(H, Ch, 1, Got, nil) and (Got = 1) do
+    if Ch = #10 then
+    begin
+      EnterCriticalSection(KLock);
+      if KHead - KTail < KQ then
+      begin
+        KLines[KHead mod KQ] := L;
+        Inc(KHead);
+      end;
+      LeaveCriticalSection(KLock);
+      L := '';
+    end
+    else if (Ch <> #13) and (Length(L) < 250) then L := L + Ch;
+  KeyReader := 0;
+end;
+
+procedure PollKeys;
+var
+  L: ShortString;
+  Got: Boolean;
+begin
+  repeat
+    EnterCriticalSection(KLock);
+    Got := KTail < KHead;
+    if Got then
+    begin
+      L := KLines[KTail mod KQ];
+      Inc(KTail);
+    end;
+    LeaveCriticalSection(KLock);
+    if not Got then Exit;
+    if not DoLine(L) then StopNow := True;
+  until StopNow;
+end;
+
+{ Ctrl-C, Ctrl-Break, the window closed: stop as quit does -- everyone is
+  told goodbye }
+function CtrlHandler(Ctrl: LongWord): LongBool; stdcall;
+begin
+  StopNow := True;
+  CtrlHandler := True;
+end;
+
+{$ENDIF}
+
 { ---------------------------------------------------------------- start-up }
 
 function Arg(const Name: ShortString; Default: LongInt): LongInt;
@@ -1707,7 +1902,9 @@ begin
       end;
   end;
   TimerStop;
+{$IFNDEF WINDOWS}
   SetIntVec($23, OldInt23);
+{$ENDIF}
   SnClose;
   XmsDone;
   if UseFile then
@@ -1745,6 +1942,7 @@ var
   L: Word;
   RunFor: LongInt;
   Spins, GapUs: LongInt;
+  Busy: Boolean;
 begin
   { FPC 3.2.2's i8086 runtime: ParamStr is '' until ParamCount runs }
   if (ParamCount > 0) and ((ParamStr(1) = '/?') or (Lower(ParamStr(1)) = '--help')) then
@@ -1755,7 +1953,11 @@ begin
     WriteLn('      [--txgap 1000]   microseconds after each frame sent (0: none)');
     Halt(0);
   end;
+{$IFDEF WINDOWS}
+  WriteLn('MPSRVW -- the Wolf3D multiplayer server for Windows -- StevenC & Claude');
+{$ELSE}
   WriteLn('MPSRV -- the Wolf3D multiplayer server for DOS -- StevenC & Claude');
+{$ENDIF}
   Players := Arg('--players', 4);
   if Players < 1 then Players := 1;
   if Players > MAXP then Players := MAXP;
@@ -1799,13 +2001,16 @@ begin
   if IOResult <> 0 then Rewrite(LogF);
   {$I+}
   LogOpen := IOResult = 0;
+{$IFNDEF WINDOWS}
   if (Seg(XMove) <> DSeg) or (Seg(XmsEntry) <> DSeg) then
   begin
     WriteLn('the XMS calls need their data in DS -- not starting');
     Halt(7);
   end;
+{$ENDIF}
   if not Flag('--noxms') then XmsInit;     { --noxms: the file, to test it }
   UseFile := False;
+{$IFNDEF WINDOWS}
   if not UseXms then
   begin
     Assign(HisFile, 'MPSRV.HIS');
@@ -1819,6 +2024,8 @@ begin
       Halt(4);
     end;
   end;
+{$ENDIF}
+  SnSetPorts(GamePort, CtlPort);
   if not SnOpen then
   begin
     WriteLn('the network: ', SnErr);
@@ -1827,14 +2034,22 @@ begin
   end;
   OldExit := ExitProc;
   ExitProc := @AtExit;
+{$IFDEF WINDOWS}
+  InitCriticalSection(KLock);
+  KHead := 0; KTail := 0;
+  BeginThread(@KeyReader, nil);
+  SetConsoleCtrlHandler(@CtrlHandler, True);
+{$ELSE}
   GetIntVec($23, OldInt23);
   SetIntVec($23, @Int23Isr);
+{$ENDIF}
   if not TimerStart then
   begin
     SnClose;
     XmsDone;
     Halt(6);
   end;
+{$IFNDEF WINDOWS}
   { the pause after each frame: SnSpin's loops in one 70 Hz tick, measured }
   T := Ticks;
   while Ticks = T do ;
@@ -1848,19 +2063,33 @@ begin
   GapUs := Arg('--txgap', 1000);
   SnGapLoops := (Spins * GapUs) div 14286;    { blocks of 100 loops; a tick is 14,286 us }
   if (GapUs > 0) and (SnGapLoops = 0) then SnGapLoops := 1;
+{$ELSE}
+  Spins := 0;
+  GapUs := 0;                                 { Windows sends a frame at a time }
+{$ENDIF}
   ResetGame;
+{$IFDEF WINDOWS}
+  Log('MPSRVW on ' + IPStr(SnMyIP) + ' (Windows)');
+  Log('the history in memory: room for ' + I2S(HistCapacity) + ' steps');
+{$ELSE}
   Log('MPSRV on ' + IPStr(SnMyIP) + ' (' + SnCfgUsed + ', packet driver at ' + HexStr(SnVec, 2) + 'h)');
   if UseXms then Log('the history in XMS: ' + I2S(XmsKB) + ' KB, ' + I2S(HistCapacity) + ' steps')
   else Log('the history in MPSRV.HIS (no XMS)');
+{$ENDIF}
   if Rules and RULE_NOENEMIES <> 0 then
     Log('listening on UDP ' + I2S(GamePort) + ': ' + I2S(Players) + ' slots (' + I2S(Humans) + ' for people, '
         + I2S(Bots) + ' bots), map ' + I2S(MapNum) + ', rules ' + I2S(Rules) + ' (' + Settings + ')')
   else
     Log('listening on UDP ' + I2S(GamePort) + ': ' + I2S(Players) + ' slots (' + I2S(Humans) + ' for people, '
         + I2S(Bots) + ' bots), map ' + I2S(MapNum) + ', rules ' + I2S(Rules) + ' (' + Settings + ')');
+{$IFDEF WINDOWS}
+  if CtlPort <> 0 then Log('console: this window, and UDP ' + I2S(CtlPort) + ' on 127.0.0.1 (python mp/mpctl.py)')
+  else Log('console: this window');
+{$ELSE}
   if CtlPort <> 0 then Log('console: the keyboard, and UDP ' + I2S(CtlPort) + ' from this subnet');
   Log('after each frame a pause of ' + I2S(GapUs) + ' us (' + I2S(SnGapLoops) + ' x 100 loops, '
       + I2S(Spins) + ' a tick; --txgap)');
+{$ENDIF}
   NextStart := 0; NextNames := 0; NextPausedT := 0;
 
   repeat
@@ -1911,13 +2140,16 @@ begin
         Inc(NextStep, 4);
         if (StepLimit > 0) and (Newest + 1 >= StepLimit) then StopNow := True;
       end;
+    Busy := False;
     while SnPoll(Rx, SizeOf(Rx), RxLen) do
     begin
+      Busy := True;
       if SnToPort = GamePort then HandleGame
       else if (CtlPort <> 0) and (SnToPort = CtlPort) then HandleControl;
       if StopNow then Break;
     end;
     ShowStatus(False);
+    if not Busy and not StopNow then SnWait(1);   { Windows: a millisecond's sleep; DOS: nothing }
   until StopNow;
 
   ClearStatus;
@@ -1927,7 +2159,7 @@ begin
     if RunFor <= 0 then RunFor := 1;
     Log('ended: ' + I2S(Newest + 1) + ' steps in ' + Secs(RunFor) + ' s; packets sent ' + I2S(SentN)
         + ', received ' + I2S(RecvN) + '; ' + I2S(Desyncs) + ' desyncs');
-    Log('  the card: ' + I2S(SnTxFrames) + ' frames sent, ' + I2S(SnTxRetried) + ' after a wait, '
+    Log('  ' + NETNAME + ': ' + I2S(SnTxFrames) + ' frames sent, ' + I2S(SnTxRetried) + ' after a wait, '
         + I2S(SnTxFail) + ' refused; ' + I2S(SnDropped) + ' received frames dropped (no room), '
         + I2S(SnRxBadSum) + ' for a wrong checksum');
     for I := 0 to Players - 1 do

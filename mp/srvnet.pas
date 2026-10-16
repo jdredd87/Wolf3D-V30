@@ -67,6 +67,10 @@ function  SnSendTo(const IP: TIP; const Mac: TMac; SrcPort, DstPort: Word;
                    var Data; Len: Word): Boolean;
 function  SnDropped: Word;
 procedure SnSpin(Loops: Word);
+{ for the same calls as WinNet (mp/winnet.pas): here every port comes in
+  through the one packet driver, and nothing waits }
+procedure SnSetPorts(Game, Ctl: Word);
+function  SnWait(Ms: Integer): Boolean;
 function  IPStr(const A: TIP): ShortString;
 function  ParseIP(S: ShortString; var A: TIP): Boolean;
 function  SameIP(const A, B: TIP): Boolean;
@@ -215,6 +219,15 @@ asm
   nop
   loop @@l
 @@done:
+end;
+
+procedure SnSetPorts(Game, Ctl: Word);
+begin
+end;
+
+function SnWait(Ms: Integer): Boolean;
+begin
+  SnWait := False;
 end;
 
 function SnDropped: Word;
