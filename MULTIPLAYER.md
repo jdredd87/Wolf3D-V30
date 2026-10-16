@@ -15,7 +15,7 @@ the summary comes first.
 | joining | any time: a joiner replays the game so far at full speed and walks in when caught up ("Catching up: N steps to go" -- README.md says why it has to, and how long: a 486 or the Pentium II under a minute for an hour's game, the V30 six to fifteen); a leaver's slot is free at once.  A WiFi dropout of up to a minute is ridden out |
 | the server | `mp/mpserver.py` (Python), or **`MPSRV.EXE` on any DOS machine**, or **`MPSRVW.EXE` on Windows** (since 2026-10-15; one Free Pascal source), each with **bots** and a **console**: status, scores, say, kick with a reason, ban, pause, map and next floor, the limits mid-game, the next game's settings -- "The server's console" below |
 | the machines | the NEC V30 (8 MHz; `LOWEST VIEW 10`, ~3-9 pictures a second), the 486 (66 MHz) and the Pentium II, all three with sound -- AdLib music and Sound Blaster effects |
-| proof | 20 generated 2- and 4-player demos give the same checksums from every player's eyes (`mp/mpsweep.py`); every change is run against the last accepted sweep.  **Eight hours, three machines and a bot, no desync** (2026-10-13); every deathmatch floor of all six episodes, and **every one of the sixty floors in co-op, with enemies, on all three machines, no desync** (2026-10-14, `stage/logs/stress.py`); single player still id's picture exactly |
+| proof | 20 generated 2- and 4-player demos give the same checksums from every player's eyes (`mp/mpsweep.py`); every change is run against the last accepted sweep.  **Eight hours, three machines and a bot, no desync** (2026-10-13); every deathmatch floor of all six episodes, and **every one of the sixty floors in co-op, with enemies, on all three machines, no desync** (2026-10-14, `stage/logs/stress.py`); **the servers on DOS and Windows**: MPSRV from each DOS machine in turn -- the V30, the 486, the Pentium II, eight hours on that one -- and MPSRVW serving all three, every run without a desync (2026-10-15/16); single player still id's picture exactly |
 | not yet | a recording (`--record`) is one floor, so one the console ends early is cut where it ended |
 
 Hosting and joining are in [README.md](README.md), "Multiplayer".
@@ -1801,3 +1801,9 @@ the log now goes to the disk once a second, and the ring has 16 slots (8 of
 the transmit ring's buffers gave the room: they were never the cure).  205
 then, and it costs nothing: a lost INPUT is replaced by the next, which
 comes a step later.
+
+**v1.4.1 -- 2026-10-16.**  The release's MPSRV.EXE and MPSRVW.EXE are now
+the build of 8439d0a (`1DC5161E` and `5E84258D`): MPSRV.LOG written once a
+second rather than after every line, and a 16-slot receive ring -- what took
+the V30 as a server from 518 dropped frames to 205.  The same on all three
+DOS machines here.  The game, `WOLF3DM.EXE` `86B78D6C`, is v1.3's.

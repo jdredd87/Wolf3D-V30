@@ -92,32 +92,42 @@ you have one, we would like to hear.
 
 ## Multiplayer
 
-On the `multiplayer` branch (`WOLF3DM.EXE`).  One PC runs the server; every
-player runs the game and joins it.  Machines of any speed play together: the
-server keeps the clock at 17.5 steps a second, every machine plays every
-step, and a slow one draws fewer pictures, not a different game.
+On the `multiplayer` branch (`WOLF3DM.EXE`); the download is `W3DMP.ZIP` on
+the [releases page](https://github.com/jdredd87/Wolf3D-V30/releases).  One
+machine runs the server; every player runs the game and joins it.  Machines
+of any speed play together: the server keeps the clock at 17.5 steps a
+second, every machine plays every step, and a slow one draws fewer pictures,
+not a different game.
 
-**Host** (Python 3, any PC on the network; open UDP 31992 in its firewall):
+**Host** -- any one of three servers, with the same switches and the same
+console:
+
+| server | runs on | built by |
+|---|---|---|
+| `MPSRV.EXE` | any DOS machine with a packet driver, the plain 8086 up | `python mp/mkmpsrv.py` (Free Pascal) |
+| `MPSRVW.EXE` | Windows, no Python needed | `python mp/mkmpsrv.py --windows` -- the same source |
+| `mp/mpserver.py` | any PC with Python 3 | -- (the reference) |
 
 ```
+MPSRV  --players 4 --mode dm --noenemies --itemrespawn 30
+MPSRVW --players 4 --bots 1 --mode coop --skill 2 --map 0
 python mp/mpserver.py --players 4 --mode dm --noenemies --itemrespawn 30
-python mp/mpserver.py --players 4 --bots 1 --mode coop --skill 2 --map 0
 ```
 
-**Or host on a DOS machine** (since 2026-10-15): `MPSRV.EXE` takes the same
-switches and the same console -- typed at its keyboard, or from any PC on
-its network with `python mp/mpctl.py --host ADDRESS status`.  It needs a
-packet driver and the machine's address in mTCP's config or
-`C:\AI\NET.CFG`, as the game does; XMS keeps a long game's history
-(without it, `MPSRV.HIS` on the disk).  Built for the plain 8086
-(`python mp/mkmpsrv.py`).  A DOS machine that serves cannot also play.
+**The DOS server** (since v1.4) needs a packet driver and the machine's
+address in mTCP's config or `C:\AI\NET.CFG`, as the game does; XMS keeps a
+long game's history (without it, `MPSRV.HIS` on the disk), so a machine can
+join hours into a game.  Its console is its keyboard, or any PC on its
+network: `python mp/mpctl.py --host ADDRESS status`.  A DOS machine that
+serves cannot also play.  Every DOS machine here has served a game -- the
+8 MHz V30, the 486 and the Pentium II, the other two playing and bots filling
+the slots: not one desync (MULTIPLAYER.md has the runs).
 
-**Or `MPSRVW.EXE` on Windows** -- the same server from the same source
-(`python mp/mkmpsrv.py --windows`), no Python needed: the same switches and
-console, typed in its window or sent with `python mp/mpctl.py` (its console
-port answers on 127.0.0.1 only).  Windows Firewall must let it in: allow it
-when Windows asks the first time, or a rule for UDP 31992 does it -- but a
-prompt left unanswered makes a rule that *blocks* it, and that one wins.
+**The Windows server**: the console is its window, or `python mp/mpctl.py`
+on the same PC (its console port answers on 127.0.0.1 only).  Windows
+Firewall must let it in: allow it when Windows asks the first time, or a
+rule for UDP 31992 does it -- but a prompt left unanswered makes a rule that
+*blocks* it, and that one wins.  The Python server needs the same rule.
 
 `--mode coop|dm`, `--noenemies`, `--ff off`, `--fraglimit N`,
 `--timelimit MIN`, `--itemrespawn SECS`, `--bots N`, `--map N` (0-59),
