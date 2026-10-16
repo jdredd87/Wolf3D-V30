@@ -114,6 +114,9 @@ MPSRVW --players 4 --bots 1 --mode coop --skill 2 --map 0
 python mp/mpserver.py --players 4 --mode dm --noenemies --itemrespawn 30
 ```
 
+`MPSRV /?` (or `MPSRVW /?`) explains every option with its default, and
+gives examples.
+
 **The DOS server** (since v1.4) needs a packet driver and the machine's
 address in mTCP's config or `C:\AI\NET.CFG`, as the game does; XMS keeps a
 long game's history (without it, `MPSRV.HIS` on the disk), so a machine can

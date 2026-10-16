@@ -119,8 +119,8 @@ var
     went out in its place -- slot 2's packets were reaching slot 3.  It did
     NOT cure that; a pause after each frame did (SnGapLoops), so the card's
     WiFi is what garbles frames sent back to back.  The ring stays, being
-    harmless and cheap, at four. }
-  TxRing  : array[0..3] of TPkt;   { 8 until 2026-10-16: four, for a 16-slot receive ring's room }
+    harmless and cheap, at two. }
+  TxRing  : array[0..1] of TPkt;   { 8 until 2026-10-16: two, for a 16-slot receive ring's room and MPSRV /? }
   TxCur   : Byte;
   Handle, IpHnd, ArpHnd: Word;
   HaveIp, HaveArp, HaveDrv: Boolean;
@@ -540,7 +540,7 @@ procedure SendFrame(Len: Word);
 var
   T0, Tries: Word;
 begin
-  TxCur := (TxCur + 1) and 3;
+  TxCur := (TxCur + 1) and 1;
   Move(TxBuf, TxRing[TxCur], Len);
   Tries := 0;
   while not SendOnce(Len) do

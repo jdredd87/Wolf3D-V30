@@ -1807,3 +1807,14 @@ the build of 8439d0a (`1DC5161E` and `5E84258D`): MPSRV.LOG written once a
 second rather than after every line, and a 16-slot receive ring -- what took
 the V30 as a server from 518 dropped frames to 205.  The same on all three
 DOS machines here.  The game, `WOLF3DM.EXE` `86B78D6C`, is v1.3's.
+
+**`MPSRV /?` -- 2026-10-16** (StevenC: "expand the /? help ... a descriptive
+comment on each option ... even examples").  It was four lines of switches;
+now a page: what the server does, every option with its default, which are
+DOS's only (`--noxms`, `--txgap`), the console's commands and how to reach
+them from a PC, six examples, and how a player joins -- under 80 columns,
+for a DOS screen, and `/?`, `/h`, `-?`, `-h`, `--help` or `help` all show it.
+The DOS build's data segment had no room for the text: the transmit ring
+went from four buffers to two (it was never the cure for the garbled
+frames; the pause after each frame was).  MPSRV `FB578572` on all three DOS
+machines, MPSRVW `993964A3`.

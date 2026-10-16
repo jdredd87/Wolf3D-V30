@@ -67,6 +67,9 @@ Any one of the three -- the same switches, the same console:
     SERVER\MPSRVW --players 4 --bots 1 --mode coop --skill 2 --map 0  (Windows)
     python SERVER\mp\mpserver.py --players 4 --mode dm --noenemies   (Python)
 
+MPSRV /? (or MPSRVW /?) explains every option, with its default, and gives
+examples -- on DOS, MPSRV /? | MORE shows it a page at a time.
+
     --players N       how many people (up to 4, bots included)
     --mode coop|dm    co-op or deathmatch
     --noenemies       an empty map

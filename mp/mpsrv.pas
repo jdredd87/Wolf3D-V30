@@ -1903,6 +1903,102 @@ begin
     if Lower(ParamStr(I)) = Name then Flag := True;
 end;
 
+{ MPSRV /? (StevenC, 2026-10-16: "expand the /? help ... a descriptive comment on
+  each option ... even examples").  Kept under 80 columns, for a DOS screen. }
+procedure ShowHelp;
+const
+{$IFDEF WINDOWS}
+  X = 'MPSRVW';
+{$ELSE}
+  X = 'MPSRV';
+{$ENDIF}
+begin
+{$IFDEF WINDOWS}
+  WriteLn('MPSRVW -- the Wolf3D multiplayer server for Windows -- StevenC & Claude');
+{$ELSE}
+  WriteLn('MPSRV -- the Wolf3D multiplayer server for DOS -- StevenC & Claude');
+{$ENDIF}
+  WriteLn;
+  WriteLn('Hosts a WOLF3DM.EXE network game for up to four players: it keeps the');
+  WriteLn('clock (17.5 steps a second), passes every player''s controls to everyone,');
+  WriteLn('lets players join and leave at any time, and checks that every machine is');
+  WriteLn('playing the same game.  The same server as mp/mpserver.py (Python).');
+  WriteLn;
+  WriteLn('usage: ', X, ' [options]       every option has a default -- none are needed');
+  WriteLn;
+  WriteLn('THE GAME                                                       (the default)');
+  WriteLn('  --players N      slots in the game, 1 to 4, bots included          (4)');
+  WriteLn('  --bots N         how many of the slots the server plays itself --  (0)');
+  WriteLn('                   the last ones; they wander, open doors and fire');
+  WriteLn('  --mode coop|dm   co-op (together, against the enemies) or          (coop)');
+  WriteLn('                   deathmatch (against each other)');
+  WriteLn('  --map N          the first floor: (episode-1)*10 + (floor-1),      (0: E1L1)');
+  WriteLn('                   so 0-59 -- E2L1 is 10, E6L10 is 59');
+  WriteLn('  --skill N        0 "can I play, daddy?" to 3 "I am death incarnate" (2)');
+  WriteLn('  --noenemies      no enemies at all: an empty map, for deathmatch');
+  WriteLn('  --ff on|off      friendly fire in co-op                            (on)');
+  WriteLn('  --fraglimit N    deathmatch: the floor ends at N frags             (0: none)');
+  WriteLn('  --timelimit MIN  a floor ends after MIN minutes                    (0: none)');
+  WriteLn('  --itemrespawn S  a taken item comes back after S seconds, in steps of 5,');
+  WriteLn('                   up to 155                 (30 in deathmatch, never in co-op)');
+  WriteLn;
+  WriteLn('THE SERVER');
+  WriteLn('  --port N         the UDP port the game talks on; players then join (31992)');
+  WriteLn('                   with PORT N');
+{$IFDEF WINDOWS}
+  WriteLn('  --control N      the console port for python mp/mpctl.py, on       (31999)');
+  WriteLn('                   127.0.0.1 only -- this PC; 0 turns it off');
+{$ELSE}
+  WriteLn('  --control N      the console port for python mp/mpctl.py --host,   (31999)');
+  WriteLn('                   from any machine on this network; 0 turns it off');
+{$ENDIF}
+  WriteLn('  --drop-after S   a player not heard from for S seconds loses its   (60)');
+  WriteLn('                   slot -- a WiFi dropout shorter than that is ridden out');
+  WriteLn('  --once           stop when the game ends, instead of waiting for the next');
+  WriteLn('  --steps N        stop after N steps -- for tests (a step is 1/17.5 s)');
+  WriteLn('  --quiet          no log lines on the screen (MPSRV.LOG still gets them)');
+{$IFNDEF WINDOWS}
+  WriteLn('  --noxms          keep the game''s history in MPSRV.HIS on the disk, not in');
+  WriteLn('                   XMS (it goes there anyway when there is no XMS)');
+  WriteLn('  --txgap US       microseconds to wait after each packet sent      (1000)');
+  WriteLn('                   -- a PicoMEM card''s WiFi garbles packets sent back to');
+  WriteLn('                   back; 0 for none, on a card that does not');
+{$ENDIF}
+  WriteLn;
+  WriteLn('THE CONSOLE -- type a command and Enter while it runs (help lists them all),');
+{$IFDEF WINDOWS}
+  WriteLn('or from another window on this PC:  python mp/mpctl.py status');
+{$ELSE}
+  WriteLn('or from a PC on this network:  python mp/mpctl.py --host ADDRESS status');
+{$ENDIF}
+  WriteLn('  status   scores   say TEXT   kick N [reason]   ban N|ADDRESS   unban ADDRESS');
+  WriteLn('  pause    resume   map E L    nextfloor   timelimit MIN   fraglimit N');
+  WriteLn('  next ...   (the next game''s settings)    end   quiet on|off   quit');
+  WriteLn;
+  WriteLn('EXAMPLES');
+  WriteLn('  ', X, ' --mode dm --noenemies');
+  WriteLn('        deathmatch on E1L1 with no enemies, items back after 30 s');
+  WriteLn('  ', X, ' --mode dm --noenemies --map 9 --timelimit 10 --fraglimit 25');
+  WriteLn('        the secret floor of episode 1: 10 minutes or 25 frags a floor');
+  WriteLn('  ', X, ' --players 4 --bots 2 --mode dm --noenemies');
+  WriteLn('        two people and two server bots -- a full game from two machines');
+  WriteLn('  ', X, ' --mode coop --skill 3 --map 20 --ff off');
+  WriteLn('        co-op from E3L1 at the hardest skill, no friendly fire');
+  WriteLn('  ', X, ' --mode coop --bots 1 --itemrespawn 60');
+  WriteLn('        co-op with a server bot along; ammo and health back after a minute');
+  WriteLn('  ', X, ' --port 31993 --control 31998');
+  WriteLn('        a second server beside another; its players add PORT 31993');
+  WriteLn;
+  WriteLn('JOINING -- on each player''s machine, in the game''s directory:');
+  WriteLn('  WOLF3DM NET <this machine''s address> NAME <a name>   (or PLAY, then M)');
+{$IFDEF WINDOWS}
+  WriteLn('Windows Firewall must let it in: allow it if Windows asks the first time.');
+{$ELSE}
+  WriteLn('It needs a packet driver and its address in mTCP''s config or C:\AI\NET.CFG.');
+  WriteLn('A machine that serves cannot also play.   (', X, ' /? | MORE: a page at a time)');
+{$ENDIF}
+end;
+
 procedure Cleanup;
 var I, K: Integer; L: Word;
 begin
@@ -1959,12 +2055,11 @@ var
   Busy: Boolean;
 begin
   { FPC 3.2.2's i8086 runtime: ParamStr is '' until ParamCount runs }
-  if (ParamCount > 0) and ((ParamStr(1) = '/?') or (Lower(ParamStr(1)) = '--help')) then
+  if (ParamCount > 0) and ((ParamStr(1) = '/?') or (Lower(ParamStr(1)) = '/h')
+     or (ParamStr(1) = '-?') or (Lower(ParamStr(1)) = '-h') or (Lower(ParamStr(1)) = '--help')
+     or (Lower(ParamStr(1)) = 'help')) then
   begin
-    WriteLn('MPSRV [--players 4] [--bots 0] [--map 0] [--skill 2] [--mode coop|dm] [--ff on|off]');
-    WriteLn('      [--noenemies] [--fraglimit N] [--timelimit MIN] [--itemrespawn SECS]');
-    WriteLn('      [--port 31992] [--control 31999] [--drop-after 60] [--steps N] [--once] [--noxms]');
-    WriteLn('      [--txgap 1000]   microseconds after each frame sent (0: none)');
+    ShowHelp;
     Halt(0);
   end;
 {$IFDEF WINDOWS}
