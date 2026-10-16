@@ -38,6 +38,34 @@ def crlf(path):
     return open(path, "rb").read().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
 
 
+def setup_txt():
+    """SETUP.md as plain text for DOS (2026-10-16): links as "text (url)",
+    headings in capitals and underlined, code blocks indented, no ** or `."""
+    import re
+    md = open(os.path.join(ROOT, "SETUP.md"), encoding="utf-8").read().replace("\r\n", "\n")
+    out, code = [], False
+    for line in md.split("\n"):
+        if line.strip().startswith("```"):
+            code = not code
+            continue
+        if code:
+            out.append("    " + line)
+            continue
+        if re.match(r"^\|[-| ]+\|$", line):          # a table's separator row
+            continue
+        line = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", lambda m: m.group(1) if m.group(2).endswith(".md")
+                      else "%s (%s)" % (m.group(1), m.group(2)), line)
+        line = line.replace("**", "").replace("`", "")
+        m = re.match(r"^(#+) (.*)$", line)
+        if m:
+            text = m.group(2).upper() if len(m.group(1)) <= 2 else m.group(2)
+            out += [text, ("=" if len(m.group(1)) == 1 else "-") * len(text)]
+            continue
+        out.append(line)
+    text = "\n".join(out).replace("MULTIPLAYER.md", "MULTIPLAYER.md on the multiplayer branch")
+    return text.replace("\n", "\r\n").encode("latin-1", "replace")
+
+
 def crc(data):
     return "%08X" % (zlib.crc32(data) & 0xFFFFFFFF)
 
@@ -66,6 +94,7 @@ def main():
         z.write(menu, "W3MENU.EXE")
         z.writestr("PLAY.BAT", crlf(os.path.join(ROOT, "launcher", "PLAY.BAT")))
         z.writestr("MULTI.TXT", crlf(os.path.join(ROOT, "release", "MULTI.TXT")))
+        z.writestr("SETUP.TXT", setup_txt())             # SETUP.md, for DOS (2026-10-16)
         z.writestr("LICENSE.DOC", open(os.path.join(ROOT, "WOLFSRC", "README", "LICENSE.DOC"), "rb").read())
         for name, data in servers:
             z.writestr(name, data)

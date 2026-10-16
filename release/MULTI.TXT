@@ -24,6 +24,9 @@ MPSRVW has served all three at once, without a desync.
 second, and has room for twice as many packets waiting.
 1.4.2: MPSRV /? and MPSRVW /? explain every option, with examples.
 
+SETUP.TXT walks through setting it all up, step by step -- the network
+on each DOS machine, the game, the server, joining, and troubleshooting.
+
 Source, the design and every test:
     https://github.com/jdredd87/Wolf3D-V30   (branch multiplayer;
                                               MULTIPLAYER.md)
@@ -146,6 +149,7 @@ THE FILES
     W3MENU.EXE        the PLAY menu, with the network page
     PLAY.BAT
     MULTI.TXT         this file
+    SETUP.TXT         the setup guide, step by step
     LICENSE.DOC       id Software's licence for the source
     SERVER\MPSRV.EXE          the server, for a DOS machine
     SERVER\MPSRVW.EXE         the server, for Windows
