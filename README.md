@@ -76,8 +76,10 @@ anywhere in the assembler would have been a build error.  It costs little:
 on the V30, demo 0 plays in 738 ticks against `WOLF3DV`'s 722 from the same
 source -- **2.3% slower**, 4.90 frames a second against 5.01 (three rounds
 each, interleaved, `ab.py`; 2026-10-15).  On a V20/V30, a 186 or anything
-newer, use `WOLF3DV` all the same.  Nobody here has an 8088 to run it on: if
-you have one, we would like to hear.
+newer, use `WOLF3DV` all the same.  It is in the download since v1.5
+(2026-10-16), and the `PLAY` menu runs it by itself on an 8086 or 8088.
+Nobody here has an 8088 to run it on: if you have one, we would like to
+hear.
 
 ## Status
 
@@ -269,7 +271,7 @@ network game.
 | `master` | id's source exactly as released, for diffing |
 | `upstream` remote | https://github.com/id-Software/wolf3d |
 
-`release/` is the playable package: `mkrelease.py` zips `WOLF3DV.EXE`, the menu, the demo reel, `release/README.TXT` and id's `LICENSE.DOC` into `release/W3DV30.ZIP` (not committed) -- no game data.
+`release/` is the playable package: `mkrelease.py` zips `WOLF3DV.EXE`, `WOLF3D8.EXE`, `WOLF3DB.EXE`, `WOLF3DO.EXE`, the menu, the demo reel, `release/README.TXT` and id's `LICENSE.DOC` into `release/W3DV30.ZIP` (not committed) -- no game data.
 
 `bsp/` is step 86's proof of concept, a program apart from the game: `mkbsp.py` and `mktables.py` make its data from your own `GAMEMAPS.WL6` and `MAPHEAD.WL6`, and `bsptest.pas` builds with FPC as `starter/` does in DOS Bridge (`fpc -Tmsdos -Pi8086 -WmLarge -FEbuild -FUbuild bsptest.pas`, with the bridge's `starter` on the unit path for `VidFix`); run it in a directory holding `TABLES.DAT` and the four `BSPnn.DAT`.
 
