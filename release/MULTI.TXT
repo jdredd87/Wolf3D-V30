@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D, MULTIPLAYER  --  by StevenC and Claude (Anthropic)
 ==================================================================
-Version 1.3, 2026-10-15
+Version 1.4, 2026-10-16
 
 id Software's Wolfenstein 3-D for up to four players over a network:
 deathmatch or co-op, each with or without enemies, DOOM's rules (no
@@ -13,6 +13,10 @@ a different game.
 Tested: eight hours at a time on a NEC V30, a 486 and a Pentium II with a
 server bot, every one of the sixty floors in co-op with enemies, every
 deathmatch floor -- no machine ever disagreed with another.
+
+New in 1.4: the server runs on DOS too, and on Windows without Python --
+MPSRV.EXE and MPSRVW.EXE, one Free Pascal source.  Eight hours with MPSRV
+on the Pentium II serving the 486 and the V30: no machine disagreed once.
 
 Source, the design and every test:
     https://github.com/jdredd87/Wolf3D-V30   (branch multiplayer;
@@ -34,8 +38,10 @@ WHAT YOU NEED
       GATEWAY 192.168.1.1
 
   (PACKETINT 0x60 says which interrupt, if the search should not.)
-* One PC with Python 3 to run the server, on the same network.  Its
-  firewall must let in UDP port 31992 from the local network.
+* One machine on the same network to run the server -- any of three:
+  a DOS machine with a packet driver (MPSRV.EXE), a Windows PC
+  (MPSRVW.EXE), or any PC with Python 3 (mpserver.py).  A PC's firewall
+  must let in UDP port 31992 from the local network.
 
 
 INSTALLING
@@ -44,13 +50,17 @@ On each DOS machine: copy WOLF3DM.EXE, W3MENU.EXE and PLAY.BAT into the
 directory with your *.WL6 files.  (W3MENU.EXE and PLAY.BAT are the same
 menu as the base package's, with a network page added; they replace it.)
 
-On the PC: copy the SERVER directory anywhere.
+For the server: MPSRV.EXE onto the DOS machine that will host, or the
+SERVER directory onto the PC.
 
 
 HOSTING
 -------
-    python SERVER\mp\mpserver.py --players 4 --mode dm --noenemies --itemrespawn 30
-    python SERVER\mp\mpserver.py --players 4 --bots 1 --mode coop --skill 2 --map 0
+Any one of the three -- the same switches, the same console:
+
+    MPSRV --players 4 --mode dm --noenemies --itemrespawn 30          (DOS)
+    SERVER\MPSRVW --players 4 --bots 1 --mode coop --skill 2 --map 0  (Windows)
+    python SERVER\mp\mpserver.py --players 4 --mode dm --noenemies   (Python)
 
     --players N       how many people (up to 4, bots included)
     --mode coop|dm    co-op or deathmatch
@@ -65,12 +75,27 @@ HOSTING
 
 The game starts when the first player has loaded the level.
 
-While it runs, the server's window takes commands -- status, scores,
-say TEXT, kick N reason, ban N, pause, resume, map E L, nextfloor,
-timelimit MIN, fraglimit N, next ..., end, quit (help lists them).  The
-same commands also work from another window on that PC:
+While it runs, the server takes commands -- status, scores, say TEXT,
+kick N reason, ban N, pause, resume, map E L, nextfloor, timelimit MIN,
+fraglimit N, next ..., end, quit (help lists them) -- typed into it, or
+sent from a PC:
 
-    python SERVER\mp\mpctl.py status
+    python SERVER\mp\mpctl.py status                     (on the same PC)
+    python SERVER\mp\mpctl.py --host 192.168.1.30 status (to MPSRV on DOS)
+
+MPSRV on DOS: the same packet driver and address file as the game.  It
+runs the PC's timer at 70 Hz while it serves, as the game does, and puts
+it back however it stops; it keeps the game's history in XMS (or in
+MPSRV.HIS on the disk without it), so a machine can join hours into a
+game.  A line at the bottom of its screen moves with the clock.  A DOS
+machine that serves cannot also play.  --txgap 1000 (the default) waits a
+millisecond after each packet it sends: a PicoMEM card's WiFi garbles one
+that follows another too closely.
+
+MPSRVW on Windows: the console is its window (the status is in the title).
+If Windows asks whether to let it on the network, allow it -- a question
+left unanswered makes a firewall rule that blocks it, and that rule wins
+over any rule for the port.
 
 
 JOINING
@@ -113,11 +138,13 @@ THE FILES
     PLAY.BAT
     MULTI.TXT         this file
     LICENSE.DOC       id Software's licence for the source
-    SERVER\gendemo.py         the server bots' moves
-    SERVER\mp\mpserver.py     the server
+    SERVER\MPSRV.EXE          the server, for a DOS machine
+    SERVER\MPSRVW.EXE         the server, for Windows
+    SERVER\gendemo.py         the Python server's bots' moves
+    SERVER\mp\mpserver.py     the server, in Python
     SERVER\mp\mpproto.py      the protocol
     SERVER\mp\mpconsole.py    the server's console
-    SERVER\mp\mpctl.py        the console from another window
+    SERVER\mp\mpctl.py        the console from another window or PC
 
 The game is id Software's source, under id's licence (LICENSE.DOC); the
 game data is not included and never will be.

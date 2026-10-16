@@ -1,17 +1,20 @@
-"""Package the network game: release/W3DMP.ZIP.  StevenC & Claude, 2026-10-15.
+"""Package the network game: release/W3DMP.ZIP.  StevenC & Claude, 2026-10-15/16.
 
-    python w3dbuild.py build      first: WOLFSRC\\WOLF3DV.EXE from this branch's HEAD
+    python w3dbuild.py build          first: WOLFSRC\\WOLF3DV.EXE from this branch's HEAD
+    python mp/mkmpsrv.py              ... mp/build/MPSRV.EXE, the DOS server
+    python mp/mkmpsrv.py --windows    ... mp/build/win/MPSRVW.EXE, the Windows server
     python mp/mkmprel.py
 
 The zip holds what each player copies beside their own *.WL6 files --
 WOLF3DM.EXE (this branch's build, renamed), the PLAY menu with its network
 page (W3MENU.EXE, built here, and PLAY.BAT), release/MULTI.TXT and id's
-LICENSE.DOC -- and SERVER\\, the Python server for the host PC (mpserver,
-mpproto, mpconsole, mpctl, and gendemo for the bots' moves, in the layout
-mpserver.py imports them from).  None of id's game data.  Text files for
-DOS go in with CRLF.  It refuses an EXE older than the newest committed
-source, and prints the EXE's size and CRC-32 so a release can be matched to
-what the machines run.
+LICENSE.DOC -- and SERVER\\, the three servers, any one of which hosts a
+game: MPSRV.EXE for a DOS machine, MPSRVW.EXE for Windows (since v1.4, both
+built from mp/mpsrv.pas), and the Python one (mpserver, mpproto, mpconsole,
+mpctl, and gendemo for the bots' moves, in the layout mpserver.py imports
+them from).  None of id's game data.  Text files for DOS go in with CRLF.
+It refuses an EXE older than its committed source, and prints every EXE's
+size and CRC-32 so a release can be matched to what the machines run.
 """
 import os
 import subprocess
@@ -25,11 +28,18 @@ import w3dbuild          # noqa: E402  (build_launcher)
 
 EXE = os.path.join(ROOT, "WOLFSRC", "WOLF3DV.EXE")
 OUT = os.path.join(ROOT, "release", "W3DMP.ZIP")
-SERVER = ["mp/mpserver.py", "mp/mpproto.py", "mp/mpconsole.py", "mp/mpctl.py", "gendemo.py"]
+PYSERVER = ["mp/mpserver.py", "mp/mpproto.py", "mp/mpconsole.py", "mp/mpctl.py", "gendemo.py"]
+# the Free Pascal servers: (built file, its name in the zip, the sources it is built from)
+FPSERVERS = [("mp/build/mpsrv.exe", "SERVER/MPSRV.EXE", ["mp/mpsrv.pas", "mp/srvnet.pas"]),
+             ("mp/build/win/mpsrvw.exe", "SERVER/MPSRVW.EXE", ["mp/mpsrv.pas", "mp/winnet.pas"])]
 
 
 def crlf(path):
     return open(path, "rb").read().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+
+
+def crc(data):
+    return "%08X" % (zlib.crc32(data) & 0xFFFFFFFF)
 
 
 def main():
@@ -40,6 +50,15 @@ def main():
            if os.path.splitext(f)[1].upper() in (".C", ".H", ".ASM")]
     if os.path.getmtime(EXE) < max(os.path.getmtime(p) for p in src):
         sys.exit("WOLFSRC\\WOLF3DV.EXE is older than the source: python w3dbuild.py build")
+    servers = []
+    for built, name, sources in FPSERVERS:
+        p = os.path.join(ROOT, built)
+        if not os.path.exists(p):
+            sys.exit("no %s: python mp/mkmpsrv.py%s" % (built, " --windows" if "win" in built else ""))
+        if os.path.getmtime(p) < max(os.path.getmtime(os.path.join(ROOT, s)) for s in sources):
+            sys.exit("%s is older than its source: python mp/mkmpsrv.py%s"
+                     % (built, " --windows" if "win" in built else ""))
+        servers.append((name, open(p, "rb").read()))
     menu = w3dbuild.build_launcher()
     exe = open(EXE, "rb").read()
     with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as z:
@@ -48,12 +67,16 @@ def main():
         z.writestr("PLAY.BAT", crlf(os.path.join(ROOT, "launcher", "PLAY.BAT")))
         z.writestr("MULTI.TXT", crlf(os.path.join(ROOT, "release", "MULTI.TXT")))
         z.writestr("LICENSE.DOC", open(os.path.join(ROOT, "WOLFSRC", "README", "LICENSE.DOC"), "rb").read())
-        for f in SERVER:
+        for name, data in servers:
+            z.writestr(name, data)
+        for f in PYSERVER:
             z.write(os.path.join(ROOT, f), "SERVER/" + f)
     head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
                           capture_output=True, text=True).stdout.strip()
-    print("%s: %d bytes" % (OUT, os.path.getsize(OUT)))
-    print("WOLF3DM.EXE %d bytes, CRC-32 %08X, source %s" % (len(exe), zlib.crc32(exe) & 0xFFFFFFFF, head))
+    print("%s: %d bytes, source %s" % (OUT, os.path.getsize(OUT), head))
+    print("WOLF3DM.EXE  %7d bytes, CRC-32 %s" % (len(exe), crc(exe)))
+    for name, data in servers:
+        print("%-12s %7d bytes, CRC-32 %s" % (os.path.basename(name), len(data), crc(data)))
     with zipfile.ZipFile(OUT) as z:
         for i in z.infolist():
             print("  %-24s %7d" % (i.filename, i.file_size))
