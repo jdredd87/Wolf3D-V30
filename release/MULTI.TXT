@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D, MULTIPLAYER  --  by StevenC and Claude (Anthropic)
 ==================================================================
-Version 1.4.3, 2026-10-16
+Version 1.5, 2026-10-16
 
 id Software's Wolfenstein 3-D for up to four players over a network:
 deathmatch or co-op, each with or without enemies, DOOM's rules (no
@@ -24,6 +24,10 @@ MPSRVW has served all three at once, without a desync.
 second, and has room for twice as many packets waiting.
 1.4.2: MPSRV /? and MPSRVW /? explain every option, with examples.
 1.4.3: SETUP.TXT, the setup guide.
+1.5: SETUP.TXT has the server's console in full -- every command, with
+an example; on a plain 8086 or 8088 the PLAY menu says the network game
+needs a V20/V30 or better (WOLF3DM uses 80186 instructions).  The game
+and the servers are the same as 1.4.3's.
 
 SETUP.TXT walks through setting it all up, step by step -- the network
 on each DOS machine, the game, the server, joining, and troubleshooting.
