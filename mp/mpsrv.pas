@@ -1173,6 +1173,10 @@ begin
             + ', ' + I2S(Inputs) + ' inputs, heard ' + Secs(Ticks - Heard) + ' s ago');
       end;
   if Pending <> '' then Say('next game:' + Pending);
+  { the counters (2026-10-15): so a long run can be watched from afar }
+  Say('  net: ' + I2S(Desyncs) + ' desyncs; packets sent ' + I2S(SentN) + ', received ' + I2S(RecvN)
+      + '; the card: ' + I2S(SnTxFail) + ' refused, ' + I2S(SnRxBadSum) + ' bad checksums, '
+      + I2S(SnDropped) + ' dropped (no room)');
 end;
 
 procedure SayAll(const Text: ShortString);
