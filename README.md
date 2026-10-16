@@ -112,6 +112,13 @@ packet driver and the machine's address in mTCP's config or
 (without it, `MPSRV.HIS` on the disk).  Built for the plain 8086
 (`python mp/mkmpsrv.py`).  A DOS machine that serves cannot also play.
 
+**Or `MPSRVW.EXE` on Windows** -- the same server from the same source
+(`python mp/mkmpsrv.py --windows`), no Python needed: the same switches and
+console, typed in its window or sent with `python mp/mpctl.py` (its console
+port answers on 127.0.0.1 only).  Windows Firewall must let it in: allow it
+when Windows asks the first time, or a rule for UDP 31992 does it -- but a
+prompt left unanswered makes a rule that *blocks* it, and that one wins.
+
 `--mode coop|dm`, `--noenemies`, `--ff off`, `--fraglimit N`,
 `--timelimit MIN`, `--itemrespawn SECS`, `--bots N`, `--map N` (0-59),
 `--skill 0-3`.  The game starts when the first player has loaded the level;

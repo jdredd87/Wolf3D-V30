@@ -13,7 +13,7 @@ the summary comes first.
 | the game | `WOLF3DM.EXE`: id's Wolfenstein 3-D for up to **four players** -- **deathmatch or co-op**, each with or without enemies; DOOM's rules (no lives, respawn with SPACE, frags, items back after a time, one player's keys everyone's in co-op); BJ in four colours; chat (T), scores (TAB), ESC asks first |
 | the network | lockstep over UDP, port 31992: the server keeps the clock at 17.5 steps a second and passes controls along; every machine plays every step, so a V30 and a Pentium II play the same game.  Checksums every 50 steps catch any machine that differs |
 | joining | any time: a joiner replays the game so far at full speed and walks in when caught up ("Catching up: N steps to go" -- README.md says why it has to, and how long: a 486 or the Pentium II under a minute for an hour's game, the V30 six to fifteen); a leaver's slot is free at once.  A WiFi dropout of up to a minute is ridden out |
-| the server | `mp/mpserver.py` (Python), or **`MPSRV.EXE` on any DOS machine** (since 2026-10-15), each with **bots** and a **console**: status, scores, say, kick with a reason, ban, pause, map and next floor, the limits mid-game, the next game's settings -- "The server's console" below |
+| the server | `mp/mpserver.py` (Python), or **`MPSRV.EXE` on any DOS machine**, or **`MPSRVW.EXE` on Windows** (since 2026-10-15; one Free Pascal source), each with **bots** and a **console**: status, scores, say, kick with a reason, ban, pause, map and next floor, the limits mid-game, the next game's settings -- "The server's console" below |
 | the machines | the NEC V30 (8 MHz; `LOWEST VIEW 10`, ~3-9 pictures a second), the 486 (66 MHz) and the Pentium II, all three with sound -- AdLib music and Sound Blaster effects |
 | proof | 20 generated 2- and 4-player demos give the same checksums from every player's eyes (`mp/mpsweep.py`); every change is run against the last accepted sweep.  **Eight hours, three machines and a bot, no desync** (2026-10-13); every deathmatch floor of all six episodes, and **every one of the sixty floors in co-op, with enemies, on all three machines, no desync** (2026-10-14, `stage/logs/stress.py`); single player still id's picture exactly |
 | not yet | a recording (`--record`) is one floor, so one the console ends early is cut where it ended |
@@ -1751,3 +1751,23 @@ frames sent and none refused, 0 datagrams with a wrong checksum, 7 frames
 dropped coming in (the receive ring full for a moment; the protocol sends
 them again).  The same eight hours the Python server gives.  Still to do:
 every machine taking a turn as the server.
+
+**And on Windows: `MPSRVW.EXE` -- 2026-10-15/16** (StevenC: "can we make a
+windows wolf3d server now too? with freepascal?").  The same `mp/mpsrv.pas`
+with `{$IFDEF WINDOWS}` around the five parts that touch DOS: the network
+(`mp/winnet.pas`, WinSock behind the same procedures as `srvnet.pas`), the
+70 Hz clock (the performance counter), the history (memory: room for 67
+million steps), the console (a thread reading lines from the window or a
+pipe; the status in the window's title; the console port on 127.0.0.1 only,
+as `mpserver.py`'s), and Ctrl-C (a clean stop: everyone told goodbye).
+`python mp/mkmpsrv.py --windows`, FPC's own i386-win32: 74 KB.
+
+The first try on the network heard nothing at all: at its first run Windows
+had made two inbound *block* rules for `mpsrvw.exe` (its "allow access?"
+prompt went unanswered), and a block rule beats the port's allow rule.
+StevenC removed them.  Then the live test (`stage/logs/livesrv.py --win`)
+with the PC serving **all three DOS machines at once**: the 486 and P3 from
+the start, a bot, the V30 (`NOAL`) joining at step 5,300-odd and catching up
+7,612 steps in 76 s, then pause, `nextfloor` with `map 1 3` and both limits
+in the tally, and a kick -- **9,185 steps, 0 desyncs**, the 486 and P3 at
+17.0 pictures a second, 21,493 frames sent and none lost.
