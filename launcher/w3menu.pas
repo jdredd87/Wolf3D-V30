@@ -169,7 +169,8 @@ end;
 procedure LoadNet;
 var f: Text; s, w, v: string; i, code: Integer; n: Word;
 begin
-  HaveNet := FSearch('WOLF3DM.EXE', '') <> '';
+  { WOLF3DM needs the 80186 instructions, and there is no 8086 build of it }
+  HaveNet := (FSearch('WOLF3DM.EXE', '') <> '') and Has186 and not Force8086;
   NetIp := '';
   NetPort := DefPort;
   NetName := '';
@@ -412,7 +413,9 @@ begin
   WriteLn;
   WriteLn('    P  play     B  benchmark these switches     Q  quit');
   if HaveNet then
-    WriteLn('    M  network game (WOLF3DM)');
+    WriteLn('    M  network game (WOLF3DM)')
+  else if FSearch('WOLF3DM.EXE', '') <> '' then
+    WriteLn('       (the network game needs a V20/V30, an 80186 or better)');
   WriteLn('       (in the game, TAB shows the map of what you have seen)');
   WriteLn;
   WriteLn('  ', Prog, Args);
