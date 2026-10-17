@@ -3,8 +3,10 @@
 #include "WL_DEF.H"
 #pragma	hdrstop
 
-#ifndef SPEAR		// id's Spear of Destiny has no help or end text: its project left
-					// this file out (StevenC & Claude, 2026-10-16)
+// id's Spear of Destiny has no help or end text: its project left this file
+// out (StevenC & Claude, 2026-10-16).  The network game (NETGAME) shows none
+// either, and the V30 needs the memory: two stubs at the end (2026-10-17)
+#if !defined(SPEAR) && !defined(NETGAME)
 
 /*
 =============================================================================
@@ -861,4 +863,9 @@ void EndText (void)
 #endif
 }
 
-#endif	// SPEAR
+#endif	// SPEAR, NETGAME
+
+#ifdef NETGAME
+void HelpScreens (void) {}		// for their callers, which a network game never reaches
+void EndText (void) {}
+#endif
