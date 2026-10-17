@@ -1824,3 +1824,38 @@ MPSRVW.EXE `993964A3`; the game, `WOLF3DM.EXE` `86B78D6C`, is v1.3's.
 
 **v1.4.3 -- 2026-10-16**: [SETUP.md](SETUP.md), the network game set up step by
 step, and in the download as `SETUP.TXT`; the same EXEs as v1.4.2.
+
+## The shareware, and a pause after every packet on every server -- 2026-10-16
+
+StevenC: "Ok lets tackle all of this one by one then" -- item 4, the free
+shareware episode.  `WOLF3DM1.EXE` is `WOLF3DM` built with id's `UPLOAD`
+(`python w3dbuild.py buildwl1` on this branch), for the shareware 1.4's
+`*.WL1`: the graphics header `GFXV_W14.H` (the `v30-8086` branch's README
+has how it was found), and one change here -- under `UPLOAD` the game stays
+in episode 1 whatever floor the server names (`MPEPISODE`, `WL_MP.C`), as
+the shareware has no other.  The registered `WOLF3DM` builds byte for byte
+as it did.  So anyone can try a network game without buying anything.
+
+The first live game, MPSRVW serving the 486, P3 and the V30 (`NOAL LOWEST
+VIEW 10`) and a bot in `C:\WL1` on each, found two faults, neither of them
+the shareware's:
+
+* **The V30 quit at once: "Tried to load a sparse page!"**  `LOWEST` turns
+  on `FLATWALLS`, which averages every wall page for its colours, and the
+  shareware's VSWAP has 42 empty walls -- which `PM_GetPage` refuses.  An
+  empty page now counts as black (`FlatColours`, `WL_DRAW.C`, on
+  `v30-8086`); registered data has none, and `FLATWALLS`' checksums there
+  are as they were.
+* **P3, joining late, never got out of "Catching up"**: 1,236 frames
+  received of the server's 5,000, and not one step it could use.  The
+  catch-up is a burst of frames back to back, and P3's PicoMEM WiFi
+  garbles those -- the fault MPSRV's `--txgap` answered on 2026-10-15, but
+  MPSRVW and `mpserver.py` had no such pause.  Both have it now, 1,000 us
+  by default, spun on the clock (`time.sleep` and Windows' `Sleep` are
+  1-16 ms).  That costs a PC about 70 ms a second at four players.
+
+Then the same game again, P3 joining 75 s late: it caught up 1,318 steps
+in under a second, and **all three played 4,500 steps with the same sums**
+(`E793050D` at step 2000), no desync; the V30 at 8.6 pictures a second on
+`LOWEST`, a bot fragging it on E1L1.  `mpserver.py` with the pause: three
+fakes, one late, 3% loss, 600 steps, all agree.

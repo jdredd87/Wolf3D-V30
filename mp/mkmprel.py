@@ -6,7 +6,8 @@
     python mp/mkmprel.py
 
 The zip holds what each player copies beside their own *.WL6 files --
-WOLF3DM.EXE (this branch's build, renamed), the PLAY menu with its network
+WOLF3DM.EXE (this branch's build, renamed), WOLF3DM1.EXE (the same
+for the shareware),the PLAY menu with its network
 page (W3MENU.EXE, built here, and PLAY.BAT), release/MULTI.TXT and id's
 LICENSE.DOC -- and SERVER\\, the three servers, any one of which hosts a
 game: MPSRV.EXE for a DOS machine, MPSRVW.EXE for Windows (since v1.4, both
@@ -27,6 +28,7 @@ sys.path.insert(0, ROOT)
 import w3dbuild          # noqa: E402  (build_launcher)
 
 EXE = os.path.join(ROOT, "WOLFSRC", "WOLF3DV.EXE")
+EXE1 = os.path.join(ROOT, "WOLFSRC", "WOLF3DM1.EXE")     # the shareware's: w3dbuild.py buildwl1 (2026-10-16)
 OUT = os.path.join(ROOT, "release", "W3DMP.ZIP")
 PYSERVER = ["mp/mpserver.py", "mp/mpproto.py", "mp/mpconsole.py", "mp/mpctl.py", "gendemo.py"]
 # the Free Pascal servers: (built file, its name in the zip, the sources it is built from)
@@ -78,6 +80,8 @@ def main():
            if os.path.splitext(f)[1].upper() in (".C", ".H", ".ASM")]
     if os.path.getmtime(EXE) < max(os.path.getmtime(p) for p in src):
         sys.exit("WOLFSRC\\WOLF3DV.EXE is older than the source: python w3dbuild.py build")
+    if not os.path.exists(EXE1) or os.path.getmtime(EXE1) < max(os.path.getmtime(p) for p in src):
+        sys.exit("WOLFSRC\\WOLF3DM1.EXE is missing or older than the source: python w3dbuild.py buildwl1")
     servers = []
     for built, name, sources in FPSERVERS:
         p = os.path.join(ROOT, built)
@@ -89,8 +93,10 @@ def main():
         servers.append((name, open(p, "rb").read()))
     menu = w3dbuild.build_launcher()
     exe = open(EXE, "rb").read()
+    exe1 = open(EXE1, "rb").read()
     with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("WOLF3DM.EXE", exe)
+        z.writestr("WOLF3DM1.EXE", exe1)            # the shareware's (2026-10-16)
         z.write(menu, "W3MENU.EXE")
         z.writestr("PLAY.BAT", crlf(os.path.join(ROOT, "launcher", "PLAY.BAT")))
         z.writestr("MULTI.TXT", crlf(os.path.join(ROOT, "release", "MULTI.TXT")))
@@ -104,6 +110,7 @@ def main():
                           capture_output=True, text=True).stdout.strip()
     print("%s: %d bytes, source %s" % (OUT, os.path.getsize(OUT), head))
     print("WOLF3DM.EXE  %7d bytes, CRC-32 %s" % (len(exe), crc(exe)))
+    print("WOLF3DM1.EXE %7d bytes, CRC-32 %s" % (len(exe1), crc(exe1)))
     for name, data in servers:
         print("%-12s %7d bytes, CRC-32 %s" % (os.path.basename(name), len(data), crc(data)))
     with zipfile.ZipFile(OUT) as z:

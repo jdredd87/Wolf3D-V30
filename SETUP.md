@@ -27,9 +27,16 @@ Everything happens on UDP port **31992** (the server's console uses 31999).
 
 ## What you need
 
-- **The game data**: the *registered* Wolfenstein 3-D 1.4 files
-  (`VSWAP.WL6`, `GAMEMAPS.WL6` and the rest) on every player's machine.
-  They are not included.  The shareware `*.WL1` files won't work.
+- **The game data** on every player's machine -- none of it is included:
+  - the *registered* Wolfenstein 3-D 1.4 files (`VSWAP.WL6`, `GAMEMAPS.WL6`
+    and the rest), all six episodes -- the game is `WOLF3DM.EXE`; or
+  - the free *shareware* 1.4 files (`*.WL1`, episode 1's ten floors) --
+    the game is `WOLF3DM1.EXE` (since v1.6).  The shareware is free to
+    copy: `1WOLF14.ZIP` on any DOS game archive, unzipped and its `INSTALL`
+    run.  So anyone can try a network game without buying anything.
+
+  Everyone in one game uses the same one: all `WOLF3DM` on registered data,
+  or all `WOLF3DM1` on shareware.  The server refuses a mixture.
 - **On each player's DOS machine**: a NEC V20/V30, an 80186, or a 286 and
   up (the network game uses 186 instructions; a plain 8086 or 8088 can run
   the DOS server, but not play yet), VGA, DOS, at least about **550 KB of
@@ -81,13 +88,15 @@ the file is current.
 ## Step 2: the game on each player's machine
 
 1. Copy `WOLF3DM.EXE`, `W3MENU.EXE` and `PLAY.BAT` from the zip into the
-   directory with your `*.WL6` files.  (They replace the base package's
-   menu with one that has a network page.)
+   directory with your `*.WL6` files -- or `WOLF3DM1.EXE`, `W3MENU.EXE`
+   and `PLAY.BAT` into the one with the shareware's `*.WL1`.  (They replace
+   the base package's menu with one that has a network page; in a
+   shareware folder it runs `WOLF3DM1` by itself.)
 2. Check the memory: `MEM`'s "largest executable program size" should be
    about 550 KB or more.  Free more by loading drivers high, or leaving out
    what the game doesn't need (a CD-ROM driver is a common one).
-3. Everyone must run **the same `WOLF3DM.EXE`**: the server refuses a
-   machine with a different build.
+3. Everyone must run **the same `WOLF3DM.EXE`** (or the same
+   `WOLF3DM1.EXE`): the server refuses a machine with a different build.
 
 ## Step 3: the server -- pick one
 
@@ -132,6 +141,9 @@ the disk.  Even an 8 MHz V30 can host a full game.
    ```
 3. On Windows, Python needs the same firewall permission as `MPSRVW`.
 
+With the shareware, the server's `--map` and `map` pick a floor of
+episode 1: whatever episode you give, the shareware game stays in it.
+
 ### The server's address
 
 Players need the server machine's address: on Windows run `ipconfig`; on
@@ -145,7 +157,7 @@ On each player's machine, in the game's directory:
 WOLF3DM NET 192.168.1.10 NAME STEVE
 ```
 
-or type `PLAY`, press **M** for the network page, and fill it in: **S**
+(`WOLF3DM1 NET ...` with the shareware), or type `PLAY`, press **M** for the network page, and fill it in: **S**
 the server's address, **Y** your name, **O** the port (only if the server
 uses another), then **J** to join.  The server and your name are remembered
 in `WOLF3DM.CFG`, so next time `WOLF3DM NET` on its own is enough.
@@ -280,7 +292,8 @@ python SERVER\mp\mpctl.py --host 192.168.1.30 status
 | `no IPADDR in %MTCPCFG% or C:\AI\NET.CFG` | Write the address file (step 1). |
 | `Joining the server...` and then `No answer from the server in 90 seconds` | The server can't be reached.  Check that it's running, that the address is right, and on Windows the firewall (below). |
 | `The server is full -- try again when someone leaves` | All four slots are taken (bots count).  Start the server with fewer `--bots`. |
-| `The server is playing a different WOLF3DM` | Use the same `WOLF3DM.EXE` on every machine. |
+| `The server is playing a different WOLF3DM` | Use the same `WOLF3DM.EXE` on every machine -- or, with the shareware, the same `WOLF3DM1.EXE`.  Registered and shareware machines cannot play together. |
+| A machine with a **PicoMEM** card joins late and never gets past "Catching up" | The server is sending its catch-up too fast for the card's WiFi.  Every server waits 1 ms after each packet by default (`--txgap 1000`); if you set `--txgap 0`, take it out. |
 | `No word from the server: N s` | The network dropped.  It recovers by itself within a minute; after 60 s the server frees the slot. |
 | `DESYNC reported` at the end | The machines disagreed.  This shouldn't happen.  If it does, note what happened and let us know. |
 | A machine with a **PicoMEM** card freezes in network games | Its emulated AdLib can lock the machine up.  Add `NOAL` (sound effects then play on the PC speaker): `WOLF3DM NET NOAL`. |
