@@ -95,6 +95,7 @@ void EndSpear(void)
 #endif
 #endif
 
+#ifndef NETGAME		// the network game (WOLF3DM) has its own tally and none of these: stubs at the end, for the V30's memory (StevenC & Claude, 2026-10-17)
 //==========================================================================
 
 /*
@@ -324,6 +325,7 @@ void PG13 (void)
 	VW_FadeOut ();
 }
 #endif
+#endif	// NETGAME
 
 
 //==========================================================================
@@ -426,6 +428,7 @@ LRstruct LevelRatios[8];
 LRstruct LevelRatios[20];
 #endif
 
+#ifndef NETGAME		// the network game (WOLF3DM) has its own tally and none of these: stubs at the end, for the V30's memory (StevenC & Claude, 2026-10-17)
 void LevelCompleted (void)
 {
 	#define VBLWAIT	30
@@ -956,6 +959,8 @@ void LevelCompleted (void)
 
 
 
+#endif	// NETGAME
+
 //==========================================================================
 
 
@@ -1017,6 +1022,7 @@ void PreloadGraphics(void)
 }
 
 
+#ifndef NETGAME		// the network game (WOLF3DM) has its own tally and none of these: stubs at the end, for the V30's memory (StevenC & Claude, 2026-10-17)
 //==========================================================================
 
 /*
@@ -1260,6 +1266,8 @@ void	CheckHighScore (long score,word other)
 
 }
 
+
+#endif	// NETGAME
 
 #ifndef UPLOAD
 #ifndef SPEAR
@@ -1716,3 +1724,13 @@ void CopyProtection(void)
 #endif // SPEARDEMO
 #endif // SPEAR
 //===========================================================================
+
+#ifdef NETGAME
+void Victory (void) {}
+#ifndef JAPAN
+void PG13 (void) {}
+#endif
+void LevelCompleted (void) {}
+void DrawHighScores (void) {}
+void CheckHighScore (long score,word other) {}
+#endif
