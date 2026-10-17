@@ -19,6 +19,16 @@
 #include "WL_DEF.H"
 #pragma hdrstop
 
+#ifdef NETGAME
+// The network game (WOLF3DM) has no profiler: an 8 MHz V30 needs the memory
+// for what id's start-up check asks (StevenC & Claude, 2026-10-17)
+boolean		profiling;
+void ProfInit (void) {}
+void ProfStart (void) {}
+void ProfStop (void) {}
+unsigned long ProfWrite (void) { return 0; }
+#else
+
 #define PROFSHIFT	4				// 16-byte buckets: seg + ip>>4, exact in 16 bits
 #define PROFMAX		9216			// 147,456 bytes: all of the code, with room
 
@@ -171,3 +181,5 @@ unsigned long ProfWrite (void)
 		total += prof[i];
 	return total;
 }
+
+#endif	// NETGAME
