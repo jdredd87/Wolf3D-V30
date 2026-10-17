@@ -55,11 +55,15 @@ def main():
         i = args.index("--dir")
         gdir = args[i + 1]
         del args[i:i + 2]
+    idx = os.path.join(HERE, "stage", "gen", "INDEX.TXT")
+    if "--index" in args:          # another game's demos' names (gendemo.py --out's INDEX.TXT)
+        i = args.index("--index")
+        idx = args[i + 1]
+        del args[i:i + 2]
     ours, ref = args[0].upper(), args[1].upper()
     first = int(args[2]) if len(args) > 2 else 0
     last = int(args[3]) if len(args) > 3 else 119
     names = {}
-    idx = os.path.join(HERE, "stage", "gen", "INDEX.TXT")
     for line in open(idx):
         m = re.match(r"G(\d+)\.DEM (.*)", line.strip())
         if m:
