@@ -206,7 +206,9 @@ def cmd_buildwl1(plain8086=False):
     assert t.count(b"//#define UPLOAD") == 1
     open(p, "wb").write(t.replace(b"//#define UPLOAD", b"#define UPLOAD"))
     home = SRC
-    name, REMOTE = "WOLF3D1", REMOTE + "1"
+    # the network game's tree (the multiplayer branch) makes WOLF3DM1, the shareware's WOLF3DM
+    name = "WOLF3DM1" if os.path.exists(os.path.join(home, "WL_MP.C")) else "WOLF3D1"
+    REMOTE = REMOTE + "1"
     if plain8086:                   # buildwl18: the same, through to8086.py -- WOLF3D18.EXE
         dst8 = os.path.join(STAGE, "srcwl18")
         r = subprocess.run([sys.executable, os.path.join(HERE, "to8086.py"), dst, dst8])
