@@ -1963,6 +1963,21 @@ Tested on MPSRVW with the 486 and the V30:
 The game's end-of-game report has a line for the teams now (`Gold n
 Silver n (captures)`), which is how that was read.
 
+### The release, on the machines
+
+The v1.8 binaries from the zip: MPSRV on P3 running capture the flag, the
+486 playing 1,800 steps against its bot, no desync; MPSRVW with the 486
+playing and the V30 **watching**, 2,500 steps, the watcher caught up 778
+steps at 144 a second, no desync.  One thing did not work, and it is not
+the game: **the V30 cannot reach P3's server** -- as a watcher or as a
+player, "No answer from the server in 90 seconds", and MPSRV's own count
+said it had received not one packet.  ARP works both ways between them
+and the 486 plays P3's server from the same room, so the V30's datagrams
+to P3 are lost somewhere between two PicoMEM 2 cards' WiFi.  Earlier the
+same day the V30 watched a game on P3's server, so it is a state, not a
+rule; a full power-off of either card is the first thing to try
+(SETUP.md's troubleshooting has the PicoMEM's habits).
+
 ### Memory: the V30 again
 
 Discovery and the watchers cost 4 KB, and the V30 said "not enough memory":
@@ -1971,7 +1986,7 @@ id's start-up check wants 200,000 bytes for the caches, and there were
 text or the profiler, so the multiplayer branch defines `NETGAME`
 (`VERSION.H`), under which `WL_DEBUG.C`, `WL_TEXT.C` and `WL_PROF.C` are
 stubs (on `v30-8086`, where nothing defines it, nothing changes:
-`WOLF3DV` is still `A18AA5AE`).  With all four items in: **205,136 bytes**.
+`WOLF3DV` is still `A18AA5AE`).  With all four items in: **205,008 bytes** (the release build, measured on the V30).
 One trap on the way: `VERSION.H` ends in a Ctrl-Z, and Borland stops
 reading a file there -- a `#define` appended after it is silently not
 there.  It goes before.
