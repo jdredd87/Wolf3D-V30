@@ -8,10 +8,11 @@
   step from the first and let in once caught up), checks every machine's
   checksums, and plays bots.  Built for the plain 8086.
 
-    MPSRV [--players 4] [--bots 0] [--map 0] [--skill 2] [--mode coop|dm]
-          [--ff on|off] [--noenemies] [--fraglimit N] [--timelimit MIN]
-          [--itemrespawn SECS] [--port 31992] [--control 31999]
-          [--drop-after 60] [--steps N] [--once]
+    MPSRV [--players 4] [--bots 0] [--map 0] [--skill 2]
+          [--mode coop|dm|tdm|ctf] [--ff on|off] [--noenemies]
+          [--fraglimit N] [--timelimit MIN] [--itemrespawn SECS]
+          [--port 31992] [--control 31999] [--drop-after 60] [--steps N]
+          [--once] [--record GAME.MPR] [--name NAME]
 
   Its console is the keyboard: a command and Enter (help lists them -- the
   same as mpserver.py's).  The same commands come over the network to UDP
@@ -48,6 +49,9 @@ const
   EV_NEXTFLOOR = 1; EV_MAP = 2; EV_TIMELIMIT = 4; EV_FRAGLIMIT = 5;
   BYE_END = 0; BYE_FULL = 1; BYE_BUILD = 2; BYE_DROPPED = 3; BYE_KICKED = 4;
   RULE_DM = 1; RULE_NOFF = 2; RULE_NOENEMIES = 4;
+  { START's byte after the starts (2026-10-17): teams -- Gold P1+P3, Silver
+    P2+P4 -- and capture the flag, with teams }
+  RULE2_TEAM = 1; RULE2_CTF = 2;
   SERVER_SLOT = $FF;
   STEPS_MAX = 64;
   CAUGHT_UP = 4;
@@ -114,7 +118,7 @@ type
 
 var
   { settings }
-  Players, Bots, Humans, MapNum, Skill, Rules, Respawn: Integer;
+  Players, Bots, Humans, MapNum, Skill, Rules, Rules2, Respawn: Integer;
   Frags, Minutes: Word;
   GamePort, CtlPort: Word;
   StepLimit: LongInt;
@@ -713,7 +717,8 @@ begin
   Head(START);
   Tx[4] := Players; Tx[5] := MapNum; Tx[6] := Skill; Tx[7] := Rules;
   for I := 0 to Players * 4 - 1 do Tx[8 + I] := 0;
-  StartLen := 8 + Players * 4;
+  Tx[8 + Players * 4] := Rules2;      { an older game stops reading before it }
+  StartLen := 9 + Players * 4;
 end;
 
 function NamesLen: Word;
@@ -1016,7 +1021,7 @@ begin
   Tx[5] := Players; Tx[6] := People; Tx[7] := Bots; Tx[8] := 0;
   for I := MAXP to LASTSLOT do
     if Slots[I].Used then Inc(Tx[8]);
-  Tx[9] := MapNum; Tx[10] := Skill; Tx[11] := Rules; Tx[12] := 0; Tx[13] := 0;
+  Tx[9] := MapNum; Tx[10] := Skill; Tx[11] := Rules; Tx[12] := Rules2; Tx[13] := 0;
   PutL(14, Newest + 1);
   PutL(18, B);
   for K := 0 to 15 do
@@ -1448,11 +1453,29 @@ end;
 
 { ---------------------------------------------------------------- the console }
 
+{ --mode's word: 0 coop, 1 dm, 2 tdm, 3 ctf }
+function ModeOf(const S: ShortString): Integer;
+begin
+  if S = 'coop' then ModeOf := 0 else if S = 'dm' then ModeOf := 1
+  else if S = 'tdm' then ModeOf := 2 else if S = 'ctf' then ModeOf := 3
+  else ModeOf := -1;
+end;
+
+procedure SetMode(M: Integer; var R: Integer);
+begin
+  if M = 0 then R := R and not RULE_DM else R := R or RULE_DM;
+  if M = 2 then Rules2 := RULE2_TEAM
+  else if M = 3 then Rules2 := RULE2_TEAM or RULE2_CTF
+  else Rules2 := 0;
+end;
+
 function Settings: ShortString;
 var S: ShortString;
 begin
   S := 'map ' + I2S(MapNum) + ' (E' + I2S(MapNum div 10 + 1) + 'L' + I2S(MapNum mod 10 + 1) + '), ';
-  if Rules and RULE_DM <> 0 then S := S + 'deathmatch' else S := S + 'co-op';
+  if Rules2 and RULE2_CTF <> 0 then S := S + 'capture the flag'
+  else if Rules2 and RULE2_TEAM <> 0 then S := S + 'team deathmatch'
+  else if Rules and RULE_DM <> 0 then S := S + 'deathmatch' else S := S + 'co-op';
   S := S + ', skill ' + I2S(Skill) + ', bots ' + I2S(Bots);
   if Rules and RULE_NOENEMIES <> 0 then S := S + ', enemies off' else S := S + ', enemies on';
   if Rules and RULE_NOFF <> 0 then S := S + ', ff off' else S := S + ', ff on';
@@ -1471,7 +1494,12 @@ var S: ShortString;
 begin
   S := '';
   if NxMap >= 0 then S := S + ' map ' + I2S(NxMap);
-  if NxMode >= 0 then if NxMode = 1 then S := S + ' mode dm' else S := S + ' mode coop';
+  case NxMode of
+    0: S := S + ' mode coop';
+    1: S := S + ' mode dm';
+    2: S := S + ' mode tdm';
+    3: S := S + ' mode ctf';
+  end;
   if NxSkill >= 0 then S := S + ' skill ' + I2S(NxSkill);
   if NxBots >= 0 then S := S + ' bots ' + I2S(NxBots);
   if NxTime >= 0 then S := S + ' timelimit ' + I2S(NxTime);
@@ -1493,8 +1521,8 @@ begin
   R := Rules and 7;
   if NxMode >= 0 then
   begin
-    if NxMode = 1 then R := R or RULE_DM else R := R and not RULE_DM;
-    if NxResp < 0 then if NxMode = 1 then NxResp := 30 else NxResp := 0;
+    SetMode(NxMode, R);
+    if NxResp < 0 then if NxMode <> 0 then NxResp := 30 else NxResp := 0;
   end;
   if NxEnemies >= 0 then
     if NxEnemies = 1 then R := R and not RULE_NOENEMIES else R := R or RULE_NOENEMIES;
@@ -1716,7 +1744,7 @@ begin
   Say('nextfloor                everyone to the next floor now');
   Say('timelimit MIN | fraglimit N   change the game''s limit now (0: none)');
   Say('next                     the settings the next game starts with');
-  Say('next map E L | next map N    next mode dm|coop    next skill 0-3');
+  Say('next map E L | next map N    next mode coop|dm|tdm|ctf    next skill 0-3');
   Say('next bots N    next timelimit MIN    next fraglimit N    next itemrespawn SECS');
   Say('next enemies on|off      next ff on|off');
   Say('quiet on|off             the log''s lines off, or on again');
@@ -1742,9 +1770,8 @@ begin
   end
   else if What = 'mode' then
   begin
-    if Lower(W[2]) = 'dm' then NxMode := 1
-    else if Lower(W[2]) = 'coop' then NxMode := 0
-    else begin Say('next mode: dm or coop'); Exit; end;
+    NxMode := ModeOf(Lower(W[2]));
+    if NxMode < 0 then begin Say('next mode: coop, dm, tdm or ctf'); Exit; end;
   end
   else if (What = 'skill') or (What = 'bots') or (What = 'timelimit') or (What = 'fraglimit')
           or (What = 'itemrespawn') then
@@ -2215,8 +2242,13 @@ begin
   WriteLn('  --players N      slots in the game, 1 to 4, bots included          (4)');
   WriteLn('  --bots N         how many of the slots the server plays itself --  (0)');
   WriteLn('                   the last ones; they wander, open doors and fire');
-  WriteLn('  --mode coop|dm   co-op (together, against the enemies) or          (coop)');
-  WriteLn('                   deathmatch (against each other)');
+  WriteLn('  --mode M         coop: together, against the enemies               (coop)');
+  WriteLn('                   dm: deathmatch, everyone against everyone');
+  WriteLn('                   tdm: team deathmatch -- Gold (P1, P3) against');
+  WriteLn('                   Silver (P2, P4); a team''s frags are its score');
+  WriteLn('                   ctf: capture the flag -- the same teams, a flag');
+  WriteLn('                   at P1''s and P2''s start; the frag limit counts');
+  WriteLn('                   captures');
   WriteLn('  --map N          the first floor: (episode-1)*10 + (floor-1),      (0: E1L1)');
   WriteLn('                   so 0-59 -- E2L1 is 10, E6L10 is 59');
   WriteLn('  --skill N        0 "can I play, daddy?" to 3 "I am death incarnate" (2)');
@@ -2371,7 +2403,10 @@ begin
   if Bots > Players - 1 then Bots := Players - 1;
   Humans := Players - Bots;
   Rules := 0;
-  if ArgS('--mode', 'coop') = 'dm' then Rules := Rules or RULE_DM;
+  Rules2 := 0;
+  I := ModeOf(Lower(ArgS('--mode', 'coop')));
+  if I < 0 then begin WriteLn('--mode: coop, dm, tdm or ctf'); Halt(1); end;
+  SetMode(I, Rules);
   if ArgS('--ff', 'on') = 'off' then Rules := Rules or RULE_NOFF;
   if Flag('--noenemies') then Rules := Rules or RULE_NOENEMIES;
   if Rules and RULE_DM <> 0 then Respawn := Arg('--itemrespawn', 30) else Respawn := Arg('--itemrespawn', 0);

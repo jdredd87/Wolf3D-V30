@@ -3927,6 +3927,7 @@ void MPReport (void)
 	static char far r1[] = "mp: %d players, camera P%d, %ld steps, state sum %08lX\n";
 	static char far r2[] = "mp step %4d: %08lX\n";
 	static char far r3[] = "  P%d at %d,%d  health %d  ammo %d  keys %d  score %ld  took %ld  died %d  frags %d\n";
+	static char far r4[] = "  Gold %d  Silver %d (frags)\n", far r5[] = "  Gold %d  Silver %d (captures)\n";
 	int	i;
 
 	MPUse (0);
@@ -3941,4 +3942,6 @@ void MPReport (void)
 		mprintf (r3,i+1,ob->tilex,ob->tiley,mpctx[i].gs.health,mpctx[i].gs.ammo,
 			mpctx[i].gs.keys,mpctx[i].gs.score,mptook[i],mpctx[i].deaths,mpctx[i].frags);
 	}
+	if (mprules2 & RULE2_TEAM)		// the teams' scores: captures, or frags
+		mprintf ((mprules2 & RULE2_CTF) ? r5 : r4,Team (0),Team (1));
 }

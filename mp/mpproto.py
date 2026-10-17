@@ -65,17 +65,21 @@ def un_welcome(b):
     return dict(slot=slot, players=players, map=mapnum, skill=skill, rules=rules, frags=frags, minutes=minutes)
 
 
-def start(players, mapnum, skill, rules, starts):
+def start(players, mapnum, skill, rules, starts, rules2=0):
+    """rules2, after the starts (2026-10-17): 1 teams (Gold P1+P3, Silver
+    P2+P4), 2 capture the flag (with 1).  A game older than it stops reading
+    at the starts, and one that finds no byte there takes 0."""
     out = head(START) + bytes([players, mapnum, skill, rules])
     for s in starts:
         out += bytes(s)
-    return out
+    return out + bytes([rules2])
 
 
 def un_start(b):
     players, mapnum, skill, rules = b[:4]
     starts = [tuple(b[4 + 4 * i:8 + 4 * i]) for i in range(players)]
-    return dict(players=players, map=mapnum, skill=skill, rules=rules, starts=starts)
+    rules2 = b[4 + 4 * players] if len(b) > 4 + 4 * players else 0
+    return dict(players=players, map=mapnum, skill=skill, rules=rules, starts=starts, rules2=rules2)
 
 
 def inp(slot, buttons, turn, move, seq, have, played=None):

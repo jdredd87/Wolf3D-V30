@@ -18,6 +18,9 @@ some players with 8 bullets and some with 50.
 The game reads the keyboard itself (INT 9), so neither KINJ nor KNET can
 press TAB, T, SPACE or ESC in it.  This build's NETBOT does instead:
 
+  * capturing the flag (2026-10-17), goes for the flags first: the other
+    team's, then home with it, or its own when dropped -- and hunts only
+    when there is nothing to do with a flag;
   * hunts: turns toward the nearest other player and runs at them, wanders
     at random a while when it has got nowhere in half a second, fires only
     when aimed, within 8 tiles and with nothing between (no wall, no shut
@@ -113,8 +116,8 @@ MP = [
 		static long far lastx, far lasty;
 		mpctx_t	far *me = &mpctx[mplocal];
 		objtype	*o = me->ob, *t;
-		long	best = 0x7fffffffl, dx, dy, d, fx, fy, cr, dt;
-		int		j, bj = -1;
+		long	best = 0x7fffffffl, dx, dy, d, fx, fy, cr, dt, tx, ty;
+		int		j, bj = -1, flag = 0, mt, et;
 
 		tog ^= 1;
 		if (me->dead)
@@ -135,6 +138,36 @@ MP = [
 					bj = j;
 				}
 			}
+		if (flagobj[0])						// capture the flag: the flags first
+		{
+			mt = TEAM (mplocal);
+			et = !mt;
+			flag = 1;
+			if (flagby_[et] == mplocal)		// carrying theirs: home
+			{
+				tx = flagbx[mt];
+				ty = flagby[mt];
+			}
+			else if (flagby_[et] < 0)		// theirs, lying: take it
+			{
+				tx = flagx[et];
+				ty = flagy[et];
+			}
+			else if (flagby_[mt] < 0 && (flagx[mt] != flagbx[mt] || flagy[mt] != flagby[mt]))
+			{								// ours, dropped: send it home
+				tx = flagx[mt];
+				ty = flagy[mt];
+			}
+			else
+				flag = 0;					// nothing to do with a flag: hunt
+			if (flag)
+			{
+				tx = (tx << 16) + 0x8000l;
+				ty = (ty << 16) + 0x8000l;
+				best = labs (tx - o->x) + labs (ty - o->y);
+				bj = mplocal;
+			}
+		}
 		if (++calls >= 35)					// got nowhere in a while: wander
 		{
 			calls = 0;
@@ -148,17 +181,22 @@ MP = [
 		}
 		if (bj >= 0 && !wander)
 		{
-			t = mpctx[bj].ob;
-			dx = (t->x - o->x) >> 8;
-			dy = -((t->y - o->y) >> 8);		// map y runs south
+			if (!flag)
+			{
+				t = mpctx[bj].ob;
+				tx = t->x;
+				ty = t->y;
+			}
+			dx = (tx - o->x) >> 8;
+			dy = -((ty - o->y) >> 8);		// map y runs south
 			fx = costable[o->angle] >> 8;
 			fy = sintable[o->angle] >> 8;
 			cr = fx*dy - fy*dx;				// > 0: the target is to the left
 			dt = fx*dx + fy*dy;
 			if (dt > 0 && labs (cr) < dt/12)
 			{
-				long	sx = o->x, sy = o->y, ddx = (t->x - o->x)/16, ddy = (t->y - o->y)/16;
-				int		k, n, see = best < 8*65536l;
+				long	sx = o->x, sy = o->y, ddx = (tx - o->x)/16, ddy = (ty - o->y)/16;
+				int		k, n, see = !flag && best < 8*65536l;
 
 				for (k=1;k<16 && see;k++)		// nothing between: a wall or a shut
 				{								// door, every 16th of the way
@@ -178,7 +216,7 @@ MP = [
 					*x = -*x;
 				*bits = 4;
 			}
-			*y = (dt > 0 && labs (cr) < dt && best > 2*65536l) ? -60 : 0;
+			*y = (dt > 0 && labs (cr) < dt && (flag || best > 2*65536l)) ? -60 : 0;
 			return;
 		}
 		if (wander)

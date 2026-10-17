@@ -1,7 +1,7 @@
 """The multiplayer server, in Python -- the reference.  StevenC & Claude, 2026.
 
     python mp/mpserver.py [--players 4] [--bots 0] [--map 0] [--skill 2]
-                          [--mode coop|dm] [--ff on|off] [--noenemies]
+                          [--mode coop|dm|tdm|ctf] [--ff on|off] [--noenemies]
                           [--fraglimit N] [--timelimit MIN] [--itemrespawn SECS]
                           [--port 31992] [--bind 0.0.0.0] [--steps N] [--once]
                           [--drop-after 60] [--record GAME.MPR] [--drop 0.0] [--quiet]
@@ -35,7 +35,10 @@ strafes, fire, use), so two machines can try a four-player game.  They cannot
 aim: the server does not run the game.
 
 The rules go to every machine in WELCOME and START (MULTIPLAYER.md, "Modes
-and rules"): --mode coop (the default) or dm (deathmatch); --ff off turns
+and rules"): --mode coop (the default) or dm (deathmatch), tdm (team
+deathmatch: Gold, P1 and P3, against Silver, P2 and P4 -- a team's frags are
+its score) or ctf (capture the flag: the same teams, each flag at its first
+player's start, a capture a point -- the frag limit counts them); --ff off turns
 friendly fire off in co-op (on by default, as DOOM's); --noenemies spawns
 no enemies; --fraglimit and --timelimit end a deathmatch level;
 --itemrespawn SECS brings a taken item back that long after (in 5 s steps,
@@ -71,6 +74,9 @@ import gendemo                      # noqa: E402  (the bots' input)
 import mpconsole                    # noqa: E402  (typed commands: kick, end, next ...)
 
 RULE_DM, RULE_NOFF, RULE_NOENEMIES = 1, 2, 4
+RULE2_TEAM, RULE2_CTF = 1, 2           # START's byte after the starts (2026-10-17)
+MODES = {"coop": (0, 0), "dm": (RULE_DM, 0), "tdm": (RULE_DM, RULE2_TEAM),
+         "ctf": (RULE_DM, RULE2_TEAM | RULE2_CTF)}     # --mode: rules, rules2
 CAUGHT_UP = 4                       # steps behind the newest: let it in
 WATCHERS = 4                        # watchers (NET WATCH, 2026-10-17): numbers 4-7
 JOIN_SILENT = 60                    # seconds: a join that never loaded
@@ -104,8 +110,11 @@ class Server:
         self.bots = max(0, min(self.players - 1, arg("--bots", 0, int)))
         self.humans = self.players - self.bots
         self.rules = arg("--rules", 0, int)
-        if arg("--mode", "coop") == "dm":
-            self.rules |= RULE_DM
+        mode = arg("--mode", "coop").lower()
+        if mode not in MODES:
+            sys.exit("--mode: coop, dm, tdm or ctf")
+        self.rules |= MODES[mode][0]
+        self.rules2 = MODES[mode][1]
         if arg("--ff", "on") == "off":
             self.rules |= RULE_NOFF
         if "--noenemies" in sys.argv:
@@ -409,11 +418,19 @@ class Server:
         build = self.slots[people[0]].build if people else 0
         return P.info(1 if self.state == "play" else 0, self.players, len(people), self.bots,
                       sum(1 for w in self.watchers if w),
-                      self.map, self.skill, self.rules, 0, len(self.history), build, self.name,
+                      self.map, self.skill, self.rules, self.rules2, len(self.history), build, self.name,
                       [s.name if s else "" for s in self.slots])
 
     def start_packet(self):
-        return P.start(self.players, self.map, self.skill, self.rules, [(0, 0, 0, 0)] * self.players)
+        return P.start(self.players, self.map, self.skill, self.rules, [(0, 0, 0, 0)] * self.players,
+                       self.rules2)
+
+    def mode_name(self):
+        if self.rules2 & RULE2_CTF:
+            return "capture the flag"
+        if self.rules2 & RULE2_TEAM:
+            return "team deathmatch"
+        return "deathmatch" if self.rules & RULE_DM else "co-op"
 
     # ---- the clock
 
@@ -468,7 +485,7 @@ class Server:
     def run(self):
         self.log("listening on UDP %d: %d slots (%d for people, %d bots), map %d, rules %d (%s%s, items %s)"
                  % (self.sock.getsockname()[1], self.players, self.humans, self.bots, self.map, self.rules,
-                    "deathmatch" if self.rules & RULE_DM else "co-op",
+                    self.mode_name(),
                     ", no enemies" if self.rules & RULE_NOENEMIES else "",
                     "back after %d s" % ((self.rules >> 3) * 5) if self.rules >> 3 else "do not come back"))
         self.console.start()

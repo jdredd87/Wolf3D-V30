@@ -22,7 +22,7 @@ WOLF3DM of 2026-10-13 or later on every machine.
     timelimit MIN | fraglimit N   change the game's limit now (0: none)
     next                     the settings the next game starts with
     next map E L | next map N    episode and floor (N = (E-1)*10 + L-1)
-    next mode dm|coop        next skill 0-3      next bots N
+    next mode coop|dm|tdm|ctf    next skill 0-3   next bots N
     next timelimit MIN       next fraglimit N    next itemrespawn SECS
     next enemies on|off      next ff on|off
     quiet on|off             the log's lines off, or on again
@@ -141,10 +141,12 @@ class Console:
         if "skill" in p:
             s.skill = p["skill"]
         rules = s.rules & 7
-        if "mode" in p:
-            rules = (rules | self.RULE_DM) if p["mode"] == "dm" else (rules & ~self.RULE_DM)
+        if "mode" in p:                         # tdm, ctf: deathmatch with teams
+            dm = p["mode"] != "coop"
+            rules = (rules | self.RULE_DM) if dm else (rules & ~self.RULE_DM)
+            s.rules2 = {"tdm": 1, "ctf": 3}.get(p["mode"], 0)
             if "itemrespawn" not in p:          # each mode's default, as at start-up:
-                p["itemrespawn"] = 30 if p["mode"] == "dm" else 0   # 30 s, or never
+                p["itemrespawn"] = 30 if dm else 0  # 30 s, or never
         if "enemies" in p:
             rules = (rules & ~self.RULE_NOENEMIES) if p["enemies"] else (rules | self.RULE_NOENEMIES)
         if "ff" in p:
@@ -180,7 +182,7 @@ class Console:
         s = self.s
         r = s.rules
         e, l = s.map // 10 + 1, s.map % 10 + 1
-        parts = ["map %d (E%dL%d)" % (s.map, e, l), "deathmatch" if r & self.RULE_DM else "co-op",
+        parts = ["map %d (E%dL%d)" % (s.map, e, l), s.mode_name(),
                  "skill %d" % s.skill, "bots %d" % s.bots,
                  "enemies %s" % ("off" if r & self.RULE_NOENEMIES else "on"),
                  "ff %s" % ("off" if r & self.RULE_NOFF else "on"),
@@ -303,8 +305,8 @@ class Console:
                     raise ValueError("map 0-59")
             self.pending["map"] = n
         elif what == "mode":
-            if w[1].lower() not in ("dm", "coop"):
-                raise ValueError("dm or coop")
+            if w[1].lower() not in ("dm", "coop", "tdm", "ctf"):
+                raise ValueError("coop, dm, tdm or ctf")
             self.pending["mode"] = w[1].lower()
         elif what in ("skill", "bots", "timelimit", "fraglimit", "itemrespawn"):
             v = int(w[1])

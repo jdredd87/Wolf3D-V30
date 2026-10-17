@@ -14,11 +14,14 @@ done in the first week.  Since then:
   (id's 1992 code, rebuilt for it) to **5.5 fps with id's exact picture**,
   and past **10 fps** with the optional detail switches.  On a 486 at 66 MHz:
   **100 fps**.
-* **It plays over a network.** Up to four players, **deathmatch or co-op**,
-  with or without enemies, DOOM's rules, server bots, chat, scores, and
-  people joining and leaving a game that keeps running -- lockstep over UDP,
-  so a V30 and a Pentium II play the same game step for step.
-* **It has a server you can drive.** A small Python server keeps the clock;
+* **It plays over a network.** Up to four players, **deathmatch, team
+  deathmatch, capture the flag or co-op**, with or without enemies, DOOM's
+  rules, server bots, chat, scores, and people joining and leaving a game
+  that keeps running -- lockstep over UDP, so a V30 and a Pentium II play
+  the same game step for step.  The game **finds** the servers on its
+  network, up to four people can **watch**, and a server can **record** a
+  whole game for anyone to **replay** (v1.8).
+* **It has a server you can drive.** A server -- Python, DOS or Windows -- keeps the clock;
   its console kicks, bans, pauses, sends messages to every screen, changes
   the floor and the limits mid-game, and shows the scores.
 * **It adds to the game without changing it.** An automap (TAB), window
@@ -132,7 +135,7 @@ and not free: none of its data is in this repository.
 | speed | **5.51 fps** over all four demos, **5.57 in play** on the V30 (id's code: 2.81); demo 0 in full **2.75 -> 5.17 fps, 1.88x**.  On the 486 at 66 MHz, 99.7 fps in play.  The BSP version's default 6.15 on the V30, 105.5 on the 486.  Every option on both machines: [BENCHMARKS.md](BENCHMARKS.md) |
 | picture | identical to id's renderer over the whole attract loop -- 5,386 frames, every 50th checksummed, the 3-D view and the whole screen (`ab.py --full`) -- and over 240 generated demos on all sixty maps (`gendemo.py`, `allmaps.py`) |
 | music | identical to id's: the same register writes on the same ticks (`MUSICLOG`) |
-| multiplayer | **works**: deathmatch and co-op, up to four players, bots, chat, scores, drop-in and drop-out, a server console; eight hours on the 486, the Pentium II and the V30 together without a desync (2026-10-13), every floor in co-op (2026-10-14); **the server on DOS or Windows too** (`MPSRV.EXE`, `MPSRVW.EXE`; v1.4, 2026-10-15/16), each DOS machine serving in turn -- the V30 as well -- without a desync |
+| multiplayer | **works**: deathmatch, team deathmatch, capture the flag and co-op, finding a server, watching, recording and replaying (v1.8, 2026-10-17), up to four players, bots, chat, scores, drop-in and drop-out, a server console; eight hours on the 486, the Pentium II and the V30 together without a desync (2026-10-13), every floor in co-op (2026-10-14); **the server on DOS or Windows too** (`MPSRV.EXE`, `MPSRVW.EXE`; v1.4, 2026-10-15/16), each DOS machine serving in turn -- the V30 as well -- without a desync |
 | optimisations | 98 steps, each one measured, each one proven to draw id's picture -- [V30NOTES.md](V30NOTES.md) is the lab notebook, including the ideas that measured as nothing |
 | detail switches | optional, any combination, none on by default -- below |
 

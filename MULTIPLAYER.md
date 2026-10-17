@@ -10,13 +10,13 @@ the summary comes first.
 
 | | |
 |---|---|
-| the game | `WOLF3DM.EXE`: id's Wolfenstein 3-D for up to **four players** -- **deathmatch or co-op**, each with or without enemies; DOOM's rules (no lives, respawn with SPACE, frags, items back after a time, one player's keys everyone's in co-op); BJ in four colours; chat (T), scores (TAB), ESC asks first |
+| the game | `WOLF3DM.EXE`: id's Wolfenstein 3-D for up to **four players** -- **deathmatch, team deathmatch, capture the flag or co-op**, each with or without enemies; DOOM's rules (no lives, respawn with SPACE, frags, items back after a time, one player's keys everyone's in co-op); BJ in four colours; chat (T), scores (TAB), ESC asks first |
 | the network | lockstep over UDP, port 31992: the server keeps the clock at 17.5 steps a second and passes controls along; every machine plays every step, so a V30 and a Pentium II play the same game.  Checksums every 50 steps catch any machine that differs |
 | joining | any time: a joiner replays the game so far at full speed and walks in when caught up ("Catching up: N steps to go" -- README.md says why it has to, and how long: a 486 or the Pentium II under a minute for an hour's game, the V30 six to fifteen); a leaver's slot is free at once.  A WiFi dropout of up to a minute is ridden out |
 | the server | `mp/mpserver.py` (Python), or **`MPSRV.EXE` on any DOS machine**, or **`MPSRVW.EXE` on Windows** (since 2026-10-15; one Free Pascal source), each with **bots** and a **console**: status, scores, say, kick with a reason, ban, pause, map and next floor, the limits mid-game, the next game's settings -- "The server's console" below |
 | the machines | the NEC V30 (8 MHz; `LOWEST VIEW 10`, ~3-9 pictures a second), the 486 (66 MHz) and the Pentium II, all three with sound -- AdLib music and Sound Blaster effects |
 | proof | 20 generated 2- and 4-player demos give the same checksums from every player's eyes (`mp/mpsweep.py`); every change is run against the last accepted sweep.  **Eight hours, three machines and a bot, no desync** (2026-10-13); every deathmatch floor of all six episodes, and **every one of the sixty floors in co-op, with enemies, on all three machines, no desync** (2026-10-14, `stage/logs/stress.py`); **the servers on DOS and Windows**: MPSRV from each DOS machine in turn -- the V30, the 486, the Pentium II, eight hours on that one -- and MPSRVW serving all three, every run without a desync (2026-10-15/16); single player still id's picture exactly |
-| not yet | a recording (`--record`) is one floor, so one the console ends early is cut where it ended |
+| also (v1.8) | `NET FIND` lists the servers on the network; `WATCH`, up to four watchers beside four players; `--record GAME.MPR` on every server, the whole game, and `WOLF3DM REPLAY GAME.MPR` -- "Finding, watching, replaying, teams" at the end |
 
 Hosting and joining are in [README.md](README.md), "Multiplayer".
 
@@ -1110,9 +1110,9 @@ server that disagrees with it is wrong.
 
 | type | packet | from | after the header |
 |---|---|---|---|
-| 1 | `HELLO` | client | name (16 bytes, NUL-padded), build (u32: the EXE's CRC-32, so two builds never play together), wanted slot (u8, FFh = any) |
-| 2 | `WELCOME` | server | slot (u8), players expected (u8), map (u8), skill (u8), rules (u8), pad, frag limit (u16), time limit (u16, minutes) |
-| 3 | `START` | server | players (u8), map, skill, rules (u8 each), then for each player a start: x, y, direction, 0 -- x 0 means "the map's own start" for P1 and "beside P1" for the others (scattered, in deathmatch), found by the game itself (the same search on every machine).  Rules bits: 1 deathmatch, 2 no friendly fire (co-op), 4 no enemies; bits 3-7 (since 2026-10-08) n: a taken item comes back after 5n seconds, 0 never.  A recording keeps them in P2's start's 4th byte, as it keeps the skill + 1 in P1's |
+| 1 | `HELLO` | client | name (16 bytes, NUL-padded), build (u32: the protocol version and the data set, `MPBUILD` -- 0108h << 16 or'd with 6 for `*.WL6`, 1 for the shareware's `*.WL1`, so two that cannot play together never do; until 2026-10-17 it was a constant, 12345678h, and the check never caught anything), wanted slot (u8, FFh = any, FEh = to watch, since 2026-10-17) |
+| 2 | `WELCOME` | server | slot (u8: 0-3 a player, 4-7 a watcher), players expected (u8), map (u8), skill (u8), rules (u8), pad, frag limit (u16), time limit (u16, minutes) |
+| 3 | `START` | server | players (u8), map, skill, rules (u8 each), then for each player a start: x, y, direction, 0 -- x 0 means "the map's own start" for P1 and "beside P1" for the others (scattered, in deathmatch), found by the game itself (the same search on every machine).  Rules bits: 1 deathmatch, 2 no friendly fire (co-op), 4 no enemies; bits 3-7 (since 2026-10-08) n: a taken item comes back after 5n seconds, 0 never.  A recording keeps them in P2's start's 4th byte, as it keeps the skill + 1 in P1's.  Then (since 2026-10-17) rules2 (u8): 1 teams, 2 capture the flag (with 1); a packet without it means 0 |
 | 4 | `INPUT` | client | slot (u8), buttons (u8), turn (s8), move (s8), seq (u16), have (u32), played (u32: the highest step it has played; since 2026-10-07 -- the server lets a joiner in once it has caught up) |
 | 5 | `STEPS` | server | first (u32), count (u8), players (u8), then count steps of players x 3 bytes -- buttons, turn, move, P1 first: a step exactly as `Mn.DEM` holds it.  An empty slot's 3 bytes are 0, -128, -128 (since 2026-10-07): no player's are, as id's PollControls clamps a turn and a move to 100 a tic |
 | 6 | `SYNC` | client | slot (u8), pad, step (u32), sum (u32) |
@@ -1121,6 +1121,10 @@ server that disagrees with it is wrong.
 | 9 | `CHAT` | client | slot (u8), message number (u8), length (u8), text |
 | 10 | `CHATMSG` | server | slot (u8), message number (u8), length (u8), text -- to every player; the sender's own copy is its acknowledgement |
 | 11 | `NAMES` | server | count (u8), then each slot's name (16 bytes, NUL-padded; empty: nobody) -- when anyone comes or goes, and every 2 s (since 2026-10-08) |
+| 15 | `DISCOVER` | client | build (u32) -- broadcast to 255.255.255.255 (since 2026-10-17) |
+| 16 | `INFO` | server | state (u8: 0 waiting, 1 playing), slots, people, bots, watchers, map, skill, rules, rules2, pad (u8 each), step (u32), the build being played (u32, 0 if nobody), the server's name (16 bytes), each player slot's name (4 x 16) -- 98 bytes; the answer to `DISCOVER`, sent to whoever asked |
+
+Type 12 is `HANG` (a test build's hang report) and 14 `PAUSED` (the console paused the game, 1, or let it go on, 0); 13 is unused.
 
 **Joining** (since 2026-10-07; "Joining and leaving" below).  A client
 sends `HELLO` every half second until it has a `WELCOME`; the server answers
@@ -1859,3 +1863,116 @@ in under a second, and **all three played 4,500 steps with the same sums**
 (`E793050D` at step 2000), no desync; the V30 at 8.6 pictures a second on
 `LOWEST`, a bot fragging it on E1L1.  `mpserver.py` with the pause: three
 fakes, one late, 3% loss, 600 steps, all agree.
+
+## Finding, watching, replaying, teams -- 2026-10-17
+
+StevenC: "ok do 6-9" -- four items of the list at once.  All four are in
+`WOLF3DM` (and `WOLF3DM1`) and in all three servers, which speak the same
+protocol as ever with two packets added and one byte on the end of `START`
+(the table above).
+
+### Finding a server (`NET FIND`)
+
+The game broadcasts `DISCOVER` three times over two seconds -- the packet
+driver's broadcast address and IP 255.255.255.255 -- and every server on
+the network answers `INFO`: its name (`--name`, by default the host's), its
+state, the players' names, the floor and the rules.  The game lists them and
+the player presses a number.  `NET FIND`, or `F` on the menu's network page,
+and `J` there with no server filled in; `WOLF3DM NET` with no server known
+does it too, and remembers the one picked.  The list lives in the step ring,
+which is idle until a game starts -- the V30 had no 400 bytes to spare.
+`WL_NET.C`'s receive accepts any sender while it searches, and MPSRV's own
+stack answers a broadcast as well as its address.
+
+Tested: the 486 found MPSRVW and joined it (600 steps, no desync); with
+MPSRV on P3 as a second server it listed both and joined the second, picked
+by a key; on the V30 the menu's `M` then `F` wrote `WOLF3DM NET FIND PORT
+31992`.
+
+The `HELLO` build check found its first fault in the process: **it had
+never worked** -- every build sent the constant 12345678h.  It is
+`MPBUILD` now, the protocol version and the data set, so a registered and a
+shareware game are told apart before they can desync.
+
+### Watching (`WATCH`)
+
+`HELLO`'s wanted slot FEh asks to watch.  A watcher is slots 4-7: sent every
+step, in none of them -- the server sends it what it sends a player and
+takes nothing from it but `INPUT`'s `have` (its controls are ignored) and
+`SYNC`, so its game is checked like anyone's.  It sees through a player's
+eyes, `1` to `4` to change, and moves on by itself when that player leaves.
+It cannot chat.  `status` on the console lists watchers as W1-W4.
+
+Tested on all three servers: the V30 watched while the 486 played, 3,000
+steps each, the same sums; a late watcher caught up at about 150 steps a
+second.
+
+### Recording and replaying (`--record GAME.MPR`, `REPLAY`)
+
+`--record` used to write `Mn.DEM`, id's demo format: one floor, 5,400 steps
+of four players at most.  A name ending `.MPR` (every server) writes instead
+what a watcher is sent -- `WMR1`, then each packet as a u16 length and the
+packet: `WELCOME` (slot 4, a watcher's), `START`, `NAMES` when they change,
+`STEPS` (up to 64, with their events: next floor, map, limits) and
+`CHATMSG` -- for as long as the game goes, every floor.  A name ending
+`.DEM` keeps the old file.
+
+`WOLF3DM REPLAY GAME.MPR` reads that file through the same code a watcher's
+packets go through (`Pump` in `WL_MP.C`), paced by the clock: the steps are
+held until they are due, `F` makes the clock run eight times as fast.  The
+first replay drew ten pictures in all -- steps read ahead of time looked
+like a backlog, and the catch-up code played them without drawing; `Due()`
+counts only what the clock has reached.
+
+Tested: two-floor games recorded on the Python server, MPSRVW and MPSRV on
+P3; replayed on the 486 and the V30 they gave all 51 live checksums every
+time.  The V30 draws a replay at 15.6 pictures a second.
+
+### Teams (`--mode tdm`, `--mode ctf`)
+
+`START`'s new last byte, rules2: 1 teams, 2 capture the flag.  **Gold** is
+P1 and P3, **Silver** P2 and P4 (`TEAM(i)`, `i & 1`), each drawn in its
+colour (the brown ramp and the grey) and named in it on the scores.  Both
+modes are deathmatch underneath; `Friend()` makes a teammate unhurtable,
+whatever `--ff` says.  A team's score -- the scores' title, `GOLD n  SILVER
+n`, and `--fraglimit` -- is its players' frags in team deathmatch, its
+captures in capture the flag.
+
+**Capture the flag** is all game state, worked out every step on every
+machine (`Flags()`, from `MPStep`): Gold's flag is the gold key at P1's
+start, Silver's the silver key at P2's -- two extra static objects, not
+bonuses, so nobody picks one up as a key.  Onto the other team's flag:
+taken.  A carrier dies (`MPDie`) or leaves: dropped where they were.  Onto
+one's own flag away from home: home.  Lying 30 s (525 steps) untouched:
+home.  Onto one's own base, with the other flag and one's own at home: a
+capture.  Every one is a notice on every screen.
+
+Tested on MPSRVW with the 486 and the V30:
+
+* team deathmatch, 4 slots and 2 server bots, 3,000 steps: no desync;
+  the scores showed `GOLD 0  SILVER 0` and each name in its team's colour;
+* capture the flag, the same, 6,000 steps with the test bots
+  (`mp/huntbot.py`) hunting each other: no desync, the same sums on both
+  (`E3D6A874` at step 3200), a frag -- and no captures: hunting bots chase
+  players, not flags;
+* so the test bot now goes for the flags first, when the game has them --
+  the other team's, home with it, or its own when dropped -- and hunts only
+  when there is nothing to do with a flag.  Two players, 4,000 steps: **Gold
+  2, Silver 0 captures, on both machines**, no desync.
+
+The game's end-of-game report has a line for the teams now (`Gold n
+Silver n (captures)`), which is how that was read.
+
+### Memory: the V30 again
+
+Discovery and the watchers cost 4 KB, and the V30 said "not enough memory":
+id's start-up check wants 200,000 bytes for the caches, and there were
+199,830.  The network game never uses the debug keys, the help and end
+text or the profiler, so the multiplayer branch defines `NETGAME`
+(`VERSION.H`), under which `WL_DEBUG.C`, `WL_TEXT.C` and `WL_PROF.C` are
+stubs (on `v30-8086`, where nothing defines it, nothing changes:
+`WOLF3DV` is still `A18AA5AE`).  With all four items in: **205,136 bytes**.
+One trap on the way: `VERSION.H` ends in a Ctrl-Z, and Borland stops
+reading a file there -- a `#define` appended after it is silently not
+there.  It goes before.
+

@@ -147,7 +147,10 @@ episode 1: whatever episode you give, the shareware game stays in it.
 ### The server's address
 
 Players need the server machine's address: on Windows run `ipconfig`; on
-DOS, it's the `IPADDR` in its address file.
+DOS, it's the `IPADDR` in its address file.  **Or let the game find it**:
+on the same network, `WOLF3DM NET FIND` asks every server there and lists
+what it hears -- each one's name, the game it runs and who is in it -- and
+you press its number.  `--name NAME` on a server sets the name it lists.
 
 ## Step 4: join and play
 
@@ -162,6 +165,10 @@ the server's address, **Y** your name, **O** the port (only if the server
 uses another), then **J** to join.  The server and your name are remembered
 in `WOLF3DM.CFG`, so next time `WOLF3DM NET` on its own is enough.
 
+Not sure of the address?  `WOLF3DM NET FIND`, or **F** on the network page
+(**J** with no server filled in does the same): the servers on your network
+are listed, and you pick one by its number.
+
 | key | does |
 |---|---|
 | T | chat |
@@ -174,6 +181,29 @@ who joins later sees **"Catching up: N steps to go"** while their machine
 replays the game so far, then walks in.  A 486 or better catches up an
 hour's game in under a minute; an 8 MHz V30 takes six to fifteen minutes.
 A network dropout of up to a minute is ridden out the same way.
+
+### Watching instead of playing
+
+`WOLF3DM NET 192.168.1.10 WATCH` (or **W** on the network page) joins as a
+spectator: up to four can watch as well as four play.  A watcher sees
+the game through a player's eyes -- **1** to **4** picks whose -- and
+takes no part in it; nobody's game changes because someone watches it.
+A watcher who arrives late catches up like a player.
+
+### Replaying a recorded game
+
+A server started with `--record GAME.MPR` writes the whole game -- every
+floor, the names and the chat -- as it is played.  Copy the file to any
+machine with the game and:
+
+```
+WOLF3DM REPLAY GAME.MPR
+```
+
+It plays at the speed it was played; **F** runs it eight times as fast
+(again for normal), **1** to **4** changes whose eyes you see through,
+**ESC** stops.  A replay is the game itself worked out again from the same
+controls, so it shows exactly what happened.
 
 **On a slow machine** (an 8 MHz 8086/V30), use the least detail:
 
@@ -195,6 +225,21 @@ just draws fewer frames.
 | Two players plus two bots | `MPSRV --players 4 --bots 2 --mode dm --noenemies` |
 | Co-op from episode 3, hardest skill | `MPSRV --mode coop --skill 3 --map 20` |
 | Co-op without friendly fire | `MPSRV --mode coop --ff off` |
+| Team deathmatch, Gold against Silver, first team to 30 | `MPSRV --mode tdm --noenemies --fraglimit 30` |
+| Capture the flag, first to 3 captures | `MPSRV --mode ctf --noenemies --fraglimit 3` |
+| Record the match for replaying later | `MPSRV --mode dm --noenemies --record MATCH.MPR` |
+
+**Teams** (`tdm` and `ctf`): players 1 and 3 are **Gold**, 2 and 4
+**Silver**, and they wear their team's colour.  Teammates cannot hurt each
+other.  In team deathmatch a team's score is its players' frags added up;
+the scores (TAB) show it on top.
+
+**Capture the flag**: the gold key is Gold's flag and stands at player 1's
+start, the silver key is Silver's at player 2's.  Walk onto the other
+team's flag to take it, and carry it to your own flag, at home, to score.
+A carrier who dies drops it where they fell; touch your own flag where it
+was dropped to send it home -- or it goes home by itself after 30 seconds.
+`--fraglimit` counts captures.
 
 (For `MPSRVW` or `mpserver.py` the switches are the same.)
 
@@ -245,7 +290,7 @@ same rules.
 |---|---|
 | `next` | shows the settings now, and any waiting for the next game |
 | `next map E L` (or `next map N`) | the floor it starts on |
-| `next mode dm` / `next mode coop` | deathmatch or co-op |
+| `next mode coop` / `dm` / `tdm` / `ctf` | co-op, deathmatch, team deathmatch or capture the flag |
 | `next skill 0-3` | the difficulty, as the game's own menu |
 | `next bots N` | how many slots the server plays itself |
 | `next timelimit MIN` / `next fraglimit N` | the limits |
@@ -325,6 +370,8 @@ untested part.
 | console port | UDP 31999 (`--control N`; 0 turns it off) |
 | player files | `WOLF3DM.EXE`, `W3MENU.EXE`, `PLAY.BAT`, beside the `*.WL6` files |
 | remembered settings | `WOLF3DM.CFG` (server, port, name) |
+| find, watch, replay | `WOLF3DM NET FIND`, `WOLF3DM NET addr WATCH`, `WOLF3DM REPLAY FILE.MPR` |
+| modes | `--mode coop`, `dm`, `tdm` (teams), `ctf` (capture the flag) |
 | server files | `MPSRV.EXE` (DOS), `MPSRVW.EXE` (Windows), `SERVER\mp\*.py` (Python) |
 | server log | `MPSRV.LOG`, beside the server |
 | help | `MPSRV /?`, `MPSRVW /?`, and `help` in the console |
