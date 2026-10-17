@@ -3,6 +3,9 @@
 #include "WL_DEF.H"
 #pragma	hdrstop
 
+#ifndef SPEAR		// id's Spear of Destiny has no help or end text: its project left
+					// this file out (StevenC & Claude, 2026-10-16)
+
 /*
 =============================================================================
 
@@ -857,3 +860,5 @@ void EndText (void)
 	MM_SortMem ();
 #endif
 }
+
+#endif	// SPEAR

@@ -1,11 +1,11 @@
 WOLFENSTEIN 3-D FOR 8086-CLASS PCs  --  optimized by StevenC and Claude
 =======================================================================
-Version 1.6, 2026-10-16
+Version 1.7, 2026-10-17
 
 id Software's Wolfenstein 3-D, rebuilt from id's released source to run
 as fast as an 8086, 8088, V20 or V30 PC allows -- and faster on anything
-better -- for the registered game and, since 1.6, the free shareware
-episode.  Six programs:
+better -- for the registered game, the free shareware episode (since
+1.6) and Spear of Destiny (since 1.7).  Eight programs:
 
     WOLF3DV.EXE   id's game and id's picture exactly, from faster code:
                   every build is checked against id's renderer over the
@@ -27,10 +27,13 @@ episode.  Six programs:
                   files of version 1.4): the same code with id's own
                   shareware settings, id's picture exactly.
     WOLF3D18.EXE  the same for a plain 8086 or 8088.
+    SPEARV.EXE    SPEAR OF DESTINY (its *.SOD files): WOLF3DV's code
+                  built as id built Spear, id's picture exactly.
+    SPEAR8.EXE    the same for a plain 8086 or 8088.
 
 WOLF3DV, WOLF3D8, WOLF3DB and WOLF3DO need the registered *.WL6 files;
-WOLF3D1 and WOLF3D18 need the shareware's *.WL1.  PLAY picks the right
-one by itself.
+WOLF3D1 and WOLF3D18 need the shareware's *.WL1; SPEARV and SPEAR8 need
+Spear of Destiny's *.SOD.  PLAY picks the right one by itself.
 
 On an NEC V30 (8086 class), demo 0 at full detail runs at 2.8 frames a
 second in id's code, 5.0 in WOLF3DV, 5.3 in WOLF3DB; the detail switches
@@ -58,6 +61,15 @@ loop, and generated demos on all ten floors.  WOLF3D1 runs the shareware's
 demo at 5.0 frames a second on an 8 MHz V30.  PLAY now runs in whatever
 folder it is started from (before, it always went to C:\WOLF3D).
 
+New in 1.7: Spear of Destiny.  SPEARV and SPEAR8 play its 21 floors,
+checked against id's renderer built the same way: the attract loop, and
+84 generated demos on every floor.  25% faster than id's code on a 486;
+5.2 frames a second on an 8 MHz V30.  id's Spear asked for more memory
+than a V30 has free; the V30 played every floor in what it has, so
+these ask what Wolfenstein does.  Spear has no manual quiz here (id's
+own setting for its later release).  FLATWALLS and FLATART are
+approximate on Spear: its artwork goes flat too.
+
 The network game -- up to four players, deathmatch or co-op, a server
 for DOS, Windows or Python -- is its own download, W3DMP.ZIP, on the
 same releases page; SETUP.md (in the repository) sets it up step by step.
@@ -69,6 +81,8 @@ WHAT YOU NEED
   package; it is id's:
     - the REGISTERED game's *.WL6 files (VSWAP.WL6, VGAGRAPH.WL6,
       AUDIOT.WL6, GAMEMAPS.WL6 and the rest) for all six episodes, or
+    - Spear of Destiny's *.SOD files (tested with the release of
+      January 1993: VSWAP.SOD 1,616,544 bytes), or
     - the free SHAREWARE episode's *.WL1 files.  The shareware is free to
       copy: it is 1WOLF14.ZIP, on most DOS game archives (for one,
       https://www.dosgamesarchive.com/download/wolfenstein-3d).  Unzip it
@@ -76,9 +90,9 @@ WHAT YOU NEED
       choose.  On an 8086 or V30 it says the game needs a 286 and asks
       whether to install anyway (id's game did; these builds do not).
 * An 8086 or better, VGA, DOS.  A coprocessor is not used.  On a plain
-  Intel 8086 or 8088, run WOLF3D8 (WOLF3D18 for the shareware);
-  WOLF3DV, WOLF3D1, WOLF3DB and WOLF3DO need the 80186 instructions a
-  V20/V30, a 186 or a 286 has.
+  Intel 8086 or 8088, run WOLF3D8 (WOLF3D18 for the shareware, SPEAR8
+  for Spear); WOLF3DV, WOLF3D1, SPEARV, WOLF3DB and WOLF3DO need the
+  80186 instructions a V20/V30, a 186 or a 286 has.
 * The free conventional memory id's own game wants; any more than that
   becomes page cache, and fewer pauses.
 * XMS or EMS helps and is used if present (XMS first).
@@ -87,7 +101,7 @@ WHAT YOU NEED
 INSTALLING
 ----------
 Copy the files from this package into the directory that holds your
-*.WL6 (or *.WL1) files.  Nothing of id's is replaced.
+*.WL6 (or *.WL1, or *.SOD) files.  Nothing of id's is replaced.
 
 
 PLAYING
@@ -97,6 +111,7 @@ PLAYING
     WOLF3DV             the game, as id made it
     WOLF3DB             the faster version
     WOLF3D1             the shareware episode
+    SPEARV              Spear of Destiny
     WOLF3DV LOWDETAIL   ... with switches (any combination, either
                         version):
 
