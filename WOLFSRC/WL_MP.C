@@ -24,6 +24,14 @@
 #include <io.h>
 #include <fcntl.h>
 
+// The shareware (UPLOAD) has one episode: whatever floor the server names,
+// the game stays in it -- floors 1 to 10 of episode 1 (2026-10-16).
+#ifdef UPLOAD
+#define MPEPISODE(m)	0
+#else
+#define MPEPISODE(m)	((m)/10)
+#endif
+
 #define MAXPLAYERS	4
 
 extern	boolean		buttonstate[NUMBUTTONS];
@@ -3162,7 +3170,7 @@ static void NextLevel (void)
 	gamestate.oldscore = gamestate.score;
 	if (mpgoto >= 0)				// the server's choice (its console, 2026-10-13)
 	{
-		gamestate.episode = mpgoto/10;
+		gamestate.episode = MPEPISODE(mpgoto);
 		gamestate.mapon = mpgoto%10;
 		mpgoto = -1;
 	}
@@ -3302,7 +3310,7 @@ void MPNetGame (void)
 	mprules = mpstart[3];
 	mpgoto = -1;
 	mppaused = 0;
-	NewGame (mpstart[2],mpstart[1]/10);
+	NewGame (mpstart[2],MPEPISODE(mpstart[1]));
 	gamestate.mapon = mpstart[1] % 10;
 	godmode = false;
 	demoplayback = false;
