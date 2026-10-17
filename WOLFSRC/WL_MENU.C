@@ -616,9 +616,8 @@ void CP_ReadThis(void)
 #endif
 #endif
 
-#ifndef SPEAR
-#ifndef GOODTIMES
-#else
+#if defined(SPEAR) || defined(GOODTIMES)	// as its callers (CP_CheckQuick): id's said
+											// !SPEAR && GOODTIMES, so Spear could not link (2026-10-16)
 ////////////////////////////////////////////////////////////////////
 //
 // BOSS KEY
@@ -639,7 +638,6 @@ void BossKey(void)
 	VL_SetPalette (&gamepal);
 	LoadLatchMem();
 }
-#endif
 #endif
 
 ////////////////////////////////////////////////////////////////////
