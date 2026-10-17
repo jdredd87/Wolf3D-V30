@@ -5,7 +5,7 @@
                           [--fraglimit N] [--timelimit MIN] [--itemrespawn SECS]
                           [--port 31992] [--bind 0.0.0.0] [--steps N] [--once]
                           [--drop-after 60] [--record M50.DEM] [--drop 0.0] [--quiet]
-                          [--control 31999] [--txgap 1000]
+                          [--control 31999] [--txgap 1000] [--name NAME]
 
 It keeps the clock and passes controls along; it knows nothing of the game.
 MULTIPLAYER.md, "Protocol, version 1", is what it speaks.
@@ -127,6 +127,8 @@ class Server:
                               for w in arg("--silence", "").split(",") if w)
         self.blackout = 0.0         # perf_counter() the outage ends at
         self.quiet = "--quiet" in sys.argv
+        # --name: what a game's server list (WOLF3DM NET FIND, 2026-10-17) calls it
+        self.name = arg("--name", socket.gethostname())[:16]
         self.rnd = random.Random(1992)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind((arg("--bind", "0.0.0.0"), arg("--port", P.PORT, int)))
@@ -258,6 +260,9 @@ class Server:
         if kind == P.HANG:              # a test build's watchdog: keep it, whoever sent it
             self.hang(b, addr)
             return
+        if kind == P.DISCOVER:          # a game looking for servers (NET FIND): what this
+            self.send(self.info_packet(), addr)     # one is playing, and who
+            return
         i = self.slot_of(addr)
         if i is not None:
             self.slots[i].heard = time.perf_counter()
@@ -326,6 +331,13 @@ class Server:
             self.log("%s says: %s" % (self.who(i), text))
             for k in self.people():
                 self.send(P.chat(i, number, text, P.CHATMSG), self.slots[k].addr)
+
+    def info_packet(self):
+        people = self.people()
+        build = self.slots[people[0]].build if people else 0
+        return P.info(1 if self.state == "play" else 0, self.players, len(people), self.bots, 0,
+                      self.map, self.skill, self.rules, 0, len(self.history), build, self.name,
+                      [s.name if s else "" for s in self.slots])
 
     def start_packet(self):
         return P.start(self.players, self.map, self.skill, self.rules, [(0, 0, 0, 0)] * self.players)

@@ -78,6 +78,7 @@ var
   TimeoutPlays: Boolean;
   HaveNet: Boolean;           { WOLF3DM.EXE is here }
   NetPage: Boolean;           { M: the network game's page is showing }
+  NetFind: Boolean;           { F: the game finds the server (NET FIND) }
   NetIp: string[15];          { the server, a.b.c.d ('' until typed) }
   NetPort: Word;
   NetName: string[16];
@@ -248,8 +249,13 @@ function NetLine: string;
 var t: string;
 begin
   Str(NetPort, t);
-  if NetIp = '' then
-    NetLine := NetExe + ' NET (no server yet)'
+  if NetFind or (NetIp = '') then         { the game finds one (NET FIND) }
+  begin
+    if NetName = '' then
+      NetLine := NetExe + ' NET FIND PORT ' + t + NetArgs
+    else
+      NetLine := NetExe + ' NET FIND PORT ' + t + ' NAME ' + NetName + NetArgs;
+  end
   else if NetName = '' then
     NetLine := NetExe + ' NET ' + NetIp + ' PORT ' + t + NetArgs
   else
@@ -375,7 +381,8 @@ begin
   WriteLn('  Kept in ', NetCfgName, ', so it is asked only once:');
   WriteLn;
   Write('    S  server:     ');
-  if NetIp = '' then WriteLn('(none yet -- the address the server prints)') else WriteLn(NetIp);
+  if NetIp = '' then WriteLn('(none yet -- F finds one, or the address it prints)') else WriteLn(NetIp);
+  WriteLn('    F  find the servers on this network, and pick one');
   WriteLn('    O  port:       ', NetPort, '  (', DefPort, ' unless the server says otherwise)');
   Write('    Y  your name:  ');
   if NetName = '' then WriteLn('(none: "Player")') else WriteLn(NetName);
@@ -616,11 +623,10 @@ begin
           '-', '_':
             if ViewSz = 0 then ViewSz := 15
             else if ViewSz > 4 then Dec(ViewSz);
-          'J', #13:
-            if NetIp = '' then
-              Msg := 'First the server''s address: S'
-            else
-            begin
+          'J', #13, 'F':
+            begin                           { no server yet, or F: the game finds one
+                                              (NET FIND, 2026-10-17) and remembers it }
+              NetFind := (c = 'F') or (NetIp = '');
               SaveCfg;
               SaveNet;
               WriteRun(False);

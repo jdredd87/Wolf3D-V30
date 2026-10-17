@@ -53,6 +53,11 @@ int		far	nethip = 0, far nethar = 0;	// the IP and ARP handles
 int		far	netopen = 0;			// both handles held
 int		far	nethavemac = 0;			// nettomac is the server's, or the gateway's
 unsigned far netport = 0;			// ours and the server's
+int		far	netany = 0;				// LAN discovery (2026-10-17): a datagram from
+byte	far	netfrom[4] = {0};		// anyone is taken (netfrom says who), and NetSend
+									// broadcasts
+int		far	netearly = 0;			// started before the memory manager: the ring
+									// comes from DOS, and goes back in NetStop
 unsigned far netident = 0;
 long	far	netsentn = 0, far netrecvn = 0, far netframes = 0;
 
@@ -269,6 +274,19 @@ int NetStart (byte far *server, unsigned port, char far * far *why)
 	}
 	_fmemcpy (netsrv,server,4);
 	netport = port;
+	if (!ns && netearly)			// before the memory manager (NET FIND): from DOS
+	{
+		unsigned	seg;
+
+		if (allocmem ((sizeof(netshare_t)+15)/16,&seg) != -1)
+		{
+			static char far nomem[] = "no memory for the network";
+
+			*why = nomem;
+			return 0;
+		}
+		ns = (netshare_t far *)MK_FP(seg,0);
+	}
 	if (!ns)
 	{
 		MM_GetPtr (&netmem,sizeof(netshare_t));
@@ -312,6 +330,12 @@ void NetStop (void)
 	netopen = 0;
 	Release (nethip);
 	Release (nethar);
+	if (netearly && ns)				// the early ring goes back to DOS, after the
+	{								// driver has let go: the game's comes from the
+		freemem (FP_SEG(ns));		// memory manager when it starts
+		ns = 0;
+		netearly = 0;
+	}
 }
 
 /*
@@ -444,12 +468,15 @@ void NetSend (byte far *data, unsigned len)
 
 	if (!netopen || len > 1472)
 		return;
-	if (!nethavemac)
+	if (netany)						// discovery: to everyone on the wire
+		_fmemset (p,0xff,6);
+	else if (!nethavemac)
 	{
 		NetAsk ();				// not yet: ask, and this one is lost --
 		return;					// the protocol sends again
 	}
-	_fmemcpy (p,nettomac,6);
+	else
+		_fmemcpy (p,nettomac,6);
 	_fmemcpy (p+6,netmymac,6);
 	p[12] = 0x08;	p[13] = 0x00;
 	p += 14;
@@ -460,7 +487,10 @@ void NetSend (byte far *data, unsigned len)
 	p[8] = 64;	p[9] = 17;		// TTL, UDP
 	PutW (p+10,0);
 	_fmemcpy (p+12,netmyip,4);
-	_fmemcpy (p+16,netsrv,4);
+	if (netany)
+		_fmemset (p+16,0xff,4);	// 255.255.255.255
+	else
+		_fmemcpy (p+16,netsrv,4);
 	for (s = 0,i = 0;i < 20;i += 2)
 		s += GetW (p+i);
 	while (s >> 16)
@@ -959,13 +989,14 @@ void NetPump (void (*take) (byte far *data, unsigned len))
 			f += 14;
 			ihl = (f[0] & 15) * 4;
 			if ((f[0] >> 4) == 4 && f[9] == 17 && !(GetW (f+6) & 0x3fff)
-			&& !_fmemcmp (f+12,netsrv,4) && !_fmemcmp (f+16,netmyip,4)
+			&& (netany || !_fmemcmp (f+12,netsrv,4)) && !_fmemcmp (f+16,netmyip,4)
 			&& GetW (f+ihl+2) == netport)
 			{
 				unsigned ulen = GetW (f+ihl+4);
 
 				if (ulen >= 8 && ihl+ulen <= len-14)
 				{
+					_fmemcpy (netfrom,f+12,4);	// who sent it (discovery's list)
 					netrecvn++;
 					take (f+ihl+8,ulen-8);
 				}

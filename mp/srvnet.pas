@@ -682,6 +682,19 @@ begin
         Ok := True;
         for I := 0 to 3 do
           if Shared.Buf[14 + 16 + I] <> SnMyIP[I] then Ok := False;
+        if not Ok then
+        begin                 { a broadcast -- a game looking for servers (DISCOVER,
+                                2026-10-17): 255.255.255.255, or this subnet's }
+          Ok := True;
+          for I := 0 to 3 do
+            if Shared.Buf[14 + 16 + I] <> $FF then Ok := False;
+          if not Ok then
+          begin
+            Ok := True;
+            for I := 0 to 3 do
+              if Shared.Buf[14 + 16 + I] <> (SnMyIP[I] or (SnMask[I] xor $FF)) then Ok := False;
+          end;
+        end;
         if Ok then
         begin
           UdpLen := GetW(Shared.Buf, 14 + Ihl + 4);

@@ -14,9 +14,13 @@ HANG = 12
 # on (0).  No steps come while it is paused; this says why, and keeps the
 # players' "No word from the server" box away
 PAUSED = 14
+# DISCOVER / INFO (2026-10-17): LAN discovery.  A game broadcasts DISCOVER
+# (and its build) on the port; every server answers INFO -- what it is
+# playing, and who -- to the address it came from
+DISCOVER, INFO = 15, 16
 NAMES = {HELLO: "HELLO", WELCOME: "WELCOME", START: "START", INPUT: "INPUT", STEPS: "STEPS",
          SYNC: "SYNC", DESYNC: "DESYNC", BYE: "BYE", CHAT: "CHAT", CHATMSG: "CHATMSG",
-         PLAYERS: "NAMES", HANG: "HANG", PAUSED: "PAUSED"}
+         PLAYERS: "NAMES", HANG: "HANG", PAUSED: "PAUSED", DISCOVER: "DISCOVER", INFO: "INFO"}
 # the server's events (2026-10-13), in STEPS' tail: each at a step, so every
 # machine -- and every joiner, replaying -- applies it at the same one
 EV_NEXTFLOOR, EV_MAP, EV_TIMELIMIT, EV_FRAGLIMIT = 1, 2, 4, 5
@@ -163,6 +167,31 @@ def bye(slot, reason=BYE_END, text=""):
 
 def un_bye(b):
     return b[0], (b[1] if len(b) >= 2 else BYE_END)
+
+
+def discover(build):
+    return head(DISCOVER) + struct.pack("<I", build)
+
+
+def info(playing, slots, people, bots, watchers, mapnum, skill, rules, rules2, step, build, name, names):
+    """INFO: state (0 waiting, 1 playing), slots, people in, bots, spectators,
+    map, skill, rules, rules2, pad, step (u32), the build being played (u32,
+    0: none yet), the server's name (16), every slot's name (4 x 16)."""
+    out = head(INFO) + bytes([playing, slots, people, bots, watchers, mapnum, skill, rules, rules2, 0])
+    out += struct.pack("<II", step & 0xFFFFFFFF, build & 0xFFFFFFFF)
+    out += name.encode("latin-1", "replace")[:16].ljust(16, b"\0")
+    for k in range(4):
+        n = names[k] if k < len(names) else ""
+        out += n.encode("latin-1", "replace")[:16].ljust(16, b"\0")
+    return out
+
+
+def un_info(b):
+    v = struct.unpack_from("<10BII", b)
+    name = b[18:34].split(b"\0")[0].decode("latin-1")
+    names = [b[34 + 16 * k:50 + 16 * k].split(b"\0")[0].decode("latin-1") for k in range(4)]
+    return dict(playing=v[0], slots=v[1], people=v[2], bots=v[3], watchers=v[4], map=v[5], skill=v[6],
+                rules=v[7], rules2=v[8], step=v[10], build=v[11], name=name, names=names)
 
 
 def paused(on):

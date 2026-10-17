@@ -23,6 +23,19 @@
 #include <stdarg.h>
 #include <io.h>
 #include <fcntl.h>
+#include <bios.h>
+
+// The build, in HELLO and DISCOVER: the server keeps two builds out of one
+// game.  It was a constant 12345678h until v1.8 (2026-10-17), so it kept
+// nobody out -- a shareware WOLF3DM1 could join a registered game.  Now the
+// release whose network play it is, and the data: 6 registered, 1 shareware.
+// A release that changes what the game does in a network game raises MPVER.
+#define MPVER		0x0108
+#ifdef UPLOAD
+#define MPBUILD		(((unsigned long)MPVER << 16) | 1)
+#else
+#define MPBUILD		(((unsigned long)MPVER << 16) | 6)
+#endif
 
 // The shareware (UPLOAD) has one episode: whatever floor the server names,
 // the game stays in it -- floors 1 to 10 of episode 1 (2026-10-16).
@@ -1959,12 +1972,149 @@ static void SaveNet (void)
 	close (h);
 }
 
+/*
+=============================================================================
+
+						FINDING A SERVER (2026-10-17)
+
+WOLF3DM NET FIND -- or NET with no server named and none remembered: a
+DISCOVER broadcast on the port, three times in a second; every server there
+answers INFO.  The list, and this player picks one (or it is the only one),
+and it is remembered in WOLF3DM.CFG.  Before InitGame: text mode, the BIOS
+keyboard and clock, and the network's ring from DOS (NetStart's early one).
+
+=============================================================================
+*/
+
+#define FINDMAX	9
+#define INFOLEN	98				// INFO after its header: MULTIPLAYER.md
+
+extern	byte	far netfrom[4];
+extern	int		far netany, far netearly;
+
+static byte far foundip[FINDMAX][4];
+static byte far foundinfo[FINDMAX][INFOLEN];
+static int far nfound;
+
+static void FindTake (byte far *d, unsigned len)
+{
+	int	i;
+
+	if (len < 4+34 || d[0] != 'W' || d[1] != 'M' || d[2] != 1 || d[3] != 16)
+		return;
+	for (i=0;i<nfound;i++)
+		if (!_fmemcmp (foundip[i],netfrom,4))
+			return;					// the same server again (three DISCOVERs)
+	if (nfound >= FINDMAX)
+		return;
+	_fmemcpy (foundip[nfound],netfrom,4);
+	_fmemset (foundinfo[nfound],0,INFOLEN);
+	_fmemcpy (foundinfo[nfound],d+4,len-4 > INFOLEN ? INFOLEN : len-4);
+	nfound++;
+}
+
+static void Find (void)
+{
+	static char far looking[] = "Looking for servers on UDP port %u ...\n";
+	static char far nobody[] = "No server answered on UDP port %u.  Is one running on this network?\n"
+		"(On Windows its firewall must let it in.)  Or name one: WOLF3DM NET a.b.c.d\n";
+	static char far line1[] = "%d  %d.%d.%d.%d  %Fs  %Fs%Fs  E%dL%d  %Fs  %d of %d%Fs\n";
+	static char far line2[] = "      %Fs\n";
+	static char far dm[] = "deathmatch", far coop[] = "co-op", far noen[] = ", no enemies",
+		far nothing[] = "", far wait[] = "waiting", far play[] = "playing",
+		far other[] = "  (another version)";
+	static char far pick[] = "Which server?  1-%d, or Esc: ";
+	static char far why1[] = "WOLF3DM NET FIND: %Fs\n";
+	byte	any[4];
+	char	far *why;
+	long	far *bt = (long far *)MK_FP(0x40,0x6c);
+	long	t0;
+	int		i,k,sent = 0;
+
+	mprintf (looking,mpport);
+	_fmemset (any,0xff,4);
+	netearly = netany = 1;
+	if (!NetStart (any,mpport,&why))
+	{
+		mprintf (why1,why);
+		exit (1);
+	}
+	nfound = 0;
+	t0 = *bt;
+	while (*bt - t0 < 36 && *bt >= t0)			// 2 s
+	{
+		NetPump (FindTake);
+		if (sent < 3 && *bt - t0 >= 9*sent)		// at 0, 0.5 and 1 s
+		{
+			Head (15);							// DISCOVER: and this build
+			PutL (mppkt+4,MPBUILD);
+			NetSend (mppkt,8);
+			sent++;
+		}
+	}
+	NetStop ();
+	netany = 0;
+	if (!nfound)
+	{
+		mprintf (nobody,mpport);
+		exit (1);
+	}
+	for (i=0;i<nfound;i++)
+	{
+		byte	far *f = foundinfo[i];
+		char	name[17], who[70];
+		unsigned long build = GetL (f+14);
+
+		_fmemcpy ((char far *)name,f+18,16);
+		name[16] = 0;
+		who[0] = 0;
+		for (k=0;k<MAXPLAYERS;k++)
+			if (f[34+16*k])
+			{
+				int	n = strlen (who);
+
+				if (n)
+				{
+					who[n++] = ',';
+					who[n++] = ' ';
+				}
+				_fmemcpy ((char far *)who+n,f+34+16*k,16);
+				who[n+16] = 0;
+			}
+		mprintf (line1,i+1,foundip[i][0],foundip[i][1],foundip[i][2],foundip[i][3],
+			(char far *)name,f[7] & 1 ? dm : coop,f[7] & 4 ? noen : nothing,
+			f[5]/10+1,f[5]%10+1,f[0] ? play : wait,f[2]+f[3],f[1],
+			build && build != MPBUILD ? other : nothing);
+		if (who[0])
+			mprintf (line2,(char far *)who);
+	}
+	k = 0;
+	if (nfound > 1)
+	{
+		mprintf (pick,nfound);
+		for (;;)
+		{
+			int	c = bioskey (0) & 0xff;
+
+			if (c == 27)
+				exit (0);
+			if (c > '0' && c <= '0'+nfound)
+			{
+				k = c - '1';
+				break;
+			}
+		}
+	}
+	_fmemcpy (mpserver,foundip[k],4);
+	mpcfg = 1;
+}
+
 int MPNetArgs (void)
 {
 	static int far done;
-	static char far wnet[] = "net", far wport[] = "port", far wname[] = "name", far wbot[] = "netbot";
-	static char far none[] = "WOLF3DM NET: which server?  WOLF3DM NET a.b.c.d -- remembered after that\n";
-	int		i,net = 0,given = 0;
+	static char far wnet[] = "net", far wport[] = "port", far wname[] = "name", far wbot[] = "netbot",
+		far wfind[] = "find";
+	int		i,net = 0,given = 0,find = 0;
 	byte	d[4];
 
 	if (done)						// asked twice: before InitGame, and after
@@ -1998,14 +2148,13 @@ int MPNetArgs (void)
 		}
 		if (Is (a,wbot))
 			mpbot = 1;
+		if (Is (a,wfind))
+			find = 1;
 	}
-	if (!mpcfg)
+	if (find || !mpcfg)				// NET FIND, or no server known: look
 	{
-		char	s[80];
-
-		_fstrcpy ((char far *)s,none);
-		printf (s);
-		exit (1);
+		Find ();
+		given = 1;					// remembered
 	}
 	if (given && !mpbot)
 		SaveNet ();
@@ -3285,7 +3434,7 @@ void MPNetGame (void)
 				Head (1);
 				_fmemset (mppkt+4,0,16);
 				_fstrcpy ((char far *)mppkt+4,mpname);
-				PutL (mppkt+20,0x12345678l);	// the build -- to be the EXE's CRC
+				PutL (mppkt+20,MPBUILD);	// the build: release and data (MPVER)
 				mppkt[24] = 0xff;
 				NetSend (mppkt,25);
 			}

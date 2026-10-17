@@ -44,6 +44,7 @@ const
   VERSION = 1;
   HELLO = 1; WELCOME = 2; START = 3; INPUTP = 4; STEPS = 5; SYNC = 6;
   DESYNC = 7; BYE = 8; CHAT = 9; CHATMSG = 10; NAMESP = 11; HANG = 12; PAUSEDP = 14;
+  DISCOVERP = 15; INFOP = 16;     { LAN discovery: a game's NET FIND (2026-10-17) }
   EV_NEXTFLOOR = 1; EV_MAP = 2; EV_TIMELIMIT = 4; EV_FRAGLIMIT = 5;
   BYE_END = 0; BYE_FULL = 1; BYE_BUILD = 2; BYE_DROPPED = 3; BYE_KICKED = 4;
   RULE_DM = 1; RULE_NOFF = 2; RULE_NOENEMIES = 4;
@@ -115,6 +116,7 @@ var
   GamePort, CtlPort: Word;
   StepLimit: LongInt;
   Once, Quiet: Boolean;
+  ServerName: ShortString;       { --name: what a game's server list calls it }
   DropAfter: LongInt;            { ticks }
   { the game }
   Playing, Paused: Boolean;
@@ -933,6 +935,36 @@ begin
   SeqNewer := (A <> B) and (Word(A - B) < $8000);
 end;
 
+{ INFO, in Tx: what this server is playing and who -- the answer to a game's
+  DISCOVER (NET FIND, 2026-10-17).  MULTIPLAYER.md has the layout. }
+function InfoLen: Word;
+var I, K, People: Integer; B: LongWord;
+begin
+  Head(INFOP);
+  People := 0;
+  B := 0;
+  for I := 0 to Players - 1 do
+    if IsPerson(I) then
+    begin
+      Inc(People);
+      if B = 0 then B := Slots[I].Build;
+    end;
+  if Playing then Tx[4] := 1 else Tx[4] := 0;
+  Tx[5] := Players; Tx[6] := People; Tx[7] := Bots; Tx[8] := 0;
+  Tx[9] := MapNum; Tx[10] := Skill; Tx[11] := Rules; Tx[12] := 0; Tx[13] := 0;
+  PutL(14, Newest + 1);
+  PutL(18, B);
+  for K := 0 to 15 do
+    if K < Length(ServerName) then Tx[22 + K] := Ord(ServerName[K + 1]) else Tx[22 + K] := 0;
+  for I := 0 to 3 do
+    for K := 0 to 15 do
+      if (I < Players) and Slots[I].Used and (K < Length(Slots[I].Name)) then
+        Tx[38 + 16 * I + K] := Ord(Slots[I].Name[K + 1])
+      else
+        Tx[38 + 16 * I + K] := 0;
+  InfoLen := 102;
+end;
+
 procedure HandleGame;
 var
   I, K, N: Integer;
@@ -957,6 +989,11 @@ begin
       Inc(K);
     end;
     Log('HANG from ' + IPStr(SnFromIP) + ': ' + Text);
+    Exit;
+  end;
+  if Kind = DISCOVERP then             { a game looking for servers: what this one is }
+  begin
+    SendFrom(InfoLen);
     Exit;
   end;
   I := SlotOf;
@@ -1895,6 +1932,14 @@ begin
     if Lower(ParamStr(I)) = Name then ArgS := Lower(ParamStr(I + 1));
 end;
 
+function ArgCase(const Name, Default: ShortString): ShortString;   { as typed }
+var I: Integer;
+begin
+  ArgCase := Default;
+  for I := 1 to ParamCount - 1 do
+    if Lower(ParamStr(I)) = Name then ArgCase := Copy(ParamStr(I + 1), 1, 16);
+end;
+
 function Flag(const Name: ShortString): Boolean;
 var I: Integer;
 begin
@@ -1945,6 +1990,12 @@ begin
   WriteLn('THE SERVER');
   WriteLn('  --port N         the UDP port the game talks on; players then join (31992)');
   WriteLn('                   with PORT N');
+  WriteLn('  --name NAME      what a game''s server list (WOLF3DM NET FIND) calls');
+{$IFDEF WINDOWS}
+  WriteLn('                   it, up to 16 letters                (MPSRVW (Windows))');
+{$ELSE}
+  WriteLn('                   it, up to 16 letters                     (MPSRV (DOS))');
+{$ENDIF}
 {$IFDEF WINDOWS}
   WriteLn('  --control N      the console port for python mp/mpctl.py, on       (31999)');
   WriteLn('                   127.0.0.1 only -- this PC; 0 turns it off');
@@ -2088,6 +2139,11 @@ begin
   CtlPort := Arg('--control', 31999);
   StepLimit := Arg('--steps', 0);
   Once := Flag('--once');
+{$IFDEF WINDOWS}
+  ServerName := ArgCase('--name', 'MPSRVW (Windows)');
+{$ELSE}
+  ServerName := ArgCase('--name', 'MPSRV (DOS)');
+{$ENDIF}
   Quiet := Flag('--quiet');
   DropAfter := Arg('--drop-after', 60) * T_SEC;
   NxMap := -1; NxSkill := -1; NxBots := -1; NxTime := -1; NxFrag := -1;
