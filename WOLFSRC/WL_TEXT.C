@@ -866,6 +866,8 @@ void EndText (void)
 #endif	// SPEAR, NETGAME
 
 #ifdef NETGAME
+char helpfilename[13] = "HELPART.",		// WL_MENU.C names them
+	 endfilename[13] = "ENDART1.";
 void HelpScreens (void) {}		// for their callers, which a network game never reaches
 void EndText (void) {}
 #endif
