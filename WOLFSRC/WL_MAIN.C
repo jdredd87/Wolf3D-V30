@@ -320,6 +320,7 @@ long DoChecksum(byte far *source,unsigned size,long checksum)
 ==================
 */
 
+#ifndef NETGAME
 boolean SaveTheGame(int file,int x,int y)
 {
 	struct diskfree_t dfree;
@@ -541,6 +542,11 @@ boolean LoadTheGame(int file,int x,int y)
 
 	return true;
 }
+#else	// NETGAME: the network game (WOLF3DM) is never saved, and its snapshot
+		// is its own (WL_MP.C) -- room for the V30 (StevenC & Claude, 2026-10-17)
+boolean SaveTheGame(int file,int x,int y) { return false; }
+boolean LoadTheGame(int file,int x,int y) { return false; }
+#endif	// NETGAME
 
 //===========================================================================
 
