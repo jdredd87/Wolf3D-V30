@@ -110,6 +110,8 @@ int		far	mprules2;			// and more (2026-10-17: START's last byte):
 #define RULE2_TEAM		1		//   team deathmatch: Gold (P1, P3) against Silver
 								//   (P2, P4) -- no team hurts its own, a team's
 								//   frags are its score
+#define RULE2_CTF		2		//   capture the flag (with RULE2_TEAM): a capture
+								//   is a team's point, the frag limit counts them
 #define TEAM(i)			((i) & 1)
 long	far	mptook[MAXPLAYERS];	// damage each player has been dealt (the
 								// report: god mode hides it from health)
@@ -589,11 +591,138 @@ static boolean Friend (objtype *ob)
 	return (mprules & (RULE_DM|RULE_NOFF)) == RULE_NOFF;
 }
 
-// a team's score: its players' frags
+/*
+=============================================================================
+
+						CAPTURE THE FLAG (2026-10-17)
+
+Each team's flag -- Gold's the gold key, Silver's the silver -- stands at its
+base: its first player's start (P1's, P2's).  Walking onto the other team's
+flag takes it; a carrier who dies drops it where they fell, and one who
+leaves too.  Walking onto one's own flag where it was dropped sends it home,
+and so do 30 s with nobody touching it.  Carrying the other flag onto one's
+own base, with one's own flag at home, is a capture: the team's point, and
+the flag goes home.  All of it is the game's state, worked out in every
+step on every machine (MPStep); only the notices are this one's
+
+=============================================================================
+*/
+
+int		far	mpcaps[2];			// each team's captures (this floor)
+static statobj_t *flagobj[2];	// the flags, in the world (NULL: no CTF)
+static byte far flagbx[2], far flagby[2];	// the bases
+static byte far flagx[2], far flagy[2];		// where each lies (0,0: carried)
+static int far flagby_[2];		// who carries it, -1 nobody
+static int far flagtime[2];		// steps it has lain away from home
+static char far *far teamname[2];
+static char far gold[] = "Gold", far silver[] = "Silver";
+
+static void FlagAt (int t, int x, int y)
+{
+	flagobj[t]->tilex = flagx[t] = x;	// 0,0 is solid wall: never seen
+	flagobj[t]->tiley = flagy[t] = y;
+	flagobj[t]->visspot = &spotvis[x][y];
+}
+
+static void FlagHome (int t)
+{
+	flagby_[t] = -1;
+	flagtime[t] = 0;
+	FlagAt (t,flagbx[t],flagby[t]);
+}
+
+static void FlagsInit (void)		// every floor (MPSpawn)
+{
+	int	t;
+
+	mpcaps[0] = mpcaps[1] = 0;
+	flagobj[0] = flagobj[1] = NULL;
+	if (!(mprules2 & RULE2_CTF) || mpplayers < 2 || laststatobj >= &statobjlist[MAXSTATS-2])
+		return;
+	teamname[0] = gold;
+	teamname[1] = silver;
+	for (t=0;t<2;t++)
+	{
+		flagobj[t] = laststatobj++;
+		flagobj[t]->shapenum = t ? SPR_STAT_21 : SPR_STAT_20;	// the silver key, the gold
+		flagobj[t]->flags = 0;			// not a bonus: nobody picks it up as one
+		flagobj[t]->itemnumber = 0;
+		flagbx[t] = mpctx[t].sx;
+		flagby[t] = mpctx[t].sy;
+		FlagHome (t);
+	}
+}
+
+// player i drops whatever flag it carries, where it is (it died, or left)
+static void FlagDrop (int i)
+{
+	static char far f[] = "%Fs dropped the %Fs flag";
+	int		t;
+
+	if (!flagobj[0])
+		return;
+	for (t=0;t<2;t++)
+		if (flagby_[t] == i)
+		{
+			flagby_[t] = -1;
+			flagtime[t] = 0;
+			FlagAt (t,mpctx[i].ob->tilex,mpctx[i].ob->tiley);
+			Notice (pcol[i],f,Who (i),teamname[t]);
+		}
+}
+
+static void Flags (void)			// every step (MPStep)
+{
+	static char far ftake[] = "%Fs has the %Fs flag", far fback[] = "%Fs returned the %Fs flag",
+		far fcap[] = "%Fs CAPTURED the %Fs flag!", far fhome[] = "The %Fs flag went home";
+	int		i,t,e,x,y;
+
+	if (!flagobj[0])
+		return;
+	for (t=0;t<2;t++)				// lying away from home 30 s: home
+		if (flagby_[t] < 0 && (flagx[t] != flagbx[t] || flagy[t] != flagby[t])
+		&& ++flagtime[t] >= 525)
+		{
+			FlagHome (t);
+			Notice (15,fhome,teamname[t]);
+		}
+	for (i=0;i<mpplayers;i++)
+	{
+		if (mpctx[i].absent || mpctx[i].dead)
+			continue;
+		x = mpctx[i].ob->tilex;
+		y = mpctx[i].ob->tiley;
+		t = TEAM (i);
+		e = !t;
+		if (flagby_[e] < 0 && x == flagx[e] && y == flagy[e])
+		{							// the other team's flag: taken
+			flagby_[e] = i;
+			FlagAt (e,0,0);
+			Notice (pcol[i],ftake,Who (i),teamname[e]);
+		}
+		if (flagby_[t] < 0 && x == flagx[t] && y == flagy[t]
+		&& (x != flagbx[t] || y != flagby[t]))
+		{							// one's own, dropped: home
+			FlagHome (t);
+			Notice (pcol[i],fback,Who (i),teamname[t]);
+		}
+		if (flagby_[e] == i && x == flagbx[t] && y == flagby[t]
+		&& flagby_[t] < 0 && flagx[t] == flagbx[t] && flagy[t] == flagby[t])
+		{							// at home with the other flag, one's own there
+			mpcaps[t]++;
+			FlagHome (e);
+			Notice (pcol[i],fcap,Who (i),teamname[e]);
+		}
+	}
+}
+
+// a team's score: its players' frags -- or, capturing the flag, its captures
 static int Team (int t)
 {
 	int	i,n = 0;
 
+	if (mprules2 & RULE2_CTF)
+		return mpcaps[t];
 	for (i=t;i<mpplayers;i+=2)
 		n += mpctx[i].frags;
 	return n;
@@ -770,6 +899,7 @@ void MPDie (objtype *attacker)
 		far fd[] = "%Fs died";
 	mpctx_t	far *c = &mpctx[mpcur];
 
+	FlagDrop (mpcur);				// capture the flag: where it fell
 	c->dead = 1;
 	c->deadtime = 0;
 	c->deaths++;
@@ -922,6 +1052,7 @@ static void Leave (int i)
 
 	if (mpnet && !mpcatching && mpseen[i])	// not an empty slot's first step
 		Notice (pcol[i],f,Who (i));
+	FlagDrop (i);
 	mpseen[i] = 0;
 	c->absent = 1;
 	c->dead = 0;
@@ -1239,6 +1370,7 @@ void MPSpawn (byte far *b)
 	MPAsm (1,&objlist[0]);			// the renderer: no pickups or waking, and
 									// PlaceActors from the list's head
 	InitAreas ();					// every player's area, now they all exist
+	FlagsInit ();					// capture the flag: both flags home, no captures
 	if (mprules & RULE_DM)			// deathmatch: every door, and a respawn's
 		for (i=0;i<mpplayers;i++)	// 50 bullets -- a player in from the first
 		{							// step had id's 8 while one who joined
@@ -1428,6 +1560,7 @@ void MPStep (void)
 	// -- each sum chained to the one before: summed every step it cost the
 	// V30 most of a frame (32-bit shifts are software on an 8086)
 	++mpsteps;
+	Flags ();						// capture the flag
 	if (mpitemnext && mpsteps >= mpitemnext)
 		ItemsBack ();				// items taken a while ago come back
 	if (mpsteps % 50)
