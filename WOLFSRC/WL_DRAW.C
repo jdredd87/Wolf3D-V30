@@ -1154,14 +1154,17 @@ void FlatColours (unsigned ceiling)
 	{
 		if (!averaged)
 		{
-			src = (byte far *)PM_GetPage (page);
 			r = g = b = 0;					// at most 255*63: no overflow
-			for (i = 0, ofs = 0; i < 255; i++, ofs = (ofs+17)&0xfff)
-			{
-				d = src[ofs]*3;
-				r += pal[d];
-				g += pal[d+1];
-				b += pal[d+2];
+			if (PMPages[page].offset)		// not a sparse page: the shareware's VSWAP has
+			{								// 42 empty walls, which PM_GetPage refuses (2026-10-16)
+				src = (byte far *)PM_GetPage (page);
+				for (i = 0, ofs = 0; i < 255; i++, ofs = (ofs+17)&0xfff)
+				{
+					d = src[ofs]*3;
+					r += pal[d];
+					g += pal[d+1];
+					b += pal[d+2];
+				}
 			}
 			FLATAVG(page,0) = r/255;
 			FLATAVG(page,1) = g/255;
