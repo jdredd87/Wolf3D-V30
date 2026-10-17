@@ -1975,8 +1975,8 @@ said it had received not one packet.  ARP works both ways between them
 and the 486 plays P3's server from the same room, so the V30's datagrams
 to P3 are lost somewhere between two PicoMEM 2 cards' WiFi.  Earlier the
 same day the V30 watched a game on P3's server, so it is a state, not a
-rule; a full power-off of either card is the first thing to try
-(SETUP.md's troubleshooting has the PicoMEM's habits).
+rule; a full power-off of either card is the first thing to try --
+a warm reboot does not reset a PicoMEM's WiFi.
 
 ### Memory: the V30 again
 
