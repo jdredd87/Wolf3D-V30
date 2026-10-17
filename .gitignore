@@ -17,3 +17,5 @@ bsp/build/
 bsp/*.DAT
 bsp/*.WL6
 release/*.ZIP
+# Spear of Destiny's data and installer (id's; never committed) -- 2026-10-16
+SOD/
