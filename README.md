@@ -43,7 +43,7 @@ build and run programs on a real DOS machine as if it were a test suite.
 | `WOLF3D8.EXE` | `v30-8086` | **the same, for a plain 8086/8088**: `WOLF3DV` with every 186 instruction spelled the 8086 way, built by `w3dbuild.py build8086` -- below |
 | `WOLF3D1.EXE`, `WOLF3D18.EXE` | `v30-8086` | **the same for the free shareware episode** (version 1.4's `*.WL1`), for a V20/V30 and up and for a plain 8086/8088: `w3dbuild.py buildwl1` / `buildwl18` -- below |
 | `WOLF3DB.EXE` | `bsp` | **the BSP version**: allowed to change the game a little for speed -- far walls drawn in less detail by default, or the whole world from a BSP tree instead of id's rays (`BSP`) -- [BSPNOTES.md](https://github.com/jdredd87/Wolf3D-V30/blob/bsp/BSPNOTES.md) on that branch |
-| `WOLF3DM.EXE` | `multiplayer` | **the network game**: everything `WOLF3DV` is, plus up to four players over UDP -- [MULTIPLAYER.md](https://github.com/jdredd87/Wolf3D-V30/blob/multiplayer/MULTIPLAYER.md) on that branch |
+| `WOLF3DM.EXE`, `WOLF3DM1.EXE` | `multiplayer` | **the network game**: everything `WOLF3DV` is, plus up to four players over UDP; `WOLF3DM1` is the same on the free shareware (since v1.6) -- [MULTIPLAYER.md](https://github.com/jdredd87/Wolf3D-V30/blob/multiplayer/MULTIPLAYER.md) on that branch |
 
 `WOLF3DO.EXE` is **id Software's own 1992 code**, rebuilt for the 8086 by
 `refsrc.py` with the same timing harness: the yardstick everything above is
