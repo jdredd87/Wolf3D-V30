@@ -68,7 +68,7 @@ var
   ViewSz: Integer;            { 4..19, or 0: the game's own setting }
   HaveBsp: Boolean;           { WOLF3DB.EXE is here }
   Plain8086: Boolean;         { an 8086/8088, and WOLF3D8.EXE is here }
-  Shareware: Boolean;         { *.WL1 and no *.WL6 here, and WOLF3D1.EXE }
+  Shareware: Boolean;         { *.WL1 and no *.WL6 here: WOLF3D1, WOLF3DM1 }
   Force8086: Boolean;         { /8086 }
   UseBsp: Boolean;            { T: run it rather than WOLF3DV }
   BspTree: Boolean;           { K: BSP, the tree rather than id's rays }
@@ -172,12 +172,19 @@ begin
   IpOk := parts = 4;
 end;
 
+{ the network game: WOLF3DM, or WOLF3DM1 with the shareware's *.WL1 }
+function NetExe: string;
+begin
+  if Shareware then NetExe := 'WOLF3DM1' else NetExe := 'WOLF3DM';
+end;
+
 { WOLF3DM.CFG: SERVER a.b.c.d, PORT n, NAME x -- a line each, any order }
 procedure LoadNet;
 var f: Text; s, w, v: string; i, code: Integer; n: Word;
 begin
-  { WOLF3DM needs the 80186 instructions, and there is no 8086 build of it }
-  HaveNet := (FSearch('WOLF3DM.EXE', '') <> '') and Has186 and not Force8086;
+  { WOLF3DM needs the 80186 instructions, and there is no 8086 build of it;
+    WOLF3DM1 is the shareware's (2026-10-16) }
+  HaveNet := (FSearch(NetExe + '.EXE', '') <> '') and Has186 and not Force8086;
   NetIp := '';
   NetPort := DefPort;
   NetName := '';
@@ -237,11 +244,11 @@ var t: string;
 begin
   Str(NetPort, t);
   if NetIp = '' then
-    NetLine := 'WOLF3DM NET (no server yet)'
+    NetLine := NetExe + ' NET (no server yet)'
   else if NetName = '' then
-    NetLine := 'WOLF3DM NET ' + NetIp + ' PORT ' + t + NetArgs
+    NetLine := NetExe + ' NET ' + NetIp + ' PORT ' + t + NetArgs
   else
-    NetLine := 'WOLF3DM NET ' + NetIp + ' PORT ' + t + ' NAME ' + NetName + NetArgs;
+    NetLine := NetExe + ' NET ' + NetIp + ' PORT ' + t + ' NAME ' + NetName + NetArgs;
 end;
 
 { Type a value on the line: it starts as cur, Backspace takes a character
@@ -279,8 +286,7 @@ begin
     8086's build of the same game (2026-10-16) }
   { the shareware 1.4 (*.WL1, and no *.WL6 here) is WOLF3D1, or WOLF3D18 on
     an 8086/8088 (2026-10-16); WOLF3DB needs the registered data }
-  Shareware := (FSearch('VSWAP.WL6', '') = '') and (FSearch('VSWAP.WL1', '') <> '')
-               and (FSearch('WOLF3D1.EXE', '') <> '');
+  Shareware := (FSearch('VSWAP.WL6', '') = '') and (FSearch('VSWAP.WL1', '') <> '');
   if Shareware then
     Plain8086 := (Force8086 or not Has186) and (FSearch('WOLF3D18.EXE', '') <> '')
   else
@@ -429,8 +435,8 @@ begin
   WriteLn;
   WriteLn('    P  play     B  benchmark these switches     Q  quit');
   if HaveNet then
-    WriteLn('    M  network game (WOLF3DM)')
-  else if FSearch('WOLF3DM.EXE', '') <> '' then
+    WriteLn('    M  network game (', NetExe, ')')
+  else if FSearch(NetExe + '.EXE', '') <> '' then
     WriteLn('       (the network game needs a V20/V30, an 80186 or better)');
   WriteLn('       (in the game, TAB shows the map of what you have seen)');
   WriteLn;
