@@ -1968,15 +1968,17 @@ Silver n (captures)`), which is how that was read.
 The v1.8 binaries from the zip: MPSRV on P3 running capture the flag, the
 486 playing 1,800 steps against its bot, no desync; MPSRVW with the 486
 playing and the V30 **watching**, 2,500 steps, the watcher caught up 778
-steps at 144 a second, no desync.  One thing did not work, and it is not
-the game: **the V30 cannot reach P3's server** -- as a watcher or as a
-player, "No answer from the server in 90 seconds", and MPSRV's own count
-said it had received not one packet.  ARP works both ways between them
-and the 486 plays P3's server from the same room, so the V30's datagrams
-to P3 are lost somewhere between two PicoMEM 2 cards' WiFi.  Earlier the
-same day the V30 watched a game on P3's server, so it is a state, not a
-rule; a full power-off of either card is the first thing to try --
-a warm reboot does not reset a PicoMEM's WiFi.
+steps at 144 a second, no desync; the V30 playing P3's server, 1,200
+steps, no desync.
+
+That last one first read as a fault between two PicoMEM 2 cards -- "No
+answer from the server in 90 seconds", P3's server counting no packet from
+the V30, a full power-off of both changing nothing.  `PKTCAP` on P3 showed
+the V30's `HELLO` arriving -- **addressed to port 31993**.  A watcher run
+against MPSRVW on 31993 had saved that port in the V30's `WOLF3DM.CFG`, as
+a player's own run should (only `NETBOT` saves nothing), and `NET` with an
+address but no `PORT` takes the port from there.  A test names its `PORT`
+every time now, and the V30's file is back as it was.
 
 ### Memory: the V30 again
 
