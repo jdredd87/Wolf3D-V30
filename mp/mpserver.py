@@ -72,6 +72,7 @@ import mpconsole                    # noqa: E402  (typed commands: kick, end, ne
 
 RULE_DM, RULE_NOFF, RULE_NOENEMIES = 1, 2, 4
 CAUGHT_UP = 4                       # steps behind the newest: let it in
+WATCHERS = 4                        # watchers (NET WATCH, 2026-10-17): numbers 4-7
 JOIN_SILENT = 60                    # seconds: a join that never loaded
 
 
@@ -134,6 +135,7 @@ class Server:
         self.sock.bind((arg("--bind", "0.0.0.0"), arg("--port", P.PORT, int)))
         self.sock.settimeout(0.005)
         self.slots = [None] * self.players     # the bots take the last: reset()
+        self.watchers = [None] * WATCHERS       # who watches: steps, never in them
         self.games = 0
         self.stats = dict(sent=0, recv=0, dropped=0)
         self.desyncs = 0
@@ -191,14 +193,46 @@ class Server:
         for i, s in enumerate(self.slots):
             if s and not s.bot and s.addr == addr:
                 return i
+        for k, w in enumerate(self.watchers):
+            if w and w.addr == addr:
+                return 4 + k
         return None
+
+    def get(self, i):
+        return self.slots[i] if i < 4 else self.watchers[i - 4]
+
+    def everyone(self):
+        """The players and the watchers: whoever is sent the steps."""
+        return self.people() + [4 + k for k, w in enumerate(self.watchers) if w]
 
     def people(self):
         return [i for i, s in enumerate(self.slots) if s and not s.bot]
 
     def who(self, i):
+        if i >= 4:
+            w = self.watchers[i - 4]
+            return "W%d %s" % (i - 3, w.name if w else "")
         s = self.slots[i]
         return "P%d %s" % (i + 1, s.name if s else "")
+
+    def watch(self, addr, name, build):
+        """A machine that asked to watch (HELLO's slot FEh): a number of its
+        own, 4-7; it is sent every step, and is never in them."""
+        free = [k for k in range(WATCHERS) if self.watchers[k] is None]
+        if not free:
+            self.log("refused %s from %s:%d: watchers are full" % (name, addr[0], addr[1]))
+            self.send(P.bye(0xFF, P.BYE_FULL), addr)
+            return None
+        others = [self.slots[k].build for k in self.people()]
+        if others and build != others[0]:
+            self.log("refused %s: build %08X, not %08X" % (name, build, others[0]))
+            self.send(P.bye(0xFF, P.BYE_BUILD), addr)
+            return None
+        k = free[0]
+        self.watchers[k] = Slot(addr, name, build)
+        self.watchers[k].watch = True
+        self.log("%s watches from %s:%d (build %08X)" % (self.who(4 + k), addr[0], addr[1], build))
+        return 4 + k
 
     # ---- coming and going
 
@@ -221,18 +255,24 @@ class Server:
         return i
 
     def leave(self, i, why, reason=None, text=""):
-        s = self.slots[i]
+        s = self.get(i)
         if reason is not None:
             for k in range(3):                  # UDP: it may be lost
                 self.send(P.bye(i, reason, text), s.addr)
         self.log("%s %s (%d inputs, had step %s)" % (self.who(i), why, s.inputs,
                  "none" if s.have == P.NOBODY else s.have))
+        if i >= 4:
+            self.watchers[i - 4] = None
+            return
         self.slots[i] = None
         self.next_names = 0
         if self.state == "play" and not self.people():
             self.game_over("everyone has left")
 
     def game_over(self, why):
+        for i in self.everyone():
+            if i >= 4:                          # the watchers: the game they watched is over
+                self.leave(i, "stops watching: the game is over", P.BYE_END)
         n = len(self.history)
         took = time.perf_counter() - self.started_at if self.started_at else 0
         self.log("game over, %s: %d steps in %.1f s (%.2f a second)"
@@ -265,14 +305,29 @@ class Server:
             return
         i = self.slot_of(addr)
         if i is not None:
-            self.slots[i].heard = time.perf_counter()
+            self.get(i).heard = time.perf_counter()
         if kind == P.HELLO:
             name, build, want = P.un_hello(b)
+            if want == 0xFE:                    # to watch (NET WATCH, 2026-10-17)
+                if i is None and self.console.refused(addr):
+                    self.send(P.bye(0xFF, P.BYE_KICKED, "banned from this server"), addr)
+                    return
+                if i is not None and self.get(i).ready:
+                    self.leave(i, "is back (restarted)")
+                    i = None
+                if i is None:
+                    i = self.watch(addr, name, build)
+                    if i is None:
+                        return
+                self.send(P.welcome(i, self.players, self.map, self.skill, self.rules,
+                                    self.frags, self.minutes, len(self.history)), addr)
+                self.send(self.start_packet(), addr)
+                return
             if i is None and self.console.refused(addr):
                 self.log("refused %s from %s:%d: banned" % (name, addr[0], addr[1]))
                 self.send(P.bye(0xFF, P.BYE_KICKED, "banned from this server"), addr)
                 return
-            if i is not None and self.slots[i].ready:
+            if i is not None and i < 4 and self.slots[i].ready:
                 # a machine that is in the game says HELLO again: it was
                 # restarted.  Its old self leaves; it joins anew
                 self.leave(i, "is back (restarted)")
@@ -289,8 +344,19 @@ class Server:
             if kind == P.INPUT:                 # from a slot already let go:
                 self.send(P.bye(0xFF, P.BYE_DROPPED), addr)     # say so again
             return
-        s = self.slots[i]
-        if kind == P.INPUT:
+        s = self.get(i)
+        if kind == P.INPUT and i >= 4:          # a watcher: only what it holds and has played
+            slot, buttons, turn, move, seq, have, played = P.un_inp(b)
+            if not s.ready:
+                s.ready = True
+                self.log("%s has loaded the level%s" % (self.who(i), "" if self.state == "wait"
+                         else ": catching up from step 0 of %d" % len(self.history)))
+            if have != P.NOBODY and (s.have == P.NOBODY or have > s.have):
+                s.have = have
+            if played is not None:
+                s.played = None if played == P.NOBODY else played
+            s.inputs += 1
+        elif kind == P.INPUT:
             slot, buttons, turn, move, seq, have, played = P.un_inp(b)
             if not s.ready:
                 s.ready = True
@@ -321,21 +387,22 @@ class Server:
             elif first[0] != total:
                 self.desyncs += 1
                 self.log("DESYNC at step %d: %s has %08X, %s had %08X"
-                         % (step, self.who(i), total, self.who(first[1]) if self.slots[first[1]] else
+                         % (step, self.who(i), total, self.who(first[1]) if self.get(first[1]) else
                             "P%d" % (first[1] + 1), first[0]))
                 self.send(P.desync(step, 1 << i), s.addr)
         elif kind == P.BYE:
             self.leave(i, "left")
-        elif kind == P.CHAT:
+        elif kind == P.CHAT and i < 4:
             slot, number, text = P.un_chat(b)
             self.log("%s says: %s" % (self.who(i), text))
-            for k in self.people():
-                self.send(P.chat(i, number, text, P.CHATMSG), self.slots[k].addr)
+            for k in self.everyone():
+                self.send(P.chat(i, number, text, P.CHATMSG), self.get(k).addr)
 
     def info_packet(self):
         people = self.people()
         build = self.slots[people[0]].build if people else 0
-        return P.info(1 if self.state == "play" else 0, self.players, len(people), self.bots, 0,
+        return P.info(1 if self.state == "play" else 0, self.players, len(people), self.bots,
+                      sum(1 for w in self.watchers if w),
                       self.map, self.skill, self.rules, 0, len(self.history), build, self.name,
                       [s.name if s else "" for s in self.slots])
 
@@ -370,8 +437,8 @@ class Server:
                 row += s.controls if s.present else P.ABSENT
         self.history.append(row)
         newest += 1
-        for i in self.people():
-            s = self.slots[i]
+        for i in self.everyone():
+            s = self.get(i)
             if not s.ready:
                 continue
             # from the first step it lacks: a machine that fell behind (a
@@ -405,16 +472,16 @@ class Server:
                 now = time.perf_counter()
                 if now >= self.next_start:      # START again to any still loading
                     self.next_start = now + 0.5
-                    for i in self.people():
-                        if not self.slots[i].ready:
-                            self.send(self.start_packet(), self.slots[i].addr)
+                    for i in self.everyone():
+                        if not self.get(i).ready:
+                            self.send(self.start_packet(), self.get(i).addr)
                 if now >= self.next_names:      # every name, to everyone
                     self.next_names = now + 2.0
                     packet = P.names([s.name if s else "" for s in self.slots])
-                    for i in self.people():
-                        self.send(packet, self.slots[i].addr)
-                for i in self.people():         # machines gone quiet
-                    s = self.slots[i]
+                    for i in self.everyone():
+                        self.send(packet, self.get(i).addr)
+                for i in self.everyone():       # machines gone quiet
+                    s = self.get(i)
                     quiet = now - s.heard
                     if s.ready and quiet > self.drop_after:
                         self.leave(i, "was not heard from for %d s: its slot is free" % quiet,
@@ -424,8 +491,8 @@ class Server:
                 if self.state == "play" and self.paused:
                     if now >= self.next_paused:     # why no steps come, every half second
                         self.next_paused = now + 0.5
-                        for i in self.people():
-                            self.send(P.paused(True), self.slots[i].addr)
+                        for i in self.everyone():
+                            self.send(P.paused(True), self.get(i).addr)
                 if self.state == "play" and not self.paused:
                     while now >= self.tick:
                         self.step()
@@ -447,8 +514,8 @@ class Server:
         except (KeyboardInterrupt, StopIteration):
             pass
         for k in range(5):              # UDP: one BYE lost left a V30 waiting
-            for i in self.people():     # for steps that never came
-                self.send(P.bye(i, P.BYE_END), self.slots[i].addr)
+            for i in self.everyone():   # for steps that never came
+                self.send(P.bye(i, P.BYE_END), self.get(i).addr)
             time.sleep(0.05)
         self.finish()
 
@@ -459,8 +526,8 @@ class Server:
         self.said = self.said % 255 + 1
         packet = P.chat(P.SERVER_SLOT, self.said, text, P.CHATMSG)
         for k in range(3):                      # UDP: the game drops the copies
-            for i in self.people():
-                self.send(packet, self.slots[i].addr)
+            for i in self.everyone():
+                self.send(packet, self.get(i).addr)
         self.log("SERVER says: %s" % text)
 
     def pause(self, on):
@@ -473,8 +540,8 @@ class Server:
         else:
             self.tick = time.perf_counter()     # the clock goes on from now
             for k in range(3):
-                for i in self.people():
-                    self.send(P.paused(False), self.slots[i].addr)
+                for i in self.everyone():
+                    self.send(P.paused(False), self.get(i).addr)
             self.log("going again from the console at step %d" % len(self.history))
         return True
 

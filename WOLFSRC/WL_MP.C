@@ -45,6 +45,8 @@
 #define MPEPISODE(m)	((m)/10)
 #endif
 
+extern	int	far	mpspect;			// a watcher (NET WATCH): below
+
 #define MAXPLAYERS	4
 
 extern	boolean		buttonstate[NUMBUTTONS];
@@ -932,7 +934,7 @@ static void Presence (int i, int present)
 		mpseen[i] = 1;
 	if (present == !c->absent)
 		return;
-	if (i == mplocal && mpplayed >= mpjoinstep)
+	if (!mpspect && i == mplocal && mpplayed >= mpjoinstep)
 	{
 		if (present)
 			mplocalin = 1;
@@ -1497,6 +1499,10 @@ extern	long	far netsentn, far netrecvn;
 #define RING	128					// steps held, played or not
 
 int		far	mpnet;				// NET given: 1
+int		far	mpwatch;			// NET WATCH: watch, not play (2026-10-17)
+int		far	mpspect;			// a watcher: its number from the server (4-7), 0 a player.
+								// mplocal is then whose view it shows (1-4 change it)
+#define MYSLOT	(mpspect ? mpspect : mplocal)
 byte	far	mpserver[4];
 unsigned far mpport = 31992;
 int		far	mpbot;				// NETBOT: random controls of its own
@@ -1586,6 +1592,11 @@ static void Take (byte far *d, unsigned len)
 		if (mpstate == 0 && len >= 6)
 		{
 			mplocal = d[4];
+			if (mplocal >= MAXPLAYERS)	// a watcher's number: it plays no slot,
+			{							// and shows P1's view to begin with
+				mpspect = mplocal;
+				mplocal = 0;
+			}
 			mpstate = 1;
 			if (len >= 14)
 			{
@@ -1791,9 +1802,12 @@ static void SendInput (void)
 	byte	bits;
 	int		x,y;
 
-	LocalInput (&bits,&x,&y);
+	if (mpspect)
+		bits = x = y = 0;			// a watcher: no controls, only what it holds
+	else
+		LocalInput (&bits,&x,&y);
 	Head (4);
-	mppkt[4] = mplocal;
+	mppkt[4] = MYSLOT;
 	mppkt[5] = bits;
 	mppkt[6] = x;
 	mppkt[7] = y;
@@ -2113,7 +2127,7 @@ int MPNetArgs (void)
 {
 	static int far done;
 	static char far wnet[] = "net", far wport[] = "port", far wname[] = "name", far wbot[] = "netbot",
-		far wfind[] = "find";
+		far wfind[] = "find", far wwatch[] = "watch";
 	int		i,net = 0,given = 0,find = 0;
 	byte	d[4];
 
@@ -2148,6 +2162,8 @@ int MPNetArgs (void)
 		}
 		if (Is (a,wbot))
 			mpbot = 1;
+		if (Is (a,wwatch))
+			mpwatch = 1;
 		if (Is (a,wfind))
 			find = 1;
 	}
@@ -2269,7 +2285,7 @@ static void ChatOut (void)
 	int	n = _fstrlen (chatsend);
 
 	Head (9);						// CHAT
-	mppkt[4] = mplocal;
+	mppkt[4] = MYSLOT;
 	mppkt[5] = chatwait;
 	mppkt[6] = n;
 	_fmemcpy (mppkt+7,chatsend,n);
@@ -2869,6 +2885,18 @@ static void Banner (char far *s)
 	VW_UpdateScreen ();
 }
 
+// a watcher shows player i's view: the status bar drawn anew, and a notice
+static void Watch (int i)
+{
+	static char far f[] = "Watching %Fs -- 1 to 4 to change";
+	int		k;
+
+	mplocal = i;
+	for (k=0;k<7;k++)
+		shown[k] = -1;
+	Notice (pcol[i],f,Who (i));
+}
+
 static void NetLoop (void)
 {
 	static char far leave[] = "Leave the game?  Y or N";
@@ -2937,7 +2965,7 @@ static void NetLoop (void)
 			if (!(mpsteps % 50))
 			{
 				Head (6);
-				mppkt[4] = mplocal;
+				mppkt[4] = MYSLOT;
 				mppkt[5] = 0;
 				PutL (mppkt+6,mpsteps);
 				PutL (mppkt+10,mpsum);
@@ -3044,9 +3072,22 @@ static void NetLoop (void)
 			}
 			if (n)
 				Status ();
-			if (!asking && !mpchatting && Keyboard[sc_T])
+			if (!asking && !mpchatting && !mpspect && Keyboard[sc_T])
 				ChatBegin ();
 			Chat ();
+			if (mpspect && !asking)		// a watcher: 1-4 picks whose view
+			{
+				for (i=0;i<mpplayers;i++)
+					if (Keyboard[sc_1+i] && i != mplocal && !mpctx[i].absent)
+						Watch (i);
+				if (mpctx[mplocal].absent)	// the one watched has gone: the next
+					for (i=1;i<mpplayers;i++)
+						if (!mpctx[(mplocal+i) % mpplayers].absent)
+						{
+							Watch ((mplocal+i) % mpplayers);
+							break;
+						}
+			}
 			mpshowscores = !mpchatting && !asking && Keyboard[sc_Tab];
 			if (mpbot)
 				BotShow ();
@@ -3435,7 +3476,7 @@ void MPNetGame (void)
 				_fmemset (mppkt+4,0,16);
 				_fstrcpy ((char far *)mppkt+4,mpname);
 				PutL (mppkt+20,MPBUILD);	// the build: release and data (MPVER)
-				mppkt[24] = 0xff;
+				mppkt[24] = mpwatch ? 0xfe : 0xff;	// FEh: to watch
 				NetSend (mppkt,25);
 			}
 			else
@@ -3444,7 +3485,7 @@ void MPNetGame (void)
 		if (Keyboard[sc_Escape])
 		{
 			Head (8);
-			mppkt[4] = mplocal;
+			mppkt[4] = MYSLOT;
 			NetSend (mppkt,5);
 			NetStop ();
 			Quit (NULL);
@@ -3498,7 +3539,7 @@ void MPNetGame (void)
 	}
 
 	Head (8);						// BYE
-	mppkt[4] = mplocal;
+	mppkt[4] = MYSLOT;
 	NetSend (mppkt,5);
 	NetStop ();
 	{
