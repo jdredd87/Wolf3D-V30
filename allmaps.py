@@ -2,7 +2,7 @@
 StevenC & Claude, 2026.
 
     python gendemo.py 500 --ship          the demos, onto the 486
-    python allmaps.py OURS.EXE REF.EXE [first last] [--box dx486]
+    python allmaps.py OURS.EXE REF.EXE [first last] [--box dx486] [--dir C:\\WL1]
 
 Both EXEs must already be in C:\\WOLF3D on the box -- ours, and id's
 renderer with TIMEDEMO's instruments (refsrc.py's tree, which takes GEN
@@ -50,6 +50,11 @@ def main():
         i = args.index("--box")
         box = args[i + 1]
         del args[i:i + 2]
+    gdir = "C:\\WOLF3D"             # --dir: another game's folder (C:\WL1, the shareware, 2026-10-16)
+    if "--dir" in args:
+        i = args.index("--dir")
+        gdir = args[i + 1]
+        del args[i:i + 2]
     ours, ref = args[0].upper(), args[1].upper()
     first = int(args[2]) if len(args) > 2 else 0
     last = int(args[3]) if len(args) > 3 else 119
@@ -64,7 +69,7 @@ def main():
     good = 0
     for start in range(first, last + 1, PER_JOB):
         demos = list(range(start, min(start + PER_JOB, last + 1)))
-        cmds = ["CD C:\\WOLF3D"]
+        cmds = ["CD " + gdir]
         for n in demos:
             cmds += ["%s timedemo crc gen %d" % (ours[:-4], n), "%s timedemo crc gen %d" % (ref[:-4], n)]
         out = dosctl("exec", "--box", box, "--timeout", "1400", *cmds)

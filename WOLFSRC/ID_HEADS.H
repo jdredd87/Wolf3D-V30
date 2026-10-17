@@ -36,7 +36,11 @@ extern	char		far signon;
 
 #ifndef SPEAR
 
+#ifdef UPLOAD
+#include "GFXV_W14.H"	// the shareware 1.4's VGAGRAPH.WL1 (StevenC & Claude, 2026-10-16)
+#else
 #include "GFXV_WL6.H"
+#endif
 #include "AUDIOWL6.H"
 #include "MAPSWL6.H"
 

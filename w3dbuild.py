@@ -9,6 +9,10 @@ DOS programs.
     python w3dbuild.py build         ship WOLFSRC, build on the 486, pull WOLF3DV.EXE + .MAP back
     python w3dbuild.py build8086     the same for a plain 8086/8088: to8086.py's copy of WOLFSRC,
                                      built in C:\\W3D8, back as WOLFSRC\\WOLF3D8.EXE + .MAP
+    python w3dbuild.py buildwl1      the shareware 1.4 (*.WL1): WOLFSRC with UPLOAD defined,
+                                     built in C:\\W3D1, back as WOLFSRC\\WOLF3D1.EXE + .MAP
+    python w3dbuild.py buildwl18     the shareware for a plain 8086/8088: that copy through
+                                     to8086.py, built in C:\\W3D18, back as WOLFSRC\\WOLF3D18.EXE
     python w3dbuild.py deploy        put WOLFSRC\\WOLF3DV.EXE into the V30's C:\\WOLF3D, with the
                                      switches menu (PLAY.BAT and W3MENU.EXE, built here)
                                      and the demo reel (SHOWCASE.BAT)
@@ -188,6 +192,34 @@ def cmd_build8086():
     print("built:", os.path.join(home, "WOLF3D8.EXE"), "(the 8086 build)")
 
 
+def cmd_buildwl1(plain8086=False):
+    """The shareware 1.4 build (2026-10-16): a copy of WOLFSRC with UPLOAD
+    defined in VERSION.H -- id's shareware code paths, and GFXV_W14.H for
+    VGAGRAPH.WL1 (ID_HEADS.H) -- built in C:\\W3D1, back as WOLFSRC\\WOLF3D1.EXE."""
+    global SRC, REMOTE
+    dst = os.path.join(STAGE, "srcwl1")
+    if os.path.exists(dst):
+        shutil.rmtree(dst)
+    shutil.copytree(SRC, dst, ignore=shutil.ignore_patterns("*.EXE", "*.MAP", "*.exe", "*.map"))
+    p = os.path.join(dst, "VERSION.H")
+    t = open(p, "rb").read()
+    assert t.count(b"//#define UPLOAD") == 1
+    open(p, "wb").write(t.replace(b"//#define UPLOAD", b"#define UPLOAD"))
+    home = SRC
+    name, REMOTE = "WOLF3D1", REMOTE + "1"
+    if plain8086:                   # buildwl18: the same, through to8086.py -- WOLF3D18.EXE
+        dst8 = os.path.join(STAGE, "srcwl18")
+        r = subprocess.run([sys.executable, os.path.join(HERE, "to8086.py"), dst, dst8])
+        if r.returncode:
+            sys.exit("to8086.py failed")
+        dst, name, REMOTE = dst8, "WOLF3D18", REMOTE + "8"
+    SRC = dst
+    cmd_build()
+    for ext in ("EXE", "MAP"):
+        shutil.copyfile(os.path.join(SRC, "WOLF3DV." + ext), os.path.join(home, name + "." + ext))
+    print("built:", os.path.join(home, name + ".EXE"), "(the shareware build%s)" % (", plain 8086" if plain8086 else ""))
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -197,6 +229,10 @@ def main():
         cmd_build()
     elif cmd == "build8086":
         cmd_build8086()
+    elif cmd == "buildwl1":
+        cmd_buildwl1()
+    elif cmd == "buildwl18":
+        cmd_buildwl1(plain8086=True)
     elif cmd == "deploy":
         cmd_deploy()
     elif cmd == "listings":

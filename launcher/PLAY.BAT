@@ -1,6 +1,8 @@
 @ECHO OFF
 REM Wolfenstein 3-D for the NEC V30: the detail switches menu, W3MENU.EXE
 REM (StevenC & Claude).  W3MENU exits 0 having written W3RUN.BAT, or 1 to quit.
+REM in the game's own folder if run there, else C:\WOLF3D
+IF EXIST W3MENU.EXE GOTO MENU
 C:
 CD \WOLF3D
 :MENU
