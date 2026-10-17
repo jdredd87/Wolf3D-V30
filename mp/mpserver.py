@@ -4,7 +4,7 @@
                           [--mode coop|dm] [--ff on|off] [--noenemies]
                           [--fraglimit N] [--timelimit MIN] [--itemrespawn SECS]
                           [--port 31992] [--bind 0.0.0.0] [--steps N] [--once]
-                          [--drop-after 60] [--record M50.DEM] [--drop 0.0] [--quiet]
+                          [--drop-after 60] [--record GAME.MPR] [--drop 0.0] [--quiet]
                           [--control 31999] [--txgap 1000] [--name NAME]
 
 It keeps the clock and passes controls along; it knows nothing of the game.
@@ -119,6 +119,10 @@ class Server:
         self.once = "--once" in sys.argv
         self.drop_after = arg("--drop-after", 60, float)
         self.record = arg("--record", "")
+        # --record GAME.MPR (2026-10-17): every packet a watcher is sent, as it
+        # is sent, for WOLF3DM REPLAY -- every floor, as long as the game goes.
+        # A name ending .DEM is the old one-floor demo (TIMEDEMO MGEN) instead
+        self.rec = None
         self.drop = arg("--drop", 0.0, float)
         # --txgap: microseconds to wait after each packet sent, as MPSRV's and
         # MPSRVW's -- a PicoMEM card's WiFi garbles packets that arrive back to
@@ -364,6 +368,7 @@ class Server:
                     self.state = "play"
                     self.started_at = time.perf_counter()
                     self.tick = self.started_at
+                    self.rec_open()
                     self.log("%s has loaded the level: the game starts" % self.who(i))
                 else:
                     self.log("%s has loaded the level: catching up from step 0 of %d"
@@ -397,6 +402,7 @@ class Server:
             self.log("%s says: %s" % (self.who(i), text))
             for k in self.everyone():
                 self.send(P.chat(i, number, text, P.CHATMSG), self.get(k).addr)
+            self.rec_other(P.chat(i, number, text, P.CHATMSG))
 
     def info_packet(self):
         people = self.people()
@@ -437,6 +443,7 @@ class Server:
                 row += s.controls if s.present else P.ABSENT
         self.history.append(row)
         newest += 1
+        self.rec_step(row)
         for i in self.everyone():
             s = self.get(i)
             if not s.ready:
@@ -525,6 +532,7 @@ class Server:
         """A message on every player's screen, as the server's."""
         self.said = self.said % 255 + 1
         packet = P.chat(P.SERVER_SLOT, self.said, text, P.CHATMSG)
+        self.rec_other(packet)
         for k in range(3):                      # UDP: the game drops the copies
             for i in self.everyone():
                 self.send(packet, self.get(i).addr)
@@ -577,9 +585,67 @@ class Server:
         with open(os.path.join(stage, "hang-%s.log" % addr[0]), "a", encoding="latin-1") as f:
             f.write("== %s\n%s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"), text.rstrip("\n")))
 
+    # ---- the recording (--record GAME.MPR, 2026-10-17)
+
+    def rec_open(self):
+        if not self.record or self.record.upper().endswith(".DEM"):
+            return
+        name = self.record
+        if self.games:                  # a second game on: GAME.MPR, GAMEB.MPR ...
+            base, ext = os.path.splitext(name)
+            name = base + chr(ord("A") + self.games) + ext
+        self.rec, self.rec_name = open(name, "wb"), name
+        self.rec.write(b"WMR1")
+        self.rec_rows, self.rec_first, self.rec_names = [], 0, None
+        self.rec_pkt(P.welcome(4, self.players, self.map, self.skill, self.rules,
+                               self.frags, self.minutes, 0))       # a watcher's
+        self.rec_pkt(self.start_packet())
+        self.rec_names_now()
+
+    def rec_pkt(self, pkt):
+        self.rec.write(struct.pack("<H", len(pkt)) + pkt)
+
+    def rec_flush(self):
+        if self.rec and self.rec_rows:
+            first, last = self.rec_first, self.rec_first + len(self.rec_rows) - 1
+            ev = [(k, e, a) for k, (e, a) in sorted(self.events.items()) if first <= k <= last]
+            self.rec_pkt(P.steps(first, self.players, self.rec_rows, ev))
+            self.rec_first += len(self.rec_rows)
+            self.rec_rows = []
+
+    def rec_other(self, pkt):
+        """A packet at this point of the game: the steps before it first."""
+        if self.rec:
+            self.rec_flush()
+            self.rec_pkt(pkt)
+
+    def rec_names_now(self):
+        names = [s.name if s else "" for s in self.slots]
+        if self.rec and names != self.rec_names:
+            self.rec_names = names
+            self.rec_other(P.names(names))
+
+    def rec_step(self, row):
+        if not self.rec:
+            return
+        self.rec_names_now()            # who came or went: before this step
+        self.rec_rows.append(row)
+        if len(self.rec_rows) >= P.STEPS_MAX:
+            self.rec_flush()
+
+    def rec_close(self):
+        if not self.rec:
+            return
+        self.rec_flush()
+        self.rec.close()
+        self.rec = None
+        self.log("recorded %d steps as %s -- WOLF3DM REPLAY %s" % (self.rec_first, self.rec_name,
+                 os.path.basename(self.rec_name)))
+
     def write_record(self):
+        self.rec_close()
         n = len(self.history)
-        if not self.record or not n:
+        if not self.record or not n or not self.record.upper().endswith(".DEM"):
             return
         per = 3 * self.players
         frames = min(n, (65535 - 4) // per)

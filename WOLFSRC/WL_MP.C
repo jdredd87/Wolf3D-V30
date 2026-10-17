@@ -24,6 +24,7 @@
 #include <io.h>
 #include <fcntl.h>
 #include <bios.h>
+#include <dos.h>
 
 // The build, in HELLO and DISCOVER: the server keeps two builds out of one
 // game.  It was a constant 12345678h until v1.8 (2026-10-17), so it kept
@@ -46,6 +47,8 @@
 #endif
 
 extern	int	far	mpspect;			// a watcher (NET WATCH): below
+extern	int	far	mpreplay;			// REPLAY: below
+extern	char	far	* far mpreplayfile;
 
 #define MAXPLAYERS	4
 
@@ -2129,7 +2132,7 @@ int MPNetArgs (void)
 {
 	static int far done;
 	static char far wnet[] = "net", far wport[] = "port", far wname[] = "name", far wbot[] = "netbot",
-		far wfind[] = "find", far wwatch[] = "watch";
+		far wfind[] = "find", far wwatch[] = "watch", far wreplay[] = "replay";
 	int		i,net = 0,given = 0,find = 0;
 	byte	d[4];
 
@@ -2137,8 +2140,16 @@ int MPNetArgs (void)
 		return mpnet;
 	done = 1;
 	for (i = 1;i < _argc;i++)
+	{
 		if (Is (_argv[i],wnet))
 			net = 1;
+		if (Is (_argv[i],wreplay) && i+1 < _argc)	// REPLAY file: a recording, played
+		{											// back as a watcher sees it
+			mpreplay = 1;
+			mpreplayfile = _argv[i+1];
+			return mpnet = 1;
+		}
+	}
 	if (!net)
 		return 0;
 	LoadNet ();
@@ -2899,6 +2910,102 @@ static void Watch (int i)
 	Notice (pcol[i],f,Who (i));
 }
 
+/*
+=============================================================================
+
+						REPLAYING A RECORDING (2026-10-17)
+
+WOLF3DM REPLAY GAME.MPR: a server's --record, played back.  The file is
+"WMR1" and then every packet a watcher would have been sent, each after its
+length (u16) -- WELCOME (a watcher's number), START, NAMES, STEPS with the
+server's events, CHATMSG -- in the order it was sent.  So this machine is a
+watcher fed from a file: the same steps, the same events, every floor; 1-4
+pick whose view, F fast forward.  The steps go at the game's own rate,
+17.5 a second (8 times that with F).  The record waits in nettx: the
+network's send buffer, which a replay never uses.
+
+=============================================================================
+*/
+
+int		far	mpreplay;				// REPLAY given: 1
+char	far	* far mpreplayfile;
+extern	byte	far nettx[1514];
+static int far replayh = -1;		// the file
+static unsigned far replaylen;		// the record in nettx, if replayheld
+static int far replayheld;
+static long far replayclock, far replaylast;	// ticks played back, and the last TimeCount
+static int far replayfast, far replayfkey;
+
+static int ReplayOpen (void)
+{
+	static char far magic[] = "WMR1";
+	char	name[64];
+	unsigned n;
+	int		h;
+
+	_fstrncpy ((char far *)name,mpreplayfile,63);
+	name[63] = 0;
+	if (_dos_open (name,0,&h))		// read only
+		return 0;
+	replayh = h;
+	if (_dos_read (replayh,nettx,4,&n) || n != 4 || _fmemcmp (nettx,magic,4))
+		return 0;
+	return 1;
+}
+
+// the next record into nettx: 0 at the end of the file
+static int ReplayRead (void)
+{
+	unsigned n;
+
+	if (_dos_read (replayh,nettx,2,&n) || n != 2)
+		return 0;
+	replaylen = nettx[0] | (nettx[1] << 8);
+	if (replaylen > sizeof(nettx)
+	|| _dos_read (replayh,nettx,replaylen,&n) || n != replaylen)
+		return 0;
+	return 1;
+}
+
+static void Pump (void)
+{
+	if (!mpreplay)
+	{
+		NetPump (Take);
+		return;
+	}
+	if (TimeCount > replaylast)		// the clock the steps go by (NetLoop sets
+		replayclock += (TimeCount - replaylast) * (replayfast ? 8 : 1);	// TimeCount
+	replaylast = TimeCount;			// back to 0 every floor)
+	mpheard = TimeCount;			// the "server" is never silent
+	while (replayheld || ReplayRead ())
+	{
+		if (nettx[3] == 5 && (long)GetL (nettx+4) > mpplayed + 64)
+		{							// STEPS too far ahead of the ring: later
+			replayheld = 1;
+			return;
+		}
+		replayheld = 0;
+		Take (nettx,replaylen);
+		if (nettx[3] == 3 && mpstate == 2)
+			return;					// START: the level loads before any steps
+	}
+	if (mpstate < 2 || mpplayed >= mphave)	// the end of the file (and all of it
+	{										// played): the game is over
+		mpstate = 3;
+		if (!mpend)
+			mpend = 2;
+	}
+}
+
+// the newest step there is to play: held -- or, replaying, held and due
+static long Due (void)
+{
+	long	d = replayclock/DEMOTICS - 1;
+
+	return mpreplay && d < mphave ? d : mphave;
+}
+
 static void NetLoop (void)
 {
 	static char far leave[] = "Leave the game?  Y or N";
@@ -2930,18 +3037,18 @@ static void NetLoop (void)
 	SendInput ();					// "loaded": the server starts its clock
 	do
 	{
-		NetPump (Take);
+		Pump ();
 		if (TimeCount - lastsend >= 2)
 		{
 			lastsend = TimeCount;
 			SendInput ();
 		}
-		if (mphave - mpplayed > 35)		// two seconds behind: catch up
+		if (Due () - mpplayed > 35)		// two seconds behind: catch up
 		{
 			mpcatching = 1;
 			ProfStart ();				// PROFILE: the catching up, only
 		}
-		else if (mpcatching && mphave - mpplayed < 8)
+		else if (mpcatching && Due () - mpplayed < 8)
 		{
 			ProfStop ();
 			mpcatching = 0;
@@ -2953,7 +3060,8 @@ static void NetLoop (void)
 		limit = mpcatching ? 64 : 16;
 		if (mpcatching)
 			catchfrom = TimeCount;
-		for (n=0;n < limit && mpplayed < mphave && !playstate;n++)
+		for (n=0;n < limit && mpplayed < mphave && !playstate
+		&& (!mpreplay || mpplayed < replayclock/DEMOTICS);n++)
 		{
 			byte	far *row = mpring[(unsigned)++mpplayed & (RING-1)];
 
@@ -3006,7 +3114,7 @@ static void NetLoop (void)
 				mpcaught++;
 				if (!((n+1) & 7))		// catching up, the network too, every 8 steps:
 				{						// its 8 packet slots fill in a fraction of a
-					NetPump (Take);		// second, and the server sends from the step
+					Pump ();		// second, and the server sends from the step
 					if (TimeCount - lastsend >= 2)	// this machine last said it had
 					{
 						lastsend = TimeCount;
@@ -3037,7 +3145,7 @@ static void NetLoop (void)
 			if (TimeCount - lastsay >= 70 || TimeCount < lastsay)
 			{
 				lastsay = TimeCount;
-				Behind (mphave - mpplayed);
+				Behind (Due () - mpplayed);
 			}
 		}
 		else
@@ -3077,6 +3185,12 @@ static void NetLoop (void)
 			if (!asking && !mpchatting && !mpspect && Keyboard[sc_T])
 				ChatBegin ();
 			Chat ();
+			if (mpreplay)				// F: fast forward, or back to the game's rate
+			{
+				if (Keyboard[sc_F] && !replayfkey)
+					replayfast ^= 1;
+				replayfkey = Keyboard[sc_F];
+			}
 			if (mpspect && !asking)		// a watcher: 1-4 picks whose view
 			{
 				for (i=0;i<mpplayers;i++)
@@ -3297,7 +3411,7 @@ static int Tally (int over)
 	mpheard = TimeCount;
 	while (!done)
 	{
-		NetPump (Take);
+		Pump ();
 		if (TimeCount - lastsend >= 2)
 		{
 			lastsend = TimeCount;
@@ -3456,13 +3570,23 @@ void MPNetGame (void)
 
 	if (!mpname[0])
 		_fstrcpy (mpname,defname);
-	if (!NetStart (mpserver,mpport,&why))
-		NetQuit (why);
-	Say (joining);
-	began = TimeCount;
-	while (mpstate < 2)				// HELLO until WELCOME, then wait for START
+	if (mpreplay)					// a recording: WELCOME and START come from it
 	{
-		NetPump (Take);
+		static char far cant[] = "Cannot read the recording (not a WOLF3DM --record file?)";
+
+		if (!ReplayOpen ())
+			NetQuit (cant);
+		while (mpstate < 2 && mpstate != 3)
+			Pump ();
+	}
+	else if (!NetStart (mpserver,mpport,&why))
+		NetQuit (why);
+	if (!mpreplay)
+		Say (joining);
+	began = TimeCount;
+	while (mpstate < 2 && !mpreplay)	// HELLO until WELCOME, then wait for START
+	{
+		Pump ();
 		if (mpstate == 0 && TimeCount - began > 90*70)
 			NetQuit (noanswer);		// nobody may be at this keyboard
 		if (TimeCount - last >= 35)

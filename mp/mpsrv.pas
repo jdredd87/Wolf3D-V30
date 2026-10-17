@@ -856,6 +856,9 @@ end;
 
 procedure ApplyNext; forward;
 procedure GameOver(const Why: ShortString); forward;
+procedure RecOpen; forward;              { the recording: below MakeStep's StepsLen }
+procedure RecClose; forward;
+procedure RecOther(Len: Word); forward;
 
 procedure Leave(I: Integer; const Why: ShortString; Reason: Integer; const Text: ShortString);
 var K: Integer; L: Word;
@@ -874,6 +877,7 @@ end;
 procedure GameOver(const Why: ShortString);
 var T: LongInt; I, K: Integer;
 begin
+  RecClose;
   for K := 1 to 3 do                   { the watchers: the game they watched is over }
     for I := MAXP to LASTSLOT do
       if Slots[I].Used then SendTo(I, ByeLen(I, BYE_END, ''));
@@ -1130,6 +1134,7 @@ begin
             StartedAt := Ticks;
             NextStep := StartedAt;
             Log(Who(I) + ' has loaded the level: the game starts');
+            RecOpen;
           end
           else
             Log(Who(I) + ' has loaded the level: catching up from step 0 of ' + I2S(Newest + 1));
@@ -1202,22 +1207,185 @@ begin
         L := 7 + N;
         for K := 0 to LASTSLOT do
           if IsReceiver(K) then SendTo(K, L);
+        RecOther(L);
       end;
   end;
 end;
 
 { ---------------------------------------------------------------- the clock's step }
 
+{ STEPS in Tx: steps First to Last (at most STEPS_MAX), and the server's
+  events among them }
+function StepsLen(First, Last: LongInt): Word;
+var
+  K, NE, P: Integer;
+  Rows: array[0..STEPS_MAX - 1] of TRow;
+  Len: Word;
+begin
+  HistGet(First, Last - First + 1, Rows);
+  Head(STEPS);
+  PutL(4, First);
+  Tx[8] := Last - First + 1;
+  Tx[9] := Players;
+  Len := 10;
+  for K := 0 to Last - First do
+  begin
+    for P := 0 to Players * 3 - 1 do Tx[Len + P] := Rows[K][P];
+    Inc(Len, Players * 3);
+  end;
+  NE := 0;
+  for K := 0 to NEv - 1 do
+    if (LongInt(Events[K].Step) >= First) and (LongInt(Events[K].Step) <= Last) and (NE < 20) then
+      Inc(NE);
+  if NE > 0 then
+  begin
+    Tx[Len] := NE;
+    Inc(Len);
+    NE := 0;
+    for K := 0 to NEv - 1 do
+      if (LongInt(Events[K].Step) >= First) and (LongInt(Events[K].Step) <= Last) and (NE < 20) then
+      begin
+        PutL(Len, Events[K].Step);
+        Tx[Len + 4] := Events[K].Kind;
+        PutW(Len + 5, Events[K].Arg);
+        Inc(Len, 7);
+        Inc(NE);
+      end;
+  end;
+  StepsLen := Len;
+end;
+
+{ ---------------------------------------------------------------- the recording
+
+  --record GAME.MPR (2026-10-17): every packet a watcher is sent, as it is
+  sent -- "WMR1", then each packet after its length (u16): WELCOME (a
+  watcher's), START, NAMES when they change, STEPS (64 at a time, with the
+  events), CHATMSG -- for WOLF3DM REPLAY.  Written as the game goes, every
+  floor, so a server that stops still leaves the game so far. }
+
+type
+  TRecBuf = array[0..SN_MAXUDP - 1] of Byte;
+
+var
+  RecFile: File;
+  Recording: Boolean;
+  RecPath, RecName: string[80];
+  RecNames: string[80];
+  RecFirst: LongInt;                   { the first step not yet written }
+  RecBuf: ^TRecBuf;                    { from the heap, when a recording opens: the
+                                         DOS server's DGROUP has no 1.5 KB to spare }
+
+procedure RecWrite(var Buf; Len: Word);
+var L: Word;
+begin
+  L := Len;
+  {$I-}
+  BlockWrite(RecFile, L, 2);
+  BlockWrite(RecFile, Buf, Len);
+  {$I+}
+  if IOResult <> 0 then
+  begin
+    Log('the recording: a write failed -- it stops here');
+    {$I-} Close(RecFile); {$I+}
+    if IOResult <> 0 then ;
+    Recording := False;
+  end;
+end;
+
+procedure RecFlush;                    { the steps made so far }
+var Last: LongInt; L: Word;
+begin
+  while Recording and (RecFirst <= Newest) do
+  begin
+    Last := RecFirst + STEPS_MAX - 1;
+    if Last > Newest then Last := Newest;
+    L := StepsLen(RecFirst, Last);
+    RecWrite(Tx, L);
+    RecFirst := Last + 1;
+  end;
+end;
+
+procedure RecOther(Len: Word);         { the packet in Tx, at this point of the game }
+begin
+  if not Recording then Exit;
+  Move(Tx, RecBuf^, Len);
+  RecFlush;
+  if Recording then RecWrite(RecBuf^, Len);
+end;
+
+procedure RecNamesNow;
+var I: Integer; S: string[80];
+begin
+  if not Recording then Exit;
+  S := '';
+  for I := 0 to Players - 1 do
+    if Slots[I].Used then S := S + Slots[I].Name + '|' else S := S + '|';
+  if S = RecNames then Exit;
+  RecNames := S;
+  RecOther(NamesLen);
+end;
+
+procedure RecOpen;
+var Ext: string[12]; I: Integer;
+begin
+  if RecPath = '' then Exit;
+  RecName := RecPath;
+  if Games > 0 then                    { a second game on: GAME.MPR, GAMEB.MPR ... }
+  begin
+    I := Length(RecName);
+    while (I > 0) and (RecName[I] <> '.') and (RecName[I] <> '\') do Dec(I);
+    if (I > 0) and (RecName[I] = '.') then
+    begin
+      Ext := Copy(RecName, I, 255);
+      RecName := Copy(RecName, 1, I - 1) + Chr(Ord('A') + Games) + Ext;
+    end
+    else RecName := RecName + Chr(Ord('A') + Games);
+  end;
+  Assign(RecFile, RecName);
+  {$I-} Rewrite(RecFile, 1); {$I+}
+  if IOResult <> 0 then
+  begin
+    Log('cannot write the recording ' + RecName);
+    Exit;
+  end;
+  if RecBuf = nil then New(RecBuf);
+  Recording := True;
+  RecFirst := 0;
+  RecNames := '';
+  RecBuf^[0] := Ord('W'); RecBuf^[1] := Ord('M'); RecBuf^[2] := Ord('R'); RecBuf^[3] := Ord('1');
+  {$I-} BlockWrite(RecFile, RecBuf^, 4); {$I+}
+  if IOResult <> 0 then ;
+  Head(WELCOME);                       { a watcher's }
+  Tx[4] := MAXP; Tx[5] := Players; Tx[6] := MapNum; Tx[7] := Skill; Tx[8] := Rules; Tx[9] := 0;
+  PutW(10, Frags); PutW(12, Minutes);
+  PutL(14, 0);
+  RecWrite(Tx, 18);
+  RecWrite(Tx, StartLen);
+  RecNamesNow;
+  Log('recording the game in ' + RecName);
+end;
+
+procedure RecClose;
+begin
+  if not Recording then Exit;
+  RecFlush;
+  if Recording then
+  begin
+    {$I-} Close(RecFile); {$I+}
+    if IOResult <> 0 then ;
+    Recording := False;
+    Log('recorded ' + I2S(RecFirst) + ' steps as ' + RecName + ' -- WOLF3DM REPLAY ' + RecName);
+  end;
+end;
+
 procedure MakeStep;
 var
   Row: TRow;
-  I, K, NE: Integer;
+  I: Integer;
   Done: LongWord;
   HasDone: Boolean;
   First, Last, Now: LongInt;
-  Rows: array[0..STEPS_MAX - 1] of TRow;
   Len, Off: Word;
-  P: Integer;
 begin
   for I := 0 to ROWB - 1 do Row[I] := 0;
   for I := 0 to Players - 1 do
@@ -1255,6 +1423,11 @@ begin
     end;
   end;
   HistAdd(Row);
+  if Recording then
+  begin
+    RecNamesNow;                       { who came or went }
+    if Newest - RecFirst + 1 >= STEPS_MAX then RecFlush;
+  end;
   Now := Ticks;
   for I := 0 to LASTSLOT do
   begin
@@ -1268,36 +1441,7 @@ begin
       if (First = SentFirst) and (Last = SentLast) and (Now - SentAt < 18) then Continue;
       SentFirst := First; SentLast := Last; SentAt := Now;
     end;
-    HistGet(First, Last - First + 1, Rows);
-    Head(STEPS);
-    PutL(4, First);
-    Tx[8] := Last - First + 1;
-    Tx[9] := Players;
-    Len := 10;
-    for K := 0 to Last - First do
-    begin
-      for P := 0 to Players * 3 - 1 do Tx[Len + P] := Rows[K][P];
-      Inc(Len, Players * 3);
-    end;
-    NE := 0;
-    for K := 0 to NEv - 1 do
-      if (LongInt(Events[K].Step) >= First) and (LongInt(Events[K].Step) <= Last) and (NE < 20) then
-        Inc(NE);
-    if NE > 0 then
-    begin
-      Tx[Len] := NE;
-      Inc(Len);
-      NE := 0;
-      for K := 0 to NEv - 1 do
-        if (LongInt(Events[K].Step) >= First) and (LongInt(Events[K].Step) <= Last) and (NE < 20) then
-        begin
-          PutL(Len, Events[K].Step);
-          Tx[Len + 4] := Events[K].Kind;
-          PutW(Len + 5, Events[K].Arg);
-          Inc(Len, 7);
-          Inc(NE);
-        end;
-    end;
+    Len := StepsLen(First, Last);
     SendTo(I, Len);
   end;
 end;
@@ -1433,6 +1577,7 @@ begin
   for K := 1 to 3 do
     for I := 0 to LASTSLOT do
       if IsReceiver(I) then SendTo(I, L);
+  RecOther(L);
   Log('SERVER says: ' + Copy(Text, 1, N));
 end;
 
@@ -2027,6 +2172,14 @@ begin
     if Lower(ParamStr(I)) = Name then ArgCase := Copy(ParamStr(I + 1), 1, 16);
 end;
 
+function ArgRaw(const Name: ShortString): ShortString;   { as typed, all of it }
+var I: Integer;
+begin
+  ArgRaw := '';
+  for I := 1 to ParamCount - 1 do
+    if Lower(ParamStr(I)) = Name then ArgRaw := ParamStr(I + 1);
+end;
+
 function Flag(const Name: ShortString): Boolean;
 var I: Integer;
 begin
@@ -2093,6 +2246,8 @@ begin
   WriteLn('  --drop-after S   a player not heard from for S seconds loses its   (60)');
   WriteLn('                   slot -- a WiFi dropout shorter than that is ridden out');
   WriteLn('  --once           stop when the game ends, instead of waiting for the next');
+  WriteLn('  --record FILE    record each game, every floor, for WOLF3DM REPLAY FILE');
+  WriteLn('                   (GAME.MPR; a second game is GAMEB.MPR, and so on)');
   WriteLn('  --steps N        stop after N steps -- for tests (a step is 1/17.5 s)');
   WriteLn('  --quiet          no log lines on the screen (MPSRV.LOG still gets them)');
 {$IFNDEF WINDOWS}
@@ -2140,6 +2295,7 @@ end;
 procedure Cleanup;
 var I, K: Integer; L: Word;
 begin
+  RecClose;
   for K := 1 to 5 do
   begin
     for I := 0 to LASTSLOT do
@@ -2226,6 +2382,7 @@ begin
   CtlPort := Arg('--control', 31999);
   StepLimit := Arg('--steps', 0);
   Once := Flag('--once');
+  RecPath := ArgRaw('--record');
 {$IFDEF WINDOWS}
   ServerName := ArgCase('--name', 'MPSRVW (Windows)');
 {$ELSE}
