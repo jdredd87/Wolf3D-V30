@@ -6,6 +6,7 @@
                           [--port 31992] [--bind 0.0.0.0] [--steps N] [--once]
                           [--drop-after 60] [--record GAME.MPR] [--drop 0.0] [--quiet]
                           [--control 31999] [--txgap 1000] [--name NAME]
+                          [--joinwait 60]
 
 It keeps the clock and passes controls along; it knows nothing of the game.
 MULTIPLAYER.md, "Protocol, version 1", is what it speaks.
@@ -52,6 +53,14 @@ SYNCs are compared step by step -- the first machine to report a step sets
 its sum, and any other that differs is told DESYNC -- so a machine that
 joined late is checked against the ones that played those steps live.
 
+--joinwait SECS (2026-10-17): a player joining late replays the game from
+the first step while it goes on at 17.5 steps a second, so a slow machine (a
+V30 joining a long, busy game) may close the gap slowly, or never.  The
+server measures each joiner's gap every second; if, at the rate it is
+closing, the joiner would not be in within SECS (60), everyone waits --
+"Waiting for NAME to catch up" -- until what is left can be closed in half
+that with the game going.  0: never wait.
+
 --record writes each game, when it ends, as an Mn.DEM for TIMEDEMO MGEN.
 --drop P throws away that fraction of packets each way, for testing.
 --silence STEP:SECS[,STEP:SECS...] is a network outage on demand: from that
@@ -93,6 +102,7 @@ class Slot:
         self.seq = None
         self.have = P.NOBODY        # the newest step it holds with none missing
         self.played = None          # the newest step it has played (None: no word)
+        self.win = None             # (time, gap) a second or more ago, catching up
         self.ready = False          # its level is loaded
         self.present = False        # in the game: its controls are in the steps
         self.inputs = 0
@@ -137,6 +147,7 @@ class Server:
         # MPSRVW's -- a PicoMEM card's WiFi garbles packets that arrive back to
         # back, and a late joiner's catch-up is a burst of them (2026-10-16)
         self.txgap = arg("--txgap", 1000, int) / 1e6
+        self.joinwait = arg("--joinwait", 60, float)
         self.silence = sorted(tuple(int(x) for x in w.split(":"))
                               for w in arg("--silence", "").split(",") if w)
         self.blackout = 0.0         # perf_counter() the outage ends at
@@ -176,6 +187,8 @@ class Server:
         self.events = {}            # step -> (event, argument): the console's
         self.paused = False         # pause: no steps until it goes on
         self.next_paused = 0.0
+        self.waitfor = None         # everyone waits for this joiner (--joinwait)
+        self.next_join = 0.0
         self.scores = None          # (step, [(frags, deaths)]) from the last SYNC
         self.live = {}              # limits changed in play, for status
         for k in range(self.bots):              # a new game's bots play anew
@@ -279,6 +292,8 @@ class Server:
             return
         self.slots[i] = None
         self.next_names = 0
+        if self.waitfor == i:
+            self.go_on("%s has gone" % s.name)
         if self.state == "play" and not self.people():
             self.game_over("everyone has left")
 
@@ -459,8 +474,13 @@ class Server:
                             self.log("%s is in the game at step %d" % (self.who(i), newest + 1))
                 row += s.controls if s.present else P.ABSENT
         self.history.append(row)
-        newest += 1
         self.rec_step(row)
+        self.feed()
+
+    def feed(self):
+        """Every machine the steps it lacks -- also while the game is held,
+        so a joiner catches up while everyone waits for it."""
+        newest = len(self.history) - 1
         for i in self.everyone():
             s = self.get(i)
             if not s.ready:
@@ -480,7 +500,7 @@ class Server:
                 continue
             s.sent_first, s.sent_last, s.sent_at = first, last, now
             ev = [(k, e, a) for k, (e, a) in sorted(self.events.items()) if first <= k <= last]
-            self.send(P.steps(first, self.players, self.history[first:last + 1], ev), s.addr)
+            self.send(P.steps(first, self.players, self.history[first:last + 1], ev, newest), s.addr)
 
     def run(self):
         self.log("listening on UDP %d: %d slots (%d for people, %d bots), map %d, rules %d (%s%s, items %s)"
@@ -512,12 +532,20 @@ class Server:
                                    P.BYE_DROPPED)
                     elif not s.ready and quiet > JOIN_SILENT:
                         self.leave(i, "never loaded the level: its slot is free")
-                if self.state == "play" and self.paused:
+                if self.state == "play" and now >= self.next_join:
+                    self.next_join = now + 1.0
+                    self.joiners(now)
+                held = self.paused or self.waitfor is not None
+                if self.state == "play" and held:
                     if now >= self.next_paused:     # why no steps come, every half second
                         self.next_paused = now + 0.5
+                        packet = P.paused(1) if self.paused else P.paused(2, self.waitfor)
                         for i in self.everyone():
-                            self.send(P.paused(True), self.get(i).addr)
-                if self.state == "play" and not self.paused:
+                            self.send(packet, self.get(i).addr)
+                    if now >= self.tick:            # a joiner's catch-up goes on
+                        self.tick = now + P.STEP_SECONDS
+                        self.feed()
+                if self.state == "play" and not held:
                     while now >= self.tick:
                         self.step()
                         self.tick += P.STEP_SECONDS
@@ -563,12 +591,64 @@ class Server:
             self.next_paused = 0.0
             self.log("paused from the console at step %d" % len(self.history))
         else:
-            self.tick = time.perf_counter()     # the clock goes on from now
-            for k in range(3):
-                for i in self.everyone():
-                    self.send(P.paused(False), self.get(i).addr)
             self.log("going again from the console at step %d" % len(self.history))
+            if self.waitfor is None:
+                self.resume()
+            else:
+                self.next_paused = 0.0          # now the wait for the joiner, said
         return True
+
+    def resume(self):
+        self.tick = time.perf_counter()         # the clock goes on from now
+        for k in range(3):
+            for i in self.everyone():
+                self.send(P.paused(0), self.get(i).addr)
+
+    # ---- a joiner that cannot catch up (--joinwait, 2026-10-17)
+
+    def go_on(self, why):
+        self.log("going on at step %d: %s" % (len(self.history), why))
+        self.waitfor = None
+        if not self.paused:
+            self.resume()
+
+    def joiners(self, now):
+        """Once a second: each joiner's gap.  One that will not be in
+        within --joinwait, at the rate it is closing, holds the game; the
+        game goes on once what is left can be closed in half that with it
+        going (17.5 steps a second coming on top)."""
+        newest = len(self.history) - 1
+        live = 1 / P.STEP_SECONDS
+        for i, s in enumerate(self.slots):
+            if s is None or s.bot or s.present or not s.ready or s.played is None or newest < 0:
+                if s is not None:
+                    s.win = None
+                continue
+            gap = newest - s.played
+            if s.win is None:
+                s.win = (now, gap)
+                continue
+            t0, gap0 = s.win
+            dt = now - t0
+            if self.waitfor == i:
+                if dt < 3:
+                    continue
+                rate = (gap0 - gap) / dt            # held: the joiner's own speed
+                s.win = (now, gap)
+                if gap <= 2 * live or (rate > live and gap <= (rate - live) * self.joinwait / 2):
+                    self.go_on("%s has caught up enough (%.0f steps a second, %d to go)"
+                               % (self.who(i), rate, gap))
+            elif self.waitfor is None and not self.paused and self.joinwait > 0:
+                if dt < 10:
+                    continue
+                gain = (gap0 - gap) / dt            # going: how fast the gap closes
+                s.win = (now, gap)
+                if gain <= 0 or gap > gain * self.joinwait:
+                    self.waitfor = i
+                    self.next_paused = 0.0
+                    self.log("everyone waits for %s: %d steps behind, %s" % (
+                        self.who(i), gap, "not gaining" if gain <= 0 else
+                        "%.1f steps a second gained -- %d s to catch up" % (gain, gap / gain)))
 
     def event(self, kind, arg=0):
         """An event at the next step made: every machine applies it there."""

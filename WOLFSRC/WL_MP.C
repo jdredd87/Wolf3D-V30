@@ -1678,7 +1678,10 @@ int		far	mpbye;				// BYE's reason: 0 the end, 1 full, 2 another build,
 								// 8-hour test (2026-10-12): a minute now
 #define QUIET	(3*70)			// silent this long: say so, every second
 int		far	mpwhy;				// why the level ended: 0 elevator, 1 frags, 2 time, 3 the server
-int		far	mppaused;			// the server has paused the game (PAUSED, 2026-10-13)
+int		far	mppaused;			// the server has paused the game (PAUSED, 2026-10-13):
+								// 1 its console, 2 everyone waits for a joiner
+int		far	mpwaitfor;			//   (2026-10-17) -- this one, to catch up
+long	far	mpnewest = -1;		// the server's newest step, from STEPS (2026-10-17)
 int		far	mpgoto = -1;		// the map the server sends everyone to (NextLevel)
 char	far	mpbyetext[41];		// why the server kicked this machine (BYE 4)
 byte	far	mpevent[RING];		// the server's event at each held step (STEPS'
@@ -1812,6 +1815,8 @@ static void Take (byte far *d, unsigned len)
 							mpeventarg[k] = e[5] | (e[6] << 8);
 						}
 					}
+				if (len > off && len >= off+1+7*d[off]+4)	// then the server's newest
+					mpnewest = (long)GetL (d+off+1+7*d[off]);	// step (2026-10-17)
 			}
 		}
 		while (mpringstep[(unsigned)(mphave+1) & (RING-1)] == (unsigned)(mphave+1))
@@ -1867,8 +1872,9 @@ static void Take (byte far *d, unsigned len)
 			Notice (pcol[k],f,Who (k),(char far *)line);
 		}
 		break;
-	case 14:						// PAUSED (2026-10-13): 1 held, 0 going again
-		mppaused = len >= 5 ? d[4] : 0;
+	case 14:						// PAUSED (2026-10-13): 1 held, 0 going again;
+		mppaused = len >= 5 ? d[4] : 0;	// 2 (2026-10-17) held for slot d[5],
+		mpwaitfor = len >= 6 && d[5] < MAXPLAYERS ? d[5] : 0;	// a joiner catching up
 		break;
 	case 11:						// NAMES: count, then 16 bytes each
 		if (len >= 5)
@@ -3017,16 +3023,47 @@ static void Picture (void)
 // Joining a running game: every step since the first, played as fast as the
 // machine can -- no picture, no sound -- with a line to say how far it is
 //
+// and (2026-10-17) how long it will take: the gap as it closes over the
+// last five seconds -- the game goes on meanwhile, 17.5 steps a second, so a
+// slow machine may close it slowly, or not at all (the server then has
+// everyone wait for it: --joinwait)
 static void Behind (long n)
 {
-	static char far f[] = "Catching up: %ld steps to go";
-	char	s[40], fmt[32];
+	static char far f[] = "Catching up: %ld steps to go", far fleft[] = "about %ld:%02ld left",
+		far fnot[] = "not gaining yet", far fwait[] = "everyone waits for you";
+	static long far was[6], far lastcall;
+	static int far nwas;
+	char	s[64], t[32];
+	long	gain;
+	int		i;
 
-	_fstrcpy ((char far *)fmt,f);
-	sprintf (s,fmt,n);
+	if (TimeCount - lastcall > 3*70 || TimeCount < lastcall)
+		nwas = 0;					// a catch-up of its own: no history
+	lastcall = TimeCount;
+	if (nwas == 6)
+		for (i=0;i<5;i++)
+			was[i] = was[i+1];
+	else
+		nwas++;
+	was[nwas-1] = n;
+	Fmt (s,f,n);
+	t[0] = 0;
+	if (mppaused == 2 && mpwaitfor == mplocal)
+		_fstrcpy ((char far *)t,fwait);
+	else if (nwas == 6)
+	{
+		gain = (was[0] - n) / 5;	// steps a second the gap closes
+		if (gain > 0)
+			Fmt (t,fleft,n/gain/60,n/gain%60);
+		else
+			_fstrcpy ((char far *)t,fnot);
+	}
 	AllRows ();
-	CenterWindow (28,3);
+	CenterWindow (28,4);			// one size for every box here: a smaller
+								// one leaves the last one's edge showing
 	US_CPrint ((char far *)s);
+	if (t[0])
+		US_CPrint ((char far *)t);
 	VW_UpdateScreen ();
 }
 
@@ -3043,16 +3080,18 @@ static void Silent (long secs)
 	_fstrcpy ((char far *)fmt,f);
 	sprintf (s,fmt,secs);
 	AllRows ();
-	CenterWindow (28,3);
+	CenterWindow (28,4);
 	US_CPrint ((char far *)s);
 	VW_UpdateScreen ();
 }
 
-static void Banner (char far *s)
+static void Banner (char far *s, char far *s2)	// one line, or two
 {
 	AllRows ();
-	CenterWindow (28,3);
+	CenterWindow (28,4);
 	US_CPrint (s);
+	if (s2)
+		US_CPrint (s2);
 	VW_UpdateScreen ();
 }
 
@@ -3182,7 +3221,9 @@ static long Due (void)
 static void NetLoop (void)
 {
 	static char far leave[] = "Leave the game?  Y or N";
-	static char far held[] = "Paused by the server";
+	static char far held[] = "Paused by the server", far waitf[] = "Waiting for %.15Fs",
+		far waitf2[] = "to catch up";
+	char	wbuf[40];
 	long	lastsend = -100, lastsay = -100, catchfrom = 0, lastquiet = -100, lastheld = -100;
 	int		n,i,asking = 0,limit,quiet = 0,paused = 0;
 
@@ -3317,7 +3358,7 @@ static void NetLoop (void)
 			if (TimeCount - lastsay >= 70 || TimeCount < lastsay)
 			{
 				lastsay = TimeCount;
-				Behind (Due () - mpplayed);
+				Behind ((mpnewest > Due () ? mpnewest : Due ()) - mpplayed);
 			}
 		}
 		else
@@ -3326,7 +3367,14 @@ static void NetLoop (void)
 			{						// the server's console: pause (2026-10-13)
 				if (!paused || TimeCount - lastheld >= 70 || TimeCount < lastheld)
 				{					// every second: the scores, a chat line or
-					Banner (held);	// a notice can be drawn over it meanwhile
+									// a notice can be drawn over it meanwhile
+					if (mppaused == 2)	// waiting for a joiner (2026-10-17)
+					{
+						Fmt (wbuf,waitf,Who (mpwaitfor));
+						Banner ((char far *)wbuf,waitf2);
+					}
+					else
+						Banner (held,NULL);
 					paused = 1;
 					lastheld = TimeCount;
 				}
@@ -3809,7 +3857,8 @@ void MPNetGame (void)
 		for (i=0;i<MAXPLAYERS;i++)
 			pcol[i] = TEAM (i) ? 7 : 14;
 	mpgoto = -1;
-	mppaused = 0;
+	mppaused = mpwaitfor = 0;
+	mpnewest = -1;
 	NewGame (mpstart[2],MPEPISODE(mpstart[1]));
 	gamestate.mapon = mpstart[1] % 10;
 	godmode = false;

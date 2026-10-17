@@ -1,6 +1,7 @@
 """Comings and goings, for testing a running game -- StevenC & Claude, 2026.
 
-    python mp/mpcome.py [--server 127.0.0.1] [--port 31992] SCRIPT...
+    python mp/mpcome.py [--server 127.0.0.1] [--port 31992] [--build HEX]
+                        [--rate N] SCRIPT...
 
 A scripted player that does not play: it sends INPUT (gendemo.py's random
 input) and keeps the steps it is sent, so the real machines in the game see
@@ -16,6 +17,12 @@ game to sum).  SCRIPT is a list of timed actions, seconds from the start:
     end@180      stop
 
 It prints what happens, and each BYE's reason.
+
+--build HEX is the build it says it is (the game's MPBUILD, 01080006 for
+WOLF3DM 1.8; a server turns away a joiner whose build is not the
+players').  --rate N (2026-10-17): it "plays" only N steps a second -- its
+INPUT says so in `played` -- as a slow machine catching up would, for
+testing the servers' --joinwait.
 """
 import os
 import random
@@ -29,7 +36,8 @@ sys.path.insert(0, os.path.join(HERE, ".."))
 import mpproto as P                 # noqa: E402
 import gendemo                      # noqa: E402
 
-BUILD = 0x12345678
+BUILD = int(sys.argv[sys.argv.index("--build") + 1], 16) if "--build" in sys.argv else 0x12345678
+RATE = float(sys.argv[sys.argv.index("--rate") + 1]) if "--rate" in sys.argv else 0
 REASON = {P.BYE_END: "the end", P.BYE_FULL: "the server is full",
           P.BYE_BUILD: "another build", P.BYE_DROPPED: "dropped (not heard from)"}
 
@@ -62,6 +70,8 @@ class Player:
         self.inputs = iter(gendemo.inputs(random.Random(77), 10 ** 5))
         self.next_hello = 0
         self.next_input = 0
+        self.played = -1.0              # --rate: how far it has "played"
+        self.last = None
 
     def send(self, data):
         if not self.quiet:
@@ -100,8 +110,14 @@ class Player:
             b, x, y = next(self.inputs)
             self.seq += 1
             have = self.have if self.have >= 0 else P.NOBODY
+            played = have
+            if RATE and self.have >= 0:
+                if self.last is not None:
+                    self.played = min(self.have, self.played + RATE * (now - self.last))
+                self.last = now
+                played = int(self.played) if self.played >= 0 else P.NOBODY
             self.send(P.inp(self.slot, b, x - 256 if x > 127 else x, y - 256 if y > 127 else y,
-                            self.seq, have, have))
+                            self.seq, have, played))
 
     def bye(self):
         for k in range(3):

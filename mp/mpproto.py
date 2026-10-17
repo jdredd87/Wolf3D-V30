@@ -97,15 +97,19 @@ def un_inp(b):
     return v + (played,)
 
 
-def steps(first, players, rows, events=()):
+def steps(first, players, rows, events=(), newest=None):
     """rows: a list of `players*3`-byte steps.  events: (step, event,
     argument) for steps among these -- a tail the game reads since
-    2026-10-13 (a count, then 7 bytes each); an older game ignores it."""
+    2026-10-13 (a count, then 7 bytes each); an older game ignores it.
+    newest (2026-10-17): the server's newest step, after the events (a
+    count of 0 first if there are none) -- how far a joiner has to go."""
     out = head(STEPS) + struct.pack("<IBB", first, len(rows), players) + b"".join(rows)
     events = list(events)[:20]
-    if events:
+    if events or newest is not None:
         out += bytes([len(events)]) + b"".join(struct.pack("<IBH", s, e, a & 0xFFFF)
                                                for s, e, a in events)
+    if newest is not None:
+        out += struct.pack("<I", newest & 0xFFFFFFFF)
     return out
 
 
@@ -198,8 +202,11 @@ def un_info(b):
                 rules=v[7], rules2=v[8], step=v[10], build=v[11], name=name, names=names)
 
 
-def paused(on):
-    return head(PAUSED) + bytes([1 if on else 0])
+def paused(on, slot=0):
+    """on: 0 going again, 1 the console paused it, 2 (2026-10-17) everyone
+    waits for a joiner to catch up -- slot, the one waited for, follows.  A
+    game older than 2 takes it as 1."""
+    return head(PAUSED) + bytes([int(on), slot])
 
 
 def chat(slot, number, text, kind=CHAT):

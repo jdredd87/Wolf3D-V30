@@ -178,9 +178,19 @@ are listed, and you pick one by its number.
 
 The game starts as soon as the first player has loaded the level.  Anyone
 who joins later sees **"Catching up: N steps to go"** while their machine
-replays the game so far, then walks in.  A 486 or better catches up an
-hour's game in under a minute; an 8 MHz V30 takes six to fifteen minutes.
-A network dropout of up to a minute is ridden out the same way.
+replays the game so far, then walks in -- and under it, after a few
+seconds, **about how long is left** ("about 1:20 left", or "not gaining
+yet").  A 486 or better catches up an hour's game in under a minute; an
+8 MHz V30 takes six to fifteen minutes.  A network dropout of up to a
+minute is ridden out the same way.
+
+The game goes on while a joiner catches up, so a slow machine joining a
+long, busy game could fall behind for good.  The server will not let it:
+if a joiner would take more than a minute (`--joinwait 60`), **everyone
+waits** -- "Waiting for NAME to catch up" on their screens, "everyone
+waits for you" on the joiner's -- and the game goes on by itself as soon
+as the rest can be closed in half a minute with it running.
+`--joinwait 0` turns the waiting off.
 
 ### Watching instead of playing
 
@@ -338,6 +348,7 @@ python SERVER\mp\mpctl.py --host 192.168.1.30 status
 | `Joining the server...` and then `No answer from the server in 90 seconds` | The server can't be reached.  Check that it's running, that the address is right, and on Windows the firewall (below). |
 | `The server is full -- try again when someone leaves` | All four slots are taken (bots count).  Start the server with fewer `--bots`. |
 | `The server is playing a different WOLF3DM` | Use the same `WOLF3DM.EXE` on every machine -- or, with the shareware, the same `WOLF3DM1.EXE`.  Registered and shareware machines cannot play together. |
+| Everyone sees **"Waiting for NAME to catch up"** | A slow machine joined a game in progress and could not catch up while it ran; the game goes on by itself in a few seconds.  To keep playing while it catches up (it may then take longer), start the server with a larger `--joinwait`, or `--joinwait 0`. |
 | A machine with a **PicoMEM** card joins late and never gets past "Catching up" | The server is sending its catch-up too fast for the card's WiFi.  Every server waits 1 ms after each packet by default (`--txgap 1000`); if you set `--txgap 0`, take it out. |
 | `No word from the server: N s` | The network dropped.  It recovers by itself within a minute; after 60 s the server frees the slot. |
 | `DESYNC reported` at the end | The machines disagreed.  This shouldn't happen.  If it does, note what happened and let us know. |

@@ -1114,7 +1114,7 @@ server that disagrees with it is wrong.
 | 2 | `WELCOME` | server | slot (u8: 0-3 a player, 4-7 a watcher), players expected (u8), map (u8), skill (u8), rules (u8), pad, frag limit (u16), time limit (u16, minutes) |
 | 3 | `START` | server | players (u8), map, skill, rules (u8 each), then for each player a start: x, y, direction, 0 -- x 0 means "the map's own start" for P1 and "beside P1" for the others (scattered, in deathmatch), found by the game itself (the same search on every machine).  Rules bits: 1 deathmatch, 2 no friendly fire (co-op), 4 no enemies; bits 3-7 (since 2026-10-08) n: a taken item comes back after 5n seconds, 0 never.  A recording keeps them in P2's start's 4th byte, as it keeps the skill + 1 in P1's.  Then (since 2026-10-17) rules2 (u8): 1 teams, 2 capture the flag (with 1); a packet without it means 0 |
 | 4 | `INPUT` | client | slot (u8), buttons (u8), turn (s8), move (s8), seq (u16), have (u32), played (u32: the highest step it has played; since 2026-10-07 -- the server lets a joiner in once it has caught up) |
-| 5 | `STEPS` | server | first (u32), count (u8), players (u8), then count steps of players x 3 bytes -- buttons, turn, move, P1 first: a step exactly as `Mn.DEM` holds it.  An empty slot's 3 bytes are 0, -128, -128 (since 2026-10-07): no player's are, as id's PollControls clamps a turn and a move to 100 a tic |
+| 5 | `STEPS` | server | first (u32), count (u8), players (u8), then count steps of players x 3 bytes -- buttons, turn, move, P1 first: a step exactly as `Mn.DEM` holds it.  An empty slot's 3 bytes are 0, -128, -128 (since 2026-10-07): no player's are, as id's PollControls clamps a turn and a move to 100 a tic.  Then the events (since 2026-10-13: a count, 7 bytes each), and (since 2026-10-17) the server's newest step (u32) -- the count is sent as 0 when there are no events, so it can follow |
 | 6 | `SYNC` | client | slot (u8), pad, step (u32), sum (u32) |
 | 7 | `DESYNC` | server | step (u32), the slots whose sum differed from the first slot's (u8 bit mask) |
 | 8 | `BYE` | either | slot (u8), and from the server a reason (u8, since 2026-10-07): 0 the game is over, 1 the server is full, 2 a different build, 3 this machine was not heard from and its slot is free |
@@ -1124,7 +1124,7 @@ server that disagrees with it is wrong.
 | 15 | `DISCOVER` | client | build (u32) -- broadcast to 255.255.255.255 (since 2026-10-17) |
 | 16 | `INFO` | server | state (u8: 0 waiting, 1 playing), slots, people, bots, watchers, map, skill, rules, rules2, pad (u8 each), step (u32), the build being played (u32, 0 if nobody), the server's name (16 bytes), each player slot's name (4 x 16) -- 98 bytes; the answer to `DISCOVER`, sent to whoever asked |
 
-Type 12 is `HANG` (a test build's hang report) and 14 `PAUSED` (the console paused the game, 1, or let it go on, 0); 13 is unused.
+Type 12 is `HANG` (a test build's hang report) and 14 `PAUSED` (the console paused the game, 1, or let it go on, 0; since 2026-10-17 also 2, everyone waits for a joiner to catch up, and the slot waited for after it); 13 is unused.
 
 **Joining** (since 2026-10-07; "Joining and leaving" below).  A client
 sends `HELLO` every half second until it has a `WELCOME`; the server answers
@@ -1992,4 +1992,60 @@ stubs (on `v30-8086`, where nothing defines it, nothing changes:
 One trap on the way: `VERSION.H` ends in a Ctrl-Z, and Borland stops
 reading a file there -- a `#define` appended after it is silently not
 there.  It goes before.
+
+## A slow machine joining late -- 2026-10-17
+
+StevenC: "at times when it is trying to catch up to the steps, more steps
+keep coming? like it never catch up? ... the v30 was the issue system i
+saw ... let it catch up if gets to far behind? for any system really? ...
+worse case, pause everyone else until it catches up".
+
+**Two things, one of them only on the screen.**  A joiner gains at its
+replay speed less 17.5 steps a second, the game going on meanwhile -- the
+V30 replays co-op E1L1 with enemies at 114-127 steps a second, so it does
+gain, about 100 a second.  But its box said "Catching up: N steps to go"
+with N the steps it had *received* and not yet played: the server sends
+them 64 at a time, so N sat between about 64 and 128 the whole while, and
+a V30 closing the gap looked as if it never would.  The game cannot know
+the real gap -- only the server knows its newest step -- so every `STEPS`
+now ends with it (the protocol table), and the box shows the real number
+and, under it, the time left from the last five seconds' gain ("about 1:20
+left", "not gaining yet").
+
+The other is real: a machine slower than the game -- a V30 in a long,
+crowded fight, or anything replaying under 17.5 steps a second -- would
+never get in.  **The servers watch for it** (`--joinwait SECS`, 60 by
+default, on all three): once a second each joiner's gap is measured, and
+after ten seconds, if at the rate it is closing it would not be in within
+SECS, the server holds the game for everyone (`PAUSED` 2, the slot) --
+"Waiting for NAME / to catch up" on their screens, "everyone waits for
+you" on the joiner's -- and goes on sending the joiner its steps.  It
+watches the joiner's own speed while it waits, and lets the game go on as
+soon as what is left could be closed in SECS/2 with the game running.  A
+joiner that leaves, or gets in, ends the wait at once; the console's
+`pause` and the wait are separate, and either holds the game.  `status`
+lists a joiner's steps still to play.
+
+Tested, `--joinwait 20` so it would show:
+
+* **MPSRVW**: the 486 playing co-op with enemies, the V30 joining three
+  minutes in -- 2,663 behind, 26 s at the 100 a second it gained: everyone
+  waited 15 s, the game went on with 943 to go at 114 a second, and the V30
+  was in 10 s later.  7,000 steps, no desync.
+* **The Python server**, the same: 2,590 behind, waited 15 s, in at
+  3,928; 7,000 steps, no desync.  The V30's box: "Catching up: 3111 steps
+  to go", then "everyone waits for you" under it.
+* **MPSRV on P3**, the V30 playing and the 486 joining: it caught up 2,500
+  steps in 4.5 s, inside the first measurement, so nobody waited -- as it
+  should be.  6,000 steps, no desync.
+* **The banner**, MPSRVW with the V30 playing and a scripted slow joiner
+  (`mp/mpcome.py --rate 40 --build 01080006`, new): the V30 showed "Waiting
+  for COMER1 / to catch up"; the game went on with 116 to go.
+
+A box that changed size left the bigger one's edge on the screen; every
+box of these is one size now.  The V30 has 204,160 bytes for id's check
+(it asks 200,000).
+
+Still to come: the joiner starting from a snapshot of the game, not step
+0 -- item 15 -- which takes the wait away instead of shortening it.
 

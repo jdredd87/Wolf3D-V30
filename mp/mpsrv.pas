@@ -87,6 +87,8 @@ type
     HaveSeq: Boolean; Seq: Word;
     Have: LongWord;              { NOBODY, or the newest step held with none missing }
     HasPlayed: Boolean; Played: LongWord;
+    HasWin: Boolean;             { catching up: its gap WinGap at Ticks WinT }
+    WinT, WinGap: LongInt;
     Ready, Present: Boolean;
     Inputs: LongInt;
     Heard: LongInt;              { Ticks of the last packet }
@@ -127,6 +129,9 @@ var
   DropAfter: LongInt;            { ticks }
   { the game }
   Playing, Paused: Boolean;
+  WaitFor: Integer;              { everyone waits for this joiner (--joinwait), -1 none }
+  JoinWait: LongInt;             { seconds; 0 never }
+  NextJoin, NextFeed: LongInt;
   Slots: array[0..LASTSLOT] of TSlot;
   Newest: LongInt;               { the newest step made; -1 none }
   NextStep, StartedAt, NextStart, NextNames, NextPausedT: LongInt;
@@ -851,6 +856,7 @@ var K: Integer;
 begin
   Playing := False;
   Paused := False;
+  WaitFor := -1;
   HistReset;
   SumsClear;
   NEv := 0;
@@ -1256,7 +1262,14 @@ begin
         Inc(Len, 7);
         Inc(NE);
       end;
+  end
+  else
+  begin
+    Tx[Len] := 0;                      { no events: a count of none, for what follows }
+    Inc(Len);
   end;
+  PutL(Len, Newest);                   { the newest step there is: how far a joiner
+  Inc(Len, 4);                           has to go (2026-10-17) }
   StepsLen := Len;
 end;
 
@@ -1383,14 +1396,39 @@ begin
   end;
 end;
 
+{ Every machine the steps it lacks -- also while the game is held, so a
+  joiner catches up while everyone waits for it (2026-10-17) }
+procedure SendSteps;
+var
+  I: Integer;
+  First, Last, Now: LongInt;
+  Len: Word;
+begin
+  Now := Ticks;
+  for I := 0 to LASTSLOT do
+  begin
+    if not IsReceiver(I) or not Slots[I].Ready then Continue;
+    if Slots[I].Have = NOBODY then First := 0 else First := Slots[I].Have + 1;
+    Last := First + STEPS_MAX - 1;
+    if Last > Newest then Last := Newest;
+    if First > Newest then Continue;
+    with Slots[I] do
+    begin
+      if (First = SentFirst) and (Last = SentLast) and (Now - SentAt < 18) then Continue;
+      SentFirst := First; SentLast := Last; SentAt := Now;
+    end;
+    Len := StepsLen(First, Last);
+    SendTo(I, Len);
+  end;
+end;
+
 procedure MakeStep;
 var
   Row: TRow;
   I: Integer;
   Done: LongWord;
   HasDone: Boolean;
-  First, Last, Now: LongInt;
-  Len, Off: Word;
+  Off: Word;
 begin
   for I := 0 to ROWB - 1 do Row[I] := 0;
   for I := 0 to Players - 1 do
@@ -1433,22 +1471,7 @@ begin
     RecNamesNow;                       { who came or went }
     if Newest - RecFirst + 1 >= STEPS_MAX then RecFlush;
   end;
-  Now := Ticks;
-  for I := 0 to LASTSLOT do
-  begin
-    if not IsReceiver(I) or not Slots[I].Ready then Continue;
-    if Slots[I].Have = NOBODY then First := 0 else First := Slots[I].Have + 1;
-    Last := First + STEPS_MAX - 1;
-    if Last > Newest then Last := Newest;
-    if First > Newest then Continue;
-    with Slots[I] do
-    begin
-      if (First = SentFirst) and (Last = SentLast) and (Now - SentAt < 18) then Continue;
-      SentFirst := First; SentLast := Last; SentAt := Now;
-    end;
-    Len := StepsLen(First, Last);
-    SendTo(I, Len);
-  end;
+  SendSteps;
 end;
 
 { ---------------------------------------------------------------- the console }
@@ -1486,6 +1509,7 @@ begin
   if LiveFrag >= 0 then S := S + ', fraglimit ' + I2S(LiveFrag) + ' in this game';
   if LiveTime >= 0 then S := S + ', timelimit ' + I2S(LiveTime) + ' in this game';
   if Paused then S := S + ', PAUSED';
+  if WaitFor >= 0 then S := S + ', WAITING for ' + Who(WaitFor) + ' to catch up';
   Settings := S;
 end;
 
@@ -1582,6 +1606,8 @@ begin
         if (Have <> NOBODY) and (Newest >= 0) then
           if Newest - LongInt(Have) > 0 then S := S + ', ' + I2S(Newest - LongInt(Have)) + ' behind'
           else S := S + ', 0 behind';
+        if Ready and not Present and HasPlayed and (Newest >= LongInt(Played)) then
+          S := S + ', ' + I2S(Newest - LongInt(Played)) + ' to play';
         Say('  P' + I2S(I + 1) + '  ' + Pad(Name, 16) + ' ' + IPStr(IP) + ':' + I2S(Port) + '  ' + S
             + ', ' + I2S(Inputs) + ' inputs, heard ' + Secs(Ticks - Heard) + ' s ago');
       end;
@@ -1609,6 +1635,86 @@ begin
   Log('SERVER says: ' + Copy(Text, 1, N));
 end;
 
+procedure Resume;
+var I, K: Integer;
+begin
+  NextStep := Ticks;                   { the clock goes on from now }
+  Head(PAUSEDP); Tx[4] := 0; Tx[5] := 0;
+  for K := 1 to 3 do
+    for I := 0 to LASTSLOT do
+      if IsReceiver(I) then SendTo(I, 6);
+end;
+
+{ ------------------------------------- a joiner that cannot catch up (--joinwait) }
+
+procedure GoOn(const Why: ShortString);
+begin
+  Log('going on at step ' + I2S(Newest + 1) + ': ' + Why);
+  WaitFor := -1;
+  if not Paused then Resume;
+end;
+
+{ Once a second: each joiner's gap.  One that will not be in within
+  --joinwait, at the rate it is closing, holds the game; the game goes on
+  once what is left can be closed in half that with it going -- 17.5 steps
+  a second come on top (2026-10-17).  In whole numbers: Dt in ticks, a rate
+  (WinGap - Gap) * T_SEC / Dt steps a second. }
+procedure Joiners;
+var
+  I: Integer;
+  T, Dt, Gap, Closed: LongInt;
+begin
+  T := Ticks;
+  if (WaitFor >= 0) and (not Slots[WaitFor].Used or Slots[WaitFor].Present) then
+    if Slots[WaitFor].Used then GoOn(Who(WaitFor) + ' is in the game')
+    else GoOn('the one waited for has gone');
+  for I := 0 to Players - 1 do
+    with Slots[I] do
+    begin
+      if not Used or Bot or Present or not Ready or not HasPlayed or (Newest < 0) then
+      begin
+        HasWin := False;
+        Continue;
+      end;
+      Gap := Newest - LongInt(Played);
+      if Gap < 0 then Gap := 0;
+      if not HasWin then
+      begin
+        HasWin := True; WinT := T; WinGap := Gap;
+        Continue;
+      end;
+      Dt := T - WinT;
+      if Dt <= 0 then Continue;
+      Closed := WinGap - Gap;
+      if WaitFor = I then
+      begin
+        if Dt < 3 * T_SEC then Continue;
+        WinT := T; WinGap := Gap;
+        { held: Closed*T_SEC/Dt is its own speed; less 17.5, the live gain }
+        if (Gap <= 35) or ((2 * Closed * T_SEC > 35 * Dt)
+           and (4 * Gap * Dt <= JoinWait * (2 * Closed * T_SEC - 35 * Dt))) then
+          GoOn(Who(I) + ' has caught up enough (' + I2S(Closed * T_SEC div Dt)
+               + ' steps a second, ' + I2S(Gap) + ' to go)');
+      end
+      else if (WaitFor < 0) and not Paused and (JoinWait > 0) then
+      begin
+        if Dt < 10 * T_SEC then Continue;
+        WinT := T; WinGap := Gap;
+        if (Closed <= 0) or (Gap * Dt > Closed * T_SEC * JoinWait) then
+        begin
+          WaitFor := I;
+          NextPausedT := 0;
+          if Closed <= 0 then
+            Log('everyone waits for ' + Who(I) + ': ' + I2S(Gap) + ' steps behind, not gaining')
+          else
+            Log('everyone waits for ' + Who(I) + ': ' + I2S(Gap) + ' steps behind, '
+                + I2S(Gap * Dt div (Closed * T_SEC)) + ' s to catch up at '
+                + I2S(Closed * T_SEC div Dt) + ' steps a second gained');
+        end;
+      end;
+    end;
+end;
+
 procedure SetPause(On: Boolean);
 var I, K: Integer;
 begin
@@ -1620,12 +1726,9 @@ begin
   end
   else
   begin
-    NextStep := Ticks;
-    Head(PAUSEDP); Tx[4] := 0;
-    for K := 1 to 3 do
-      for I := 0 to LASTSLOT do
-        if IsReceiver(I) then SendTo(I, 5);
     Log('going again from the console at step ' + I2S(Newest + 1));
+    if WaitFor < 0 then Resume
+    else NextPausedT := 0;             { now the wait for the joiner, said }
   end;
 end;
 
@@ -1642,7 +1745,7 @@ begin
 end;
 
 var
-  W: array[0..7] of ShortString;
+  W: array[0..7] of string[63];   { a command's words (not 255 each: DGROUP, 2026-10-17) }
   NW: Integer;
 
 procedure Split(const Line: ShortString);
@@ -2029,6 +2132,7 @@ begin
   for I := 0 to Players - 1 do if IsPerson(I) then Inc(Ppl);
   if Playing then S := 'step ' + I2S(Newest + 1) else S := 'waiting';
   if Paused then S := S + ' PAUSED';
+  if WaitFor >= 0 then S := S + ' WAITING';
   S := SPIN[T and 3] + ' MPSRV ' + S + ', ' + I2S(Ppl) + ' in, rx ' + I2S(RecvN) + ' tx ' + I2S(SentN)
        + '  > ' + Typed;
   if Length(S) > 79 then S := Copy(S, Length(S) - 78, 79);
@@ -2101,6 +2205,7 @@ begin
   for I := 0 to Players - 1 do if IsPerson(I) then Inc(Ppl);
   if Playing then S := 'step ' + I2S(Newest + 1) else S := 'waiting';
   if Paused then S := S + ' PAUSED';
+  if WaitFor >= 0 then S := S + ' WAITING';
   S := 'MPSRV ' + SPIN[T and 3] + ' ' + S + ', ' + I2S(Ppl) + ' in, rx ' + I2S(RecvN) + ' tx '
        + I2S(SentN) + ', ' + I2S(Desyncs) + ' desyncs' + #0;
   SetConsoleTitleA(@S[1]);
@@ -2277,6 +2382,9 @@ begin
 {$ENDIF}
   WriteLn('  --drop-after S   a player not heard from for S seconds loses its   (60)');
   WriteLn('                   slot -- a WiFi dropout shorter than that is ridden out');
+  WriteLn('  --joinwait S     a player joining late who would take more than S      (60)');
+  WriteLn('                   seconds to catch up has everyone wait for them --');
+  WriteLn('                   until the rest can be closed in S/2; 0: never wait');
   WriteLn('  --once           stop when the game ends, instead of waiting for the next');
   WriteLn('  --record FILE    record each game, every floor, for WOLF3DM REPLAY FILE');
   WriteLn('                   (GAME.MPR; a second game is GAMEB.MPR, and so on)');
@@ -2425,6 +2533,8 @@ begin
 {$ENDIF}
   Quiet := Flag('--quiet');
   DropAfter := Arg('--drop-after', 60) * T_SEC;
+  JoinWait := Arg('--joinwait', 60);
+  WaitFor := -1;
   NxMap := -1; NxSkill := -1; NxBots := -1; NxTime := -1; NxFrag := -1;
   NxResp := -1; NxMode := -1; NxEnemies := -1; NxFF := -1;
   NBanned := 0; Said := 0; Games := 0;
@@ -2537,7 +2647,7 @@ begin
   Log('after each frame a pause of ' + I2S(GapUs) + ' us (' + I2S(SnGapLoops) + ' x 100 loops, '
       + I2S(Spins) + ' a tick; --txgap)');
 {$ENDIF}
-  NextStart := 0; NextNames := 0; NextPausedT := 0;
+  NextStart := 0; NextNames := 0; NextPausedT := 0; NextJoin := 0; NextFeed := 0;
 
   repeat
     PollKeys;
@@ -2562,14 +2672,29 @@ begin
                 BYE_DROPPED, '')
         else if (not Slots[I].Ready) and (T - Slots[I].Heard > 60 * T_SEC) then
           Leave(I, 'never loaded the level: its slot is free', -1, '');
-    if Playing and Paused and (T >= NextPausedT) then
+    if Playing and (T >= NextJoin) then
     begin
-      NextPausedT := T + T_SEC div 2;
-      Head(PAUSEDP); Tx[4] := 1;
-      for I := 0 to LASTSLOT do
-        if IsReceiver(I) then SendTo(I, 5);
+      NextJoin := T + T_SEC;
+      Joiners;
     end;
-    if Playing and not Paused then
+    if Playing and (Paused or (WaitFor >= 0)) then
+    begin
+      if T >= NextPausedT then
+      begin
+        NextPausedT := T + T_SEC div 2;
+        Head(PAUSEDP);
+        if Paused then begin Tx[4] := 1; Tx[5] := 0; end
+        else begin Tx[4] := 2; Tx[5] := WaitFor; end;
+        for I := 0 to LASTSLOT do
+          if IsReceiver(I) then SendTo(I, 6);
+      end;
+      if T - NextFeed >= 0 then          { a joiner's catch-up goes on }
+      begin
+        NextFeed := T + 4;
+        SendSteps;
+      end;
+    end;
+    if Playing and not Paused and (WaitFor < 0) then
       while (Ticks - NextStep >= 0) and Playing and not StopNow do
       begin
         if Newest + 1 >= HistCapacity then

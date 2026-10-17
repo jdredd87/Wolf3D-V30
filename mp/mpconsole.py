@@ -195,6 +195,8 @@ class Console:
             parts.append("%s %s in this game" % (k, v or "none"))
         if getattr(s, "paused", False):
             parts.append("PAUSED")
+        if getattr(s, "waitfor", None) is not None:
+            parts.append("WAITING for %s to catch up" % s.who(s.waitfor))
         return ", ".join(parts)
 
     def slot(self, word):
@@ -390,6 +392,8 @@ class Console:
                 have = "none" if sl.have == P.NOBODY else sl.have
                 behind = "" if sl.have == P.NOBODY or newest < 0 else ", %d behind" % max(0, newest - sl.have)
                 state = "in the game" if sl.present else ("catching up" if sl.ready else "loading")
+                if sl.ready and not sl.present and sl.played is not None and newest >= sl.played:
+                    behind += ", %d to play" % (newest - sl.played)
                 self.say("  P%d  %-16s %s:%d  %s, has step %s%s, %d inputs, heard %.1f s ago"
                          % (i + 1, sl.name, sl.addr[0], sl.addr[1], state, have, behind, sl.inputs,
                             now - sl.heard))
