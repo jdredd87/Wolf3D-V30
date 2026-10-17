@@ -1657,6 +1657,8 @@ extern	long	far netsentn, far netrecvn;
 
 int		far	mpnet;				// NET given: 1
 int		far	mpwatch;			// NET WATCH: watch, not play (2026-10-17)
+long	far	mpsnaptest;			// SNAPTEST n: the snapshot proved at step n (REPLAY)
+int		far	mpfast;				// FAST: a replay at 8 times (as its F key)
 int		far	mpspect;			// a watcher: its number from the server (4-7), 0 a player.
 								// mplocal is then whose view it shows (1-4 change it)
 #define MYSLOT	(mpspect ? mpspect : mplocal)
@@ -1737,6 +1739,8 @@ static void Head (int kind)
 //
 // Everything from the server
 //
+static void SnapTake (byte far *d, unsigned len);	// THE SNAPSHOT, below
+
 static void Take (byte far *d, unsigned len)
 {
 	unsigned long first;
@@ -1871,6 +1875,11 @@ static void Take (byte far *d, unsigned len)
 			line[n] = 0;
 			Notice (pcol[k],f,Who (k),(char far *)line);
 		}
+		break;
+	case 17:						// SNAPREQ, SNAPDATA, SNAPGET (2026-10-17):
+	case 18:						// the snapshot a joiner starts from -- THE
+	case 19:						// SNAPSHOT, below
+		SnapTake (d,len);
 		break;
 	case 14:						// PAUSED (2026-10-13): 1 held, 0 going again;
 		mppaused = len >= 5 ? d[4] : 0;	// 2 (2026-10-17) held for slot d[5],
@@ -2293,7 +2302,8 @@ int MPNetArgs (void)
 {
 	static int far done;
 	static char far wnet[] = "net", far wport[] = "port", far wname[] = "name", far wbot[] = "netbot",
-		far wfind[] = "find", far wwatch[] = "watch", far wreplay[] = "replay";
+		far wfind[] = "find", far wwatch[] = "watch", far wreplay[] = "replay",
+		far wsnaptest[] = "snaptest", far wfast[] = "fast";
 	int		i,net = 0,given = 0,find = 0;
 	byte	d[4];
 
@@ -2304,6 +2314,13 @@ int MPNetArgs (void)
 	{
 		if (Is (_argv[i],wnet))
 			net = 1;
+		if (Is (_argv[i],wsnaptest) && i+1 < _argc)
+			mpsnaptest = Num (_argv[i+1]);
+		if (Is (_argv[i],wfast))
+			mpfast = 1;
+	}
+	for (i = 1;i < _argc;i++)
+	{
 		if (Is (_argv[i],wreplay) && i+1 < _argc)	// REPLAY file: a recording, played
 		{											// back as a watcher sees it
 			mpreplay = 1;
@@ -3218,6 +3235,349 @@ static long Due (void)
 	return mpreplay && d < mphave ? d : mphave;
 }
 
+/*
+=============================================================================
+
+						THE SNAPSHOT (2026-10-17)
+
+A joiner need not replay the game from its first step: a machine in the
+game writes down everything the game is, at the end of a step, and the
+joiner sets up the same floor and lays it over.  Every machine runs the
+same EXE, so every array below is at the same address on each of them, and
+the pointers in them -- the actors' lists, actorat, the doors, each
+player's ob, the flags -- stay good when the bytes are copied whole.  (id's
+save game cannot: it packs the actors together and leaves actorat's
+pointers stale.)  Nothing is swapped first: the globals, every player's
+context and mpcur are copied as they stand.
+
+What is not here is not the game: the picture, the sound, the network.
+The checksums prove the list -- REPLAY file SNAPTEST n saves at step n,
+sets the floor up afresh, loads, and plays on: every sum after must be a
+plain replay's
+
+=============================================================================
+*/
+
+extern	int			objcount;
+extern	LRstruct	LevelRatios[];
+extern	byte		far rndtable[];	// ID_US_A.ASM: US_RndT's index is the word before it
+
+typedef struct
+{
+	void		far *p;
+	unsigned	n;
+} snapreg_t;
+
+static snapreg_t far snapregs[] =
+{
+	// id's game: the player's numbers, the level and everything in it
+	{&gamestate,sizeof(gamestate)},	{LevelRatios,sizeof(LRstruct)*8},
+	{tilemap,sizeof(tilemap)},		{actorat,sizeof(actorat)},
+	{areaconnect,sizeof(areaconnect)},	{areabyplayer,sizeof(areabyplayer)},
+	{objlist,sizeof(objlist)},		{&player,sizeof(player)},
+	{&new,sizeof(new)},				{&obj,sizeof(obj)},
+	{&lastobj,sizeof(lastobj)},		{&objfreelist,sizeof(objfreelist)},
+	{&killerobj,sizeof(killerobj)},	{&objcount,sizeof(objcount)},
+	{&madenoise,sizeof(madenoise)},	{&playstate,sizeof(playstate)},
+	{statobjlist,sizeof(statobjlist)},	{&laststatobj,sizeof(laststatobj)},
+	{doorobjlist,sizeof(doorobjlist)},	{&lastdoorobj,sizeof(lastdoorobj)},
+	{&doornum,sizeof(doornum)},		{doorposition,sizeof(doorposition)},
+	{&pwallstate,sizeof(pwallstate)},	{&pwallpos,sizeof(pwallpos)},
+	{&pwallx,sizeof(pwallx)},		{&pwally,sizeof(pwally)},
+	{&pwalldir,sizeof(pwalldir)},	{&tics,sizeof(tics)},
+	{rndtable-2,2},					// US_RndT's index
+	// the player in the globals (MPSwapIn/Out's list)
+	{&controlx,sizeof(controlx)},	{&controly,sizeof(controly)},
+	{buttonstate,sizeof(buttonstate)},	{buttonheld,sizeof(buttonheld)},
+	{&running,sizeof(running)},		{&thrustspeed,sizeof(thrustspeed)},
+	{&plux,sizeof(plux)},			{&pluy,sizeof(pluy)},
+	{&anglefrac,sizeof(anglefrac)},	{&gotgatgun,sizeof(gotgatgun)},
+	{&LastAttacker,sizeof(LastAttacker)},
+	{&playerxmove,sizeof(playerxmove)},	{&playerymove,sizeof(playerymove)},
+	// the network game's: every player, the sums, the items, the flags
+	{mpctx,sizeof(mpctx)},			{&mpcur,sizeof(mpcur)},
+	{&mpsum,sizeof(mpsum)},			{&mpsteps,sizeof(mpsteps)},
+	{mpcheck,sizeof(mpcheck)},		{&mpnoise,sizeof(mpnoise)},
+	{mptook,sizeof(mptook)},		{mpkiller,sizeof(mpkiller)},
+	{mpseen,sizeof(mpseen)},		{mpbonus,sizeof(mpbonus)},
+	{mpitemdue,sizeof(mpitemdue)},	{mpitemshape,sizeof(mpitemshape)},
+	{mpitemdrop,sizeof(mpitemdrop)},	{&mpitemnext,sizeof(mpitemnext)},
+	{mpcaps,sizeof(mpcaps)},		{flagobj,sizeof(flagobj)},
+	{flagbx,sizeof(flagbx)},		{flagby,sizeof(flagby)},
+	{flagx,sizeof(flagx)},			{flagy,sizeof(flagy)},
+	{flagby_,sizeof(flagby_)},		{flagtime,sizeof(flagtime)},
+	{&mpfraglimit,sizeof(mpfraglimit)},	{&mptimelimit,sizeof(mptimelimit)},
+	{&mpgoto,sizeof(mpgoto)},		{&mpwhy,sizeof(mpwhy)}
+};
+#define SNAPREGS	(sizeof(snapregs)/sizeof(snapregs[0]))
+
+typedef struct
+{
+	char		magic[4];				// "WMS1"
+	long		step;					// the step it is the end of
+	int			episode,mapon,difficulty;	// the floor to set up first
+	int			regs;					// SNAPREGS: the same build
+} snaphead_t;
+
+static char far snapmagic[] = "WMS1";
+
+// the snapshot, written to a file (h): true if every byte went
+static int SnapWrite (int h, long step)
+{
+	snaphead_t	hd;
+	int			i;
+
+	_fmemcpy ((char far *)hd.magic,snapmagic,4);
+	hd.step = step;
+	hd.episode = gamestate.episode;
+	hd.mapon = gamestate.mapon;
+	hd.difficulty = gamestate.difficulty;
+	hd.regs = SNAPREGS;
+	if (!CA_FarWrite (h,(byte far *)&hd,sizeof(hd)))
+		return 0;
+	for (i=0;i<SNAPREGS;i++)
+		if (!CA_FarWrite (h,(byte far *)snapregs[i].p,snapregs[i].n))
+			return 0;
+	return 1;
+}
+
+// its header: true if it is a snapshot of this build's
+static int SnapHead (int h, snaphead_t *hd)
+{
+	return CA_FarRead (h,(byte far *)hd,sizeof(*hd))
+		&& !_fmemcmp ((char far *)hd->magic,snapmagic,4) && hd->regs == SNAPREGS;
+}
+
+// ... and the rest, laid over a floor set up as the header says
+static int SnapRead (int h)
+{
+	int	i;
+
+	for (i=0;i<SNAPREGS;i++)
+		if (!CA_FarRead (h,(byte far *)snapregs[i].p,snapregs[i].n))
+			return 0;
+	return 1;
+}
+
+static char far snapfile[] = "MPSNAP.TMP";
+
+/*
+-----------------------------------------------------------------------------
+The snapshot over the network.  The server asks a player in the game for one
+at a step to come (SNAPREQ); that player writes it to MPSNAP.TMP at the end
+of that step and sends it to the server in pieces when asked (SNAPGET,
+SNAPDATA); a joiner asks the server for it as soon as START has come, writes
+it to its own MPSNAP.TMP, and starts from that step.  Every packet: step
+(u32).  SNAPGET: offset (u32).  SNAPDATA: total (u32, 0: none -- step 0 for
+"none to be had", FFFFFFFFh for "not yet"), offset (u32), length (u16), the
+bytes.  MULTIPLAYER.md has the rest
+-----------------------------------------------------------------------------
+*/
+
+#define SNAPCHUNK	900				// a piece: a frame of 960, in a 1 KB slot
+#define SNAPWIN		4				// pieces for each SNAPGET
+
+static long far snapwant = -1;		// SNAPREQ: write one at the end of this step
+static long far snaphave = -1;		// the step of the one in the file (snaph)
+static long far snapsize;
+static int far snaph = -1;			// MPSNAP.TMP, open: being served, or received
+static int far snapgetting;			// a joiner: 1 asking, 2 has it all, 3 none
+static long far snapgot, far snaptotal, far snapstep;
+int		far	mpsnapped;				// started from one: NetLoop leaves the
+									// player's globals as the snapshot has them
+
+// SNAPDATA, built where NetSend copies it to (nettx's payload), n bytes of
+// the file from off
+static void SnapSend (long step, long total, long off, unsigned n)
+{
+	byte		far *p = nettx+42;
+	unsigned	got = 0;
+
+	p[0] = 'W'; p[1] = 'M'; p[2] = 1; p[3] = 18;
+	PutL (p+4,step);
+	PutL (p+8,total);
+	PutL (p+12,off);
+	if (n && (lseek (snaph,off,0) != off || _dos_read (snaph,p+18,n,&got)))
+		got = 0;
+	p[16] = got;
+	p[17] = got >> 8;
+	NetSend (p,18+got);
+}
+
+static void SnapTake (byte far *d, unsigned len)
+{
+	long		step,off;
+	unsigned	n;
+	int			i;
+
+	if (len < 8)
+		return;
+	step = GetL (d+4);
+	switch (d[3])
+	{
+	case 17:						// SNAPREQ: one at the end of that step, if it is
+		if (step > mpplayed && !mpcatching && !mpreplay)	// still to come and this
+			snapwant = step;		// machine plays live; else "missed"
+		else if (step != snapwant && step != snaphave)
+			SnapSend (step,0,0,0);
+		break;
+	case 19:						// SNAPGET: pieces of the one in the file
+		if (len < 12)
+			break;
+		off = GetL (d+8);
+		if (step == snaphave && snaph >= 0 && !snapgetting)
+			for (i=0;i<SNAPWIN && off < snapsize;i++,off += SNAPCHUNK)
+				SnapSend (step,snapsize,off,
+					snapsize - off < SNAPCHUNK ? (unsigned)(snapsize - off) : SNAPCHUNK);
+		else if (step != snapwant)
+			SnapSend (step,0,0,0);	// none here: missed
+		break;
+	case 18:						// SNAPDATA: a joiner's
+		if (snapgetting != 1 || len < 18)
+			break;
+		if (!GetL (d+8))
+		{
+			if (step != -1l)		// "none": play from the first step
+				snapgetting = 3;
+			break;					// (-1: not yet -- ask again)
+		}
+		off = GetL (d+12);
+		n = d[16] | (d[17] << 8);
+		if (step != snapstep)		// a newer one than it had begun on
+		{
+			snapstep = step;
+			snaptotal = GetL (d+8);
+			snapgot = 0;
+		}
+		if (off == snapgot && n && len >= 18+n && lseek (snaph,off,0) == off
+		&& !_dos_write (snaph,d+18,n,&n))
+		{
+			snapgot += n;
+			if (snapgot >= snaptotal)
+				snapgetting = 2;
+		}
+		break;
+	}
+}
+
+// a player's: the one SNAPREQ asked for, now (the end of step snapwant)
+static void SnapServe (void)
+{
+	char	name[16];
+	int		h,n;
+
+	snapwant = -1;
+	snaphave = -1;
+	if (snaph >= 0)
+		_dos_close (snaph);
+	snaph = -1;
+	_fstrcpy ((char far *)name,snapfile);
+	if (_dos_creat (name,0,&h))
+		return;
+	n = SnapWrite (h,mpplayed);
+	_dos_close (h);
+	if (n && !_dos_open (name,O_RDONLY,&h))
+	{
+		snaph = h;
+		snapsize = filelength (h);
+		snaphave = mpplayed;
+	}
+}
+
+// a joiner's: the snapshot from the server, into MPSNAP.TMP -- 1 with its
+// header read (hd) and the file open at the rest (snaph), 0 for none (the
+// game is young, or nobody could give one: then it plays from step 0)
+static int SnapFetch (snaphead_t *hd)
+{
+	static char far fgot[] = "Getting the game: %ld KB of %ld";
+	char		name[16],s[40];
+	long		began = TimeCount,last = -100,said = -100,asked = -1;
+	int			h;
+
+	if (mpreplay)
+		return 0;
+	_fstrcpy ((char far *)name,snapfile);
+	if (_dos_creat (name,0,&h))
+		return 0;
+	snaph = h;
+	snapgetting = 1;
+	snapgot = 0;
+	snapstep = -1;
+	while (snapgetting == 1 && TimeCount - began < 30*70)
+	{
+		Pump ();
+		if (TimeCount - last >= 18 || (snapgot != asked && TimeCount - last >= 2))
+		{							// ask: from what it has (a lost piece is asked
+			last = TimeCount;		// for again)
+			asked = snapgot;
+			Head (19);
+			PutL (mppkt+4,0xffffffffl);
+			PutL (mppkt+8,snapgot);
+			NetSend (mppkt,12);
+		}
+		if (snapgot && TimeCount - said >= 35)
+		{
+			said = TimeCount;
+			Fmt (s,fgot,snapgot/1024,snaptotal/1024);
+			Say ((char far *)s);
+		}
+		if (Keyboard[sc_Escape])
+			break;
+	}
+	_dos_close (snaph);
+	snaph = -1;
+	h = snapgetting;
+	snapgetting = 0;
+	if (h != 2 || _dos_open (name,O_RDONLY,&h))
+		return 0;
+	if (!SnapHead (h,hd) || hd->step != snapstep)
+	{
+		_dos_close (h);
+		return 0;
+	}
+	snaph = h;
+	return 1;
+}
+
+//
+// SNAPTEST n (with REPLAY): the snapshot at the end of step n, the floor set
+// up again from nothing, the snapshot laid over it -- and the game goes on.
+// If the list above misses anything, the sums after differ from a plain
+// replay's
+//
+static void SnapTest (void)
+{
+	static char far fok[] = "snaptest: step %ld saved and loaded (%u regions)\n",
+		far fbad[] = "snaptest: step %ld FAILED (%d)\n";
+	snaphead_t	hd;
+	char		name[16];
+	int			h,ok = 0;
+
+	_fstrcpy ((char far *)name,snapfile);
+	if (!_dos_creat (name,0,&h))
+	{
+		ok = SnapWrite (h,mpplayed) ? 1 : -1;
+		_dos_close (h);
+	}
+	if (ok == 1)
+	{
+		ClearMemory ();				// the floor, from nothing
+		SetupGameLevel ();
+		MPSpawn (mpstart+4);
+		ok = -2;
+		if (!_dos_open (name,O_RDONLY,&h))
+		{
+			ok = SnapHead (h,&hd) && hd.step == mpplayed && SnapRead (h) ? 1 : -3;
+			_dos_close (h);
+		}
+		PM_CheckMainMem ();
+	}
+	if (ok == 1)
+		mprintf (fok,mpplayed,(unsigned)SNAPREGS);
+	else
+		mprintf (fbad,mpplayed,ok);
+}
+
 static void NetLoop (void)
 {
 	static char far leave[] = "Leave the game?  Y or N";
@@ -3229,10 +3589,14 @@ static void NetLoop (void)
 
 	playstate = TimeCount = lasttimecount = 0;
 	frameon = 0;
-	running = false;
-	anglefrac = 0;
+	if (!mpsnapped)					// a floor's start: as id's; a snapshot keeps
+	{								// them as the game had them
+		running = false;
+		anglefrac = 0;
+		memset (buttonstate,0,sizeof(buttonstate));
+	}
+	mpsnapped = 0;
 	facecount = 0;
-	memset (buttonstate,0,sizeof(buttonstate));
 	ClearPaletteShifts ();
 	mpred = 0;
 	Redrawn ();						// DrawPlayScreen has just drawn the border
@@ -3323,6 +3687,10 @@ static void NetLoop (void)
 			if (!mpred)				// dead: the tint holds (DeadTint)
 				UpdatePaletteShifts ();
 			gamestate.TimeCount += tics;
+			if (mpsnaptest && mpplayed == mpsnaptest && !playstate)
+				SnapTest ();		// REPLAY ... SNAPTEST n: the snapshot, proved
+			if (mpplayed == snapwant && !playstate)
+				SnapServe ();		// the server asked for one at this step
 			if (mpcatching)
 			{
 				mpcaught++;
@@ -3795,7 +4163,8 @@ void MPNetGame (void)
 	static char far wprof[] = "profile";
 	char	far *why;
 	long	last = -100, began;
-	int		i;
+	int		i,snapped;
+	snaphead_t	hd;
 
 	if (!mpname[0])
 		_fstrcpy (mpname,defname);
@@ -3805,6 +4174,7 @@ void MPNetGame (void)
 
 		if (!ReplayOpen ())
 			NetQuit (cant);
+		replayfast = mpfast;		// FAST: 8 times, from the start
 		while (mpstate < 2 && mpstate != 3)
 			Pump ();
 	}
@@ -3864,6 +4234,13 @@ void MPNetGame (void)
 	godmode = false;
 	demoplayback = false;
 	Init (mpstart[0]);
+	snapped = SnapFetch (&hd);		// a game going on: start where it is, not at
+	if (snapped)					// its first step (2026-10-17)
+	{
+		gamestate.episode = hd.episode;
+		gamestate.mapon = hd.mapon;
+		gamestate.difficulty = hd.difficulty;
+	}
 	VW_FadeOut ();
 	SETFONTCOLOR(0,15);
 	DrawPlayScreen ();
@@ -3871,6 +4248,19 @@ void MPNetGame (void)
 	startgame = false;
 	SetupGameLevel ();
 	MPSpawn (mpstart+4);
+	if (snapped)
+	{
+		static char far bad[] = "The game from the server would not load";
+
+		if (!SnapRead (snaph))
+			NetQuit (bad);
+		_dos_close (snaph);
+		snaph = -1;
+		mpplayed = mphave = mpjoinstep = hd.step;
+		mpsnapped = 1;
+		for (i=0;i<7;i++)
+			shown[i] = -1;			// the status bar, from the snapshot's numbers
+	}
 	StartMusic ();
 	PM_CheckMainMem ();
 	fizzlein = true;
