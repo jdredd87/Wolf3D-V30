@@ -79,6 +79,7 @@ var
   HaveNet: Boolean;           { WOLF3DM.EXE is here }
   NetPage: Boolean;           { M: the network game's page is showing }
   NetFind: Boolean;           { F: the game finds the server (NET FIND) }
+  NetWatch: Boolean;          { W: join to watch, not to play (NET WATCH) }
   NetIp: string[15];          { the server, a.b.c.d ('' until typed) }
   NetPort: Word;
   NetName: string[16];
@@ -246,20 +247,21 @@ begin
 end;
 
 function NetLine: string;
-var t: string;
+var t, w: string;
 begin
   Str(NetPort, t);
+  if NetWatch then w := ' WATCH' else w := '';     { W: to watch (NET WATCH) }
   if NetFind or (NetIp = '') then         { the game finds one (NET FIND) }
   begin
     if NetName = '' then
-      NetLine := NetExe + ' NET FIND PORT ' + t + NetArgs
+      NetLine := NetExe + ' NET FIND PORT ' + t + w + NetArgs
     else
-      NetLine := NetExe + ' NET FIND PORT ' + t + ' NAME ' + NetName + NetArgs;
+      NetLine := NetExe + ' NET FIND PORT ' + t + ' NAME ' + NetName + w + NetArgs;
   end
   else if NetName = '' then
-    NetLine := NetExe + ' NET ' + NetIp + ' PORT ' + t + NetArgs
+    NetLine := NetExe + ' NET ' + NetIp + ' PORT ' + t + w + NetArgs
   else
-    NetLine := NetExe + ' NET ' + NetIp + ' PORT ' + t + ' NAME ' + NetName + NetArgs;
+    NetLine := NetExe + ' NET ' + NetIp + ' PORT ' + t + ' NAME ' + NetName + w + NetArgs;
 end;
 
 { Type a value on the line: it starts as cur, Backspace takes a character
@@ -392,7 +394,7 @@ begin
   WriteLn('  Picture:', p);
   WriteLn('    A  lowest detail (the fastest)    N  full detail    +/-  window size');
   WriteLn;
-  WriteLn('    J  join the game     M or Esc  back');
+  WriteLn('    J  join the game     W  watch it (1-4 pick whose view)     M or Esc  back');
   WriteLn;
   WriteLn('  ', NetLine);
   WriteLn;
@@ -623,10 +625,12 @@ begin
           '-', '_':
             if ViewSz = 0 then ViewSz := 15
             else if ViewSz > 4 then Dec(ViewSz);
-          'J', #13, 'F':
+          'J', #13, 'F', 'W':
             begin                           { no server yet, or F: the game finds one
-                                              (NET FIND, 2026-10-17) and remembers it }
+                                              (NET FIND, 2026-10-17) and remembers it;
+                                              W: watch, not play (NET WATCH) }
               NetFind := (c = 'F') or (NetIp = '');
+              NetWatch := c = 'W';
               SaveCfg;
               SaveNet;
               WriteRun(False);

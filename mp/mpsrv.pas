@@ -53,6 +53,8 @@ const
   CAUGHT_UP = 4;
   NOBODY = $FFFFFFFF;
   MAXP = 4;
+  WATCHN = 4;                     { watchers (NET WATCH, 2026-10-17): slots 4-7 }
+  LASTSLOT = MAXP + WATCHN - 1;
   ROWB = 12;                      { a step as stored: 4 players x 3, always }
   RINGN = 4096;                   { the newest steps, in memory }
   SUMBLK = 2048;                  { checksums: one per 50 steps, blocks of these }
@@ -73,6 +75,7 @@ type
   TName = string[16];
   TSlot = record
     Used, Bot: Boolean;
+    Watch: Boolean;              { a watcher: sent every step, in none }
     IP: TIP; Mac: TMac; Port: Word;
     Name: TName;
     Build: LongWord;
@@ -120,7 +123,7 @@ var
   DropAfter: LongInt;            { ticks }
   { the game }
   Playing, Paused: Boolean;
-  Slots: array[0..MAXP - 1] of TSlot;
+  Slots: array[0..LASTSLOT] of TSlot;
   Newest: LongInt;               { the newest step made; -1 none }
   NextStep, StartedAt, NextStart, NextNames, NextPausedT: LongInt;
   Ring: ^TRing;
@@ -671,8 +674,8 @@ begin
 end;
 
 var
-  SentTo: array[0..MAXP - 1] of LongInt;     { debug: sends a slot, and the }
-  LastDst: array[0..MAXP - 1] of Word;       { port the last went to }
+  SentTo: array[0..LASTSLOT] of LongInt;     { debug: sends a slot, and the }
+  LastDst: array[0..LASTSLOT] of Word;       { port the last went to }
 
 procedure SendTo(I: Integer; Len: Word);
 begin
@@ -729,6 +732,11 @@ end;
 
 function Who(I: Integer): ShortString;
 begin
+  if I >= MAXP then
+  begin
+    Who := 'W' + I2S(I - MAXP + 1) + ' ' + Slots[I].Name;
+    Exit;
+  end;
   if Slots[I].Used then Who := 'P' + I2S(I + 1) + ' ' + Slots[I].Name
   else Who := 'P' + I2S(I + 1);
 end;
@@ -736,6 +744,12 @@ end;
 function IsPerson(I: Integer): Boolean;
 begin
   IsPerson := Slots[I].Used and not Slots[I].Bot;
+end;
+
+{ a person or a watcher: whoever is sent the steps, the names, BYE }
+function IsReceiver(I: Integer): Boolean;
+begin
+  IsReceiver := Slots[I].Used and not Slots[I].Bot;
 end;
 
 function AnyPeople: Boolean;
@@ -750,8 +764,8 @@ function SlotOf: Integer;        { the person whose address sent Rx; -1 none }
 var I: Integer;
 begin
   SlotOf := -1;
-  for I := 0 to Players - 1 do
-    if IsPerson(I) and SameIP(Slots[I].IP, SnFromIP) and (Slots[I].Port = SnFromPort) then
+  for I := 0 to LASTSLOT do
+    if IsReceiver(I) and SameIP(Slots[I].IP, SnFromIP) and (Slots[I].Port = SnFromPort) then
     begin
       SlotOf := I;
       Exit;
@@ -858,8 +872,13 @@ begin
 end;
 
 procedure GameOver(const Why: ShortString);
-var T: LongInt;
+var T: LongInt; I, K: Integer;
 begin
+  for K := 1 to 3 do                   { the watchers: the game they watched is over }
+    for I := MAXP to LASTSLOT do
+      if Slots[I].Used then SendTo(I, ByeLen(I, BYE_END, ''));
+  for I := MAXP to LASTSLOT do
+    Slots[I].Used := False;
   T := Ticks - StartedAt;
   if T <= 0 then T := 1;
   Log('game over, ' + Why + ': ' + I2S(Newest + 1) + ' steps in ' + Secs(T) + ' s');
@@ -922,6 +941,46 @@ begin
   NextNames := 0;
 end;
 
+{ a machine that asked to watch (HELLO's slot FEh): a number of its own, 4-7;
+  it is sent every step, and is in none of them (2026-10-17) }
+procedure JoinWatch(const AName: TName; ABuild: LongWord; var I: Integer);
+var
+  K, F: Integer;
+begin
+  I := -1;
+  F := -1;
+  for K := MAXP to LASTSLOT do
+    if (F < 0) and not Slots[K].Used then F := K;
+  if F < 0 then
+  begin
+    Log('refused ' + AName + ' from ' + IPStr(SnFromIP) + ': watchers are full');
+    SendFrom(ByeLen($FF, BYE_FULL, ''));
+    Exit;
+  end;
+  for K := 0 to Players - 1 do
+    if IsPerson(K) and (Slots[K].Build <> ABuild) then
+    begin
+      Log('refused ' + AName + ': build ' + HexStr(ABuild, 8) + ', not ' + HexStr(Slots[K].Build, 8));
+      SendFrom(ByeLen($FF, BYE_BUILD, ''));
+      Exit;
+    end;
+  I := F;
+  FillChar(Slots[I], SizeOf(TSlot), 0);
+  with Slots[I] do
+  begin
+    Used := True;
+    Watch := True;
+    IP := SnFromIP; Mac := SnFromMac; Port := SnFromPort;
+    Name := AName;
+    Build := ABuild;
+    Have := NOBODY;
+    Heard := Ticks;
+    SentFirst := -1; SentLast := -1;
+  end;
+  Log(Who(I) + ' watches from ' + IPStr(SnFromIP) + ':' + I2S(SnFromPort) + ' (build '
+      + HexStr(ABuild, 8) + ')');
+end;
+
 function Banned_(const A: TIP): Boolean;
 var K: Integer;
 begin
@@ -951,6 +1010,8 @@ begin
     end;
   if Playing then Tx[4] := 1 else Tx[4] := 0;
   Tx[5] := Players; Tx[6] := People; Tx[7] := Bots; Tx[8] := 0;
+  for I := MAXP to LASTSLOT do
+    if Slots[I].Used then Inc(Tx[8]);
   Tx[9] := MapNum; Tx[10] := Skill; Tx[11] := Rules; Tx[12] := 0; Tx[13] := 0;
   PutL(14, Newest + 1);
   PutL(18, B);
@@ -1019,7 +1080,8 @@ begin
         end;
         if I < 0 then
         begin
-          Join(Name, Build, I);
+          if Rx[24] = $FE then JoinWatch(Name, Build, I)    { NET WATCH }
+          else Join(Name, Build, I);
           if I < 0 then Exit;
         end;
         Head(WELCOME);
@@ -1037,6 +1099,28 @@ begin
           Exit;
         end;
         if RxLen < 14 then Exit;
+        if Slots[I].Watch then           { a watcher: what it holds and has played }
+        begin
+          if not Slots[I].Ready then
+          begin
+            Slots[I].Ready := True;
+            if Playing then
+              Log(Who(I) + ' has loaded the level: catching up from step 0 of ' + I2S(Newest + 1))
+            else
+              Log(Who(I) + ' has loaded the level');
+          end;
+          Have := GetL(10);
+          if (Have <> NOBODY) and ((Slots[I].Have = NOBODY) or (Have > Slots[I].Have)) then
+            Slots[I].Have := Have;
+          if RxLen >= 18 then
+          begin
+            Played := GetL(14);
+            Slots[I].HasPlayed := Played <> NOBODY;
+            Slots[I].Played := Played;
+          end;
+          Inc(Slots[I].Inputs);
+          Exit;
+        end;
         if not Slots[I].Ready then
         begin
           Slots[I].Ready := True;
@@ -1106,7 +1190,7 @@ begin
       if I >= 0 then Leave(I, 'left', -1, '');
     CHAT:
       begin
-        if (I < 0) or (RxLen < 7) then Exit;
+        if (I < 0) or (I >= MAXP) or (RxLen < 7) then Exit;
         N := Rx[6];
         if 7 + N > RxLen then N := RxLen - 7;
         Text := '';
@@ -1116,8 +1200,8 @@ begin
         Tx[4] := I; Tx[5] := Rx[5]; Tx[6] := N;
         for K := 0 to N - 1 do Tx[7 + K] := Rx[7 + K];
         L := 7 + N;
-        for K := 0 to Players - 1 do
-          if IsPerson(K) then SendTo(K, L);
+        for K := 0 to LASTSLOT do
+          if IsReceiver(K) then SendTo(K, L);
       end;
   end;
 end;
@@ -1172,9 +1256,9 @@ begin
   end;
   HistAdd(Row);
   Now := Ticks;
-  for I := 0 to Players - 1 do
+  for I := 0 to LASTSLOT do
   begin
-    if not IsPerson(I) or not Slots[I].Ready then Continue;
+    if not IsReceiver(I) or not Slots[I].Ready then Continue;
     if Slots[I].Have = NOBODY then First := 0 else First := Slots[I].Have + 1;
     Last := First + STEPS_MAX - 1;
     if Last > Newest then Last := Newest;
@@ -1312,6 +1396,9 @@ begin
   end
   else
     Say('waiting for players; ' + Settings);
+  for I := MAXP to LASTSLOT do
+    if Slots[I].Used then
+      Say('  ' + Pad(Who(I), 20) + ' watching, has step ' + HaveStr(I));
   for I := 0 to Players - 1 do
     if not Slots[I].Used then Say('  P' + I2S(I + 1) + '  (empty)')
     else if Slots[I].Bot then Say('  P' + I2S(I + 1) + '  ' + Pad(Slots[I].Name, 16) + ' the server''s bot')
@@ -1344,8 +1431,8 @@ begin
   for K := 1 to N do Tx[6 + K] := Ord(Text[K]);
   L := 7 + N;
   for K := 1 to 3 do
-    for I := 0 to Players - 1 do
-      if IsPerson(I) then SendTo(I, L);
+    for I := 0 to LASTSLOT do
+      if IsReceiver(I) then SendTo(I, L);
   Log('SERVER says: ' + Copy(Text, 1, N));
 end;
 
@@ -1363,8 +1450,8 @@ begin
     NextStep := Ticks;
     Head(PAUSEDP); Tx[4] := 0;
     for K := 1 to 3 do
-      for I := 0 to Players - 1 do
-        if IsPerson(I) then SendTo(I, 5);
+      for I := 0 to LASTSLOT do
+        if IsReceiver(I) then SendTo(I, 5);
     Log('going again from the console at step ' + I2S(Newest + 1));
   end;
 end;
@@ -1687,14 +1774,14 @@ begin
     else
     begin
       for K := 1 to 3 do
-        for I := 0 to Players - 1 do
-          if IsPerson(I) then
+        for I := 0 to LASTSLOT do
+          if IsReceiver(I) then
           begin
             L := ByeLen(I, BYE_END, '');
             SendTo(I, L);
           end;
-      for I := 0 to Players - 1 do
-        if IsPerson(I) then Slots[I].Used := False;
+      for I := 0 to LASTSLOT do
+        if IsReceiver(I) then Slots[I].Used := False;
       if NW > 1 then GameOver('ended from the console (' + RestFrom(Line, 1) + ')')
       else GameOver('ended from the console');
       if StopNow then DoLine := False;
@@ -2055,8 +2142,8 @@ var I, K: Integer; L: Word;
 begin
   for K := 1 to 5 do
   begin
-    for I := 0 to Players - 1 do
-      if IsPerson(I) then
+    for I := 0 to LASTSLOT do
+      if IsReceiver(I) then
       begin
         L := ByeLen(I, BYE_END, '');
         SendTo(I, L);
@@ -2152,7 +2239,7 @@ begin
   Desyncs := 0; SentN := 0; RecvN := 0;
   Typed := ''; StopNow := False; Replying := False; LastSpin := -1;
   for I := 0 to MAXSUMBLK - 1 do SumBlks[I] := nil;
-  for I := 0 to MAXP - 1 do Slots[I].Used := False;
+  for I := 0 to LASTSLOT do Slots[I].Used := False;
 
   if not SnReadConfig then
   begin
@@ -2266,18 +2353,18 @@ begin
     if T >= NextStart then
     begin
       NextStart := T + T_SEC div 2;
-      for I := 0 to Players - 1 do
-        if IsPerson(I) and not Slots[I].Ready then SendTo(I, StartLen);
+      for I := 0 to LASTSLOT do
+        if IsReceiver(I) and not Slots[I].Ready then SendTo(I, StartLen);
     end;
     if T >= NextNames then
     begin
       NextNames := T + 2 * T_SEC;
       L := NamesLen;
-      for I := 0 to Players - 1 do
-        if IsPerson(I) then SendTo(I, L);
+      for I := 0 to LASTSLOT do
+        if IsReceiver(I) then SendTo(I, L);
     end;
-    for I := 0 to Players - 1 do
-      if IsPerson(I) then
+    for I := 0 to LASTSLOT do
+      if IsReceiver(I) then
         if Slots[I].Ready and (T - Slots[I].Heard > DropAfter) then
           Leave(I, 'was not heard from for ' + I2S((T - Slots[I].Heard) div T_SEC) + ' s: its slot is free',
                 BYE_DROPPED, '')
@@ -2287,8 +2374,8 @@ begin
     begin
       NextPausedT := T + T_SEC div 2;
       Head(PAUSEDP); Tx[4] := 1;
-      for I := 0 to Players - 1 do
-        if IsPerson(I) then SendTo(I, 5);
+      for I := 0 to LASTSLOT do
+        if IsReceiver(I) then SendTo(I, 5);
     end;
     if Playing and not Paused then
       while (Ticks - NextStep >= 0) and Playing and not StopNow do
@@ -2297,10 +2384,10 @@ begin
         begin
           Log('the history is full: ' + I2S(Newest + 1) + ' steps');
           for K := 1 to 3 do
-            for I := 0 to Players - 1 do
-              if IsPerson(I) then SendTo(I, ByeLen(I, BYE_END, ''));
-          for I := 0 to Players - 1 do
-            if IsPerson(I) then Slots[I].Used := False;
+            for I := 0 to LASTSLOT do
+              if IsReceiver(I) then SendTo(I, ByeLen(I, BYE_END, ''));
+          for I := 0 to LASTSLOT do
+            if IsReceiver(I) then Slots[I].Used := False;
           GameOver('the history is full');
           Break;
         end;

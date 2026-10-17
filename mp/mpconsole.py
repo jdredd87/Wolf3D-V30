@@ -391,5 +391,9 @@ class Console:
                 self.say("  P%d  %-16s %s:%d  %s, has step %s%s, %d inputs, heard %.1f s ago"
                          % (i + 1, sl.name, sl.addr[0], sl.addr[1], state, have, behind, sl.inputs,
                             now - sl.heard))
+        for k, w in enumerate(getattr(s, "watchers", [])):     # NET WATCH (2026-10-17)
+            if w:
+                self.say("  W%d  %-16s %s:%d  watching, has step %s" % (k + 1, w.name, w.addr[0], w.addr[1],
+                         "none" if w.have == P.NOBODY else w.have))
         if self.pending:
             self.say("next game: " + ", ".join("%s %s" % kv for kv in sorted(self.pending.items())))
