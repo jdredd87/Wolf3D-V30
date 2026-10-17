@@ -60,7 +60,7 @@ var
   ViewSz: Integer;            { 4..19, or 0: the game's own setting }
   HaveBsp: Boolean;           { WOLF3DB.EXE is here }
   Plain8086: Boolean;         { an 8086/8088, and WOLF3D8.EXE is here }
-  Shareware: Boolean;         { *.WL1 and no *.WL6 here, and WOLF3D1.EXE }
+  Shareware: Boolean;         { *.WL1 and no *.WL6 here: WOLF3D1, WOLF3DM1 }
   Force8086: Boolean;         { /8086 }
   UseBsp: Boolean;            { T: run it rather than WOLF3DV }
   BspTree: Boolean;           { K: BSP, the tree rather than id's rays }
@@ -142,8 +142,7 @@ begin
     8086's build of the same game (2026-10-16) }
   { the shareware 1.4 (*.WL1, and no *.WL6 here) is WOLF3D1, or WOLF3D18 on
     an 8086/8088 (2026-10-16); WOLF3DB needs the registered data }
-  Shareware := (FSearch('VSWAP.WL6', '') = '') and (FSearch('VSWAP.WL1', '') <> '')
-               and (FSearch('WOLF3D1.EXE', '') <> '');
+  Shareware := (FSearch('VSWAP.WL6', '') = '') and (FSearch('VSWAP.WL1', '') <> '');
   if Shareware then
     Plain8086 := (Force8086 or not Has186) and (FSearch('WOLF3D18.EXE', '') <> '')
   else
