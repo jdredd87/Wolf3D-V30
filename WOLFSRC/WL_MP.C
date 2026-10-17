@@ -106,6 +106,11 @@ int		far	mprules;			// the server's rules (MULTIPLAYER.md):
 #define RULE_NOENEMIES	4		//   no enemies spawned
 #define RULE_RESPAWN(r)	(((r) >> 3) & 31)	//   bits 3-7: items come back after
 										//   5 s times this (0: never)
+int		far	mprules2;			// and more (2026-10-17: START's last byte):
+#define RULE2_TEAM		1		//   team deathmatch: Gold (P1, P3) against Silver
+								//   (P2, P4) -- no team hurts its own, a team's
+								//   frags are its score
+#define TEAM(i)			((i) & 1)
 long	far	mptook[MAXPLAYERS];	// damage each player has been dealt (the
 								// report: god mode hides it from health)
 
@@ -310,6 +315,8 @@ static int Spr (int i, int ss)
 		mpbjbase = PMSoundStart - PMSpriteStart - 4*49;
 	if (mpbjbase < 0)
 		return ss;
+	if (mprules2 & RULE2_TEAM)		// a team's colour: Gold P4's, Silver P1's
+		return mpbjbase + (TEAM (i) ? 0 : 3)*49 + (ss - SPR_SS_S_1);
 	return mpbjbase + (i & 3)*49 + (ss - SPR_SS_S_1);
 }
 
@@ -575,7 +582,21 @@ static boolean InAim (objtype *from, objtype *to, long *dist)
 // passes through to what is behind
 static boolean Friend (objtype *ob)
 {
-	return ob->obclass == playerobj && (mprules & (RULE_DM|RULE_NOFF)) == RULE_NOFF;
+	if (ob->obclass != playerobj)
+		return false;
+	if (mprules2 & RULE2_TEAM)		// teams: one's own team
+		return TEAM (Index (ob)) == TEAM (mpcur);
+	return (mprules & (RULE_DM|RULE_NOFF)) == RULE_NOFF;
+}
+
+// a team's score: its players' frags
+static int Team (int t)
+{
+	int	i,n = 0;
+
+	for (i=t;i<mpplayers;i+=2)
+		n += mpctx[i].frags;
+	return n;
 }
 
 // A shot or a stab that found its target: an enemy takes it as id's code
@@ -1616,6 +1637,7 @@ static void Take (byte far *d, unsigned len)
 			_fmemset (mpstart,0,sizeof(mpstart));
 			_fmemcpy (mpstart,d+4,4+4*n);
 			mpstart[0] = n;
+			mprules2 = len > 8 + 4*d[4] ? d[8 + 4*d[4]] : 0;	// after the starts
 			mpstate = 2;
 		}
 		break;
@@ -2649,6 +2671,7 @@ static void ScoreBoard (int lh)
 {
 	static char far hdm[] = "DEATHMATCH", far hco[] = "CO-OP";
 	static char far flim[] = "%Fs to %u", far ftime[] = "%s  %u:%02u left";
+	static char far fteam[] = "GOLD %d  SILVER %d";
 	static char far hf[] = "FRAGS", far hs[] = "SCORE", far hd[] = "DIED";
 	static char far fn[] = "%ld";
 	char		t[64], u[64];
@@ -2681,6 +2704,8 @@ static void ScoreBoard (int lh)
 		Fmt (u,mprules & RULE_DM ? hdm : hco);
 		if ((mprules & RULE_DM) && mpfraglimit)
 			Fmt (u,flim,(char far *)(mprules & RULE_DM ? hdm : hco),mpfraglimit);
+		if (mprules2 & RULE2_TEAM)
+			Fmt (u,fteam,Team (0),Team (1));
 		if (mptimelimit && (mprules & RULE_DM))
 		{
 			tc = (long)mptimelimit*60*70 - (mplocal ? mpctx[0].gs.TimeCount : gamestate.TimeCount);
@@ -2998,6 +3023,21 @@ static void Pump (void)
 	}
 }
 
+// a frag limit reached: a player's, or a team's
+static int AtLimit (void)
+{
+	int	i;
+
+	if (!mpfraglimit)
+		return 0;
+	if (mprules2 & RULE2_TEAM)
+		return Team (0) >= mpfraglimit || Team (1) >= mpfraglimit;
+	for (i=0;i<mpplayers;i++)
+		if (mpctx[i].frags >= mpfraglimit)
+			return 1;
+	return 0;
+}
+
 // the newest step there is to play: held -- or, replaying, held and due
 static long Due (void)
 {
@@ -3124,12 +3164,11 @@ static void NetLoop (void)
 			}
 			if (!playstate && (mprules & RULE_DM))
 			{
-				for (i=0;i<mpplayers;i++)
-					if (mpfraglimit && mpctx[i].frags >= mpfraglimit)
-					{
-						playstate = ex_completed;
-						mpwhy = 1;
-					}
+				if (AtLimit ())
+				{
+					playstate = ex_completed;
+					mpwhy = 1;
+				}
 				if (!playstate && mptimelimit
 				&& gamestate.TimeCount >= (long)mptimelimit*60*70)
 				{
@@ -3363,7 +3402,16 @@ static void TallyDraw (int over)
 	CenterWindow (38,12);			// the small font: about 7 pixels a letter
 	SETFONTCOLOR (0,15);
 	PrintY = WindowY + 4;
-	US_CPrint (mpwhy == 1 ? t1 : mpwhy == 2 ? t2 : mpwhy == 3 ? t3 : t0);
+	if (mprules2 & RULE2_TEAM)
+	{
+		static char far ft[] = "GOLD %d  SILVER %d";
+		char	t[32];
+
+		Fmt (t,ft,Team (0),Team (1));
+		US_CPrint ((char far *)t);
+	}
+	else
+		US_CPrint (mpwhy == 1 ? t1 : mpwhy == 2 ? t2 : mpwhy == 3 ? t3 : t0);
 	SETFONTCOLOR (0,15);
 	Col (78,20,h1);
 	Col (122,20,h2);
@@ -3624,6 +3672,9 @@ void MPNetGame (void)
 		mpringstep[i] = 0xffff;
 
 	mprules = mpstart[3];
+	if (mprules2 & RULE2_TEAM)		// names in the team's colour: Gold, Silver
+		for (i=0;i<MAXPLAYERS;i++)
+			pcol[i] = TEAM (i) ? 7 : 14;
 	mpgoto = -1;
 	mppaused = 0;
 	NewGame (mpstart[2],MPEPISODE(mpstart[1]));
