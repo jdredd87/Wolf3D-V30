@@ -1960,10 +1960,10 @@ begin
 {$IFNDEF WINDOWS}
   WriteLn('  --noxms          keep the game''s history in MPSRV.HIS on the disk, not in');
   WriteLn('                   XMS (it goes there anyway when there is no XMS)');
+{$ENDIF}
   WriteLn('  --txgap US       microseconds to wait after each packet sent      (1000)');
   WriteLn('                   -- a PicoMEM card''s WiFi garbles packets sent back to');
-  WriteLn('                   back; 0 for none, on a card that does not');
-{$ENDIF}
+  WriteLn('                   back; 0 for none, when no player has one');
   WriteLn;
   WriteLn('THE CONSOLE -- type a command and Enter while it runs (help lists them all),');
 {$IFDEF WINDOWS}
@@ -2174,11 +2174,14 @@ begin
   if (GapUs > 0) and (SnGapLoops = 0) then SnGapLoops := 1;
 {$ELSE}
   Spins := 0;
-  GapUs := 0;                                 { Windows sends a frame at a time }
+  GapUs := Arg('--txgap', 1000);              { the same pause, on the performance counter: a
+  SnGapUs := GapUs;                             PicoMEM joining late lost its catch-up to
+                                                frames sent back to back (2026-10-16) }
 {$ENDIF}
   ResetGame;
 {$IFDEF WINDOWS}
   Log('MPSRVW on ' + IPStr(SnMyIP) + ' (Windows)');
+  Log('after each frame a pause of ' + I2S(GapUs) + ' us (--txgap)');
   Log('the history in memory: room for ' + I2S(HistCapacity) + ' steps');
 {$ELSE}
   Log('MPSRV on ' + IPStr(SnMyIP) + ' (' + SnCfgUsed + ', packet driver at ' + HexStr(SnVec, 2) + 'h)');

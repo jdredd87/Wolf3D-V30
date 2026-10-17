@@ -5,9 +5,11 @@
   driver), over WinSock UDP sockets, so mp/mpsrv.pas is one source for both
   machines.  Two sockets: the game's on every address (UDP 31992 by default),
   and the console's on 127.0.0.1 only (31999), as mp/mpserver.py's is --
-  nothing off this PC can reach it.  Windows checks UDP checksums itself and
-  sends a frame at a time, so the DOS unit's checksum test and its pause
-  after each frame have nothing to do here. }
+  nothing off this PC can reach it.  Windows checks UDP checksums itself, so
+  the DOS unit's checksum test has nothing to do here.  The pause after each
+  frame does (SnGapUs, --txgap, 2026-10-16): a PicoMEM card's WiFi garbles
+  frames that arrive back to back, wherever they come from -- a P3 joining
+  late got 1,236 of 5,000 frames from this server and could not use one. }
 
 unit WinNet;
 
@@ -36,6 +38,7 @@ var
   SnTxRetried, SnRxBadSum: LongInt;
   SnLastDst  : Word;
   SnGapLoops : Word;
+  SnGapUs    : LongInt;          { microseconds to wait after each frame sent }
 
 function  SnReadConfig: Boolean;
 procedure SnSetPorts(Game, Ctl: Word);
@@ -255,6 +258,22 @@ begin
   SnWait := select(0, @R, nil, nil, @T) > 0;
 end;
 
+function WnQpc(var C: Int64): LongBool; stdcall; external 'kernel32.dll' name 'QueryPerformanceCounter';
+function WnQpf(var F: Int64): LongBool; stdcall; external 'kernel32.dll' name 'QueryPerformanceFrequency';
+
+{ SnGapUs microseconds, spun on the performance counter: Sleep's tick is
+  1-16 ms, far too coarse for a 1 ms pause. }
+procedure GapWait;
+var
+  F, T0, T: Int64;
+begin
+  WnQpf(F);
+  WnQpc(T0);
+  repeat
+    WnQpc(T);
+  until (T - T0) * 1000000 div F >= SnGapUs;
+end;
+
 function SnSendTo(const IP: TIP; const Mac: TMac; SrcPort, DstPort: Word;
                   var Data; Len: Word): Boolean;
 var
@@ -269,6 +288,7 @@ begin
   SnLastDst := DstPort;
   SnSendTo := sendto(S, @Data, Len, 0, @A, SizeOf(A)) = Len;
   if SnSendTo then Inc(SnTxFrames) else Inc(SnTxFail);
+  if SnGapUs > 0 then GapWait;
 end;
 
 function SnDropped: Word;
@@ -291,6 +311,6 @@ begin
   SnVec := 0;
   SnErr := '';
   SnRxFrames := 0; SnRxWrong := 0; SnTxFrames := 0; SnTxFail := 0; SnArpReplied := 0;
-  SnTxRetried := 0; SnRxBadSum := 0; SnLastDst := 0; SnGapLoops := 0;
+  SnTxRetried := 0; SnRxBadSum := 0; SnLastDst := 0; SnGapLoops := 0; SnGapUs := 0;
   FillChar(SnFromMac, SizeOf(SnFromMac), 0);
 end.

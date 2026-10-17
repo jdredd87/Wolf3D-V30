@@ -5,7 +5,7 @@
                           [--fraglimit N] [--timelimit MIN] [--itemrespawn SECS]
                           [--port 31992] [--bind 0.0.0.0] [--steps N] [--once]
                           [--drop-after 60] [--record M50.DEM] [--drop 0.0] [--quiet]
-                          [--control 31999]
+                          [--control 31999] [--txgap 1000]
 
 It keeps the clock and passes controls along; it knows nothing of the game.
 MULTIPLAYER.md, "Protocol, version 1", is what it speaks.
@@ -119,6 +119,10 @@ class Server:
         self.drop_after = arg("--drop-after", 60, float)
         self.record = arg("--record", "")
         self.drop = arg("--drop", 0.0, float)
+        # --txgap: microseconds to wait after each packet sent, as MPSRV's and
+        # MPSRVW's -- a PicoMEM card's WiFi garbles packets that arrive back to
+        # back, and a late joiner's catch-up is a burst of them (2026-10-16)
+        self.txgap = arg("--txgap", 1000, int) / 1e6
         self.silence = sorted(tuple(int(x) for x in w.split(":"))
                               for w in arg("--silence", "").split(",") if w)
         self.blackout = 0.0         # perf_counter() the outage ends at
@@ -176,6 +180,10 @@ class Server:
         except OSError:
             pass
         self.stats["sent"] += 1
+        if self.txgap:                      # spun: time.sleep is 1-16 ms on Windows
+            t = time.perf_counter() + self.txgap
+            while time.perf_counter() < t:
+                pass
 
     def slot_of(self, addr):
         for i, s in enumerate(self.slots):
