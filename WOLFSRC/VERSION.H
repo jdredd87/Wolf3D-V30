@@ -7,4 +7,5 @@
 //#define DEBCHECK
 #define CARMACIZED
 //#define UPLOAD
+#define NETGAME		// the multiplayer branch: WOLF3DM (WL_DEBUG.C, 2026-10-17)
 

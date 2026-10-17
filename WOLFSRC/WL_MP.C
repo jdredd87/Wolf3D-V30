@@ -2006,9 +2006,11 @@ keyboard and clock, and the network's ring from DOS (NetStart's early one).
 extern	byte	far netfrom[4];
 extern	int		far netany, far netearly;
 
-static byte far foundip[FINDMAX][4];
-static byte far foundinfo[FINDMAX][INFOLEN];
 static int far nfound;
+// the list lives in the step ring (mpring, 1,536 bytes): nothing is in it
+// before the game starts, and the 918 bytes of its own were the V30's last
+#define foundip(i)		((byte far *)mpring + (i)*(4+INFOLEN))
+#define foundinfo(i)	((byte far *)mpring + (i)*(4+INFOLEN) + 4)
 
 static void FindTake (byte far *d, unsigned len)
 {
@@ -2017,13 +2019,13 @@ static void FindTake (byte far *d, unsigned len)
 	if (len < 4+34 || d[0] != 'W' || d[1] != 'M' || d[2] != 1 || d[3] != 16)
 		return;
 	for (i=0;i<nfound;i++)
-		if (!_fmemcmp (foundip[i],netfrom,4))
+		if (!_fmemcmp (foundip(i),netfrom,4))
 			return;					// the same server again (three DISCOVERs)
 	if (nfound >= FINDMAX)
 		return;
-	_fmemcpy (foundip[nfound],netfrom,4);
-	_fmemset (foundinfo[nfound],0,INFOLEN);
-	_fmemcpy (foundinfo[nfound],d+4,len-4 > INFOLEN ? INFOLEN : len-4);
+	_fmemcpy (foundip(nfound),netfrom,4);
+	_fmemset (foundinfo(nfound),0,INFOLEN);
+	_fmemcpy (foundinfo(nfound),d+4,len-4 > INFOLEN ? INFOLEN : len-4);
 	nfound++;
 }
 
@@ -2075,7 +2077,7 @@ static void Find (void)
 	}
 	for (i=0;i<nfound;i++)
 	{
-		byte	far *f = foundinfo[i];
+		byte	far *f = foundinfo(i);
 		char	name[17], who[70];
 		unsigned long build = GetL (f+14);
 
@@ -2095,7 +2097,7 @@ static void Find (void)
 				_fmemcpy ((char far *)who+n,f+34+16*k,16);
 				who[n+16] = 0;
 			}
-		mprintf (line1,i+1,foundip[i][0],foundip[i][1],foundip[i][2],foundip[i][3],
+		mprintf (line1,i+1,foundip(i)[0],foundip(i)[1],foundip(i)[2],foundip(i)[3],
 			(char far *)name,f[7] & 1 ? dm : coop,f[7] & 4 ? noen : nothing,
 			f[5]/10+1,f[5]%10+1,f[0] ? play : wait,f[2]+f[3],f[1],
 			build && build != MPBUILD ? other : nothing);
@@ -2119,7 +2121,7 @@ static void Find (void)
 			}
 		}
 	}
-	_fmemcpy (mpserver,foundip[k],4);
+	_fmemcpy (mpserver,foundip(k),4);
 	mpcfg = 1;
 }
 
