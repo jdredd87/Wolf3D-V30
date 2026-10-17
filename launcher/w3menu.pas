@@ -11,6 +11,8 @@
   NOLOD (L: far walls at full detail).  Every other switch works with either.
   On a plain Intel 8086 or 8088 (no 80186 instructions) the version is
   WOLF3D8, when WOLF3D8.EXE is here: WOLF3DV and WOLF3DB refuse such a CPU.
+  With the shareware's *.WL1 files and no *.WL6 it is WOLF3D1 (WOLF3D18 on
+  an 8086/8088), the same game built for the shareware episode.
   P (or Enter) writes W3RUN.BAT -- the version and the switches -- and exits
   0, and PLAY.BAT runs that and comes back here; B does the same for the
   200-frame benchmark; Q or Esc exits 1, which ends PLAY.BAT.  So nothing
@@ -58,6 +60,7 @@ var
   ViewSz: Integer;            { 4..19, or 0: the game's own setting }
   HaveBsp: Boolean;           { WOLF3DB.EXE is here }
   Plain8086: Boolean;         { an 8086/8088, and WOLF3D8.EXE is here }
+  Shareware: Boolean;         { *.WL1 and no *.WL6 here, and WOLF3D1.EXE }
   Force8086: Boolean;         { /8086 }
   UseBsp: Boolean;            { T: run it rather than WOLF3DV }
   BspTree: Boolean;           { K: BSP, the tree rather than id's rays }
@@ -103,7 +106,11 @@ end;
 
 function Prog: string;
 begin
-  if Plain8086 then Prog := 'WOLF3D8'
+  if Shareware then
+  begin
+    if Plain8086 then Prog := 'WOLF3D18' else Prog := 'WOLF3D1';
+  end
+  else if Plain8086 then Prog := 'WOLF3D8'
   else if UseBsp and HaveBsp then Prog := 'WOLF3DB' else Prog := 'WOLF3DV';
 end;
 
@@ -133,8 +140,15 @@ begin
   BspNoLod := False;
   { WOLF3DV and WOLF3DB need the 80186 instructions; WOLF3D8 is the plain
     8086's build of the same game (2026-10-16) }
-  Plain8086 := (Force8086 or not Has186) and (FSearch('WOLF3D8.EXE', '') <> '');
-  HaveBsp := (FSearch('WOLF3DB.EXE', '') <> '') and not Plain8086;
+  { the shareware 1.4 (*.WL1, and no *.WL6 here) is WOLF3D1, or WOLF3D18 on
+    an 8086/8088 (2026-10-16); WOLF3DB needs the registered data }
+  Shareware := (FSearch('VSWAP.WL6', '') = '') and (FSearch('VSWAP.WL1', '') <> '')
+               and (FSearch('WOLF3D1.EXE', '') <> '');
+  if Shareware then
+    Plain8086 := (Force8086 or not Has186) and (FSearch('WOLF3D18.EXE', '') <> '')
+  else
+    Plain8086 := (Force8086 or not Has186) and (FSearch('WOLF3D8.EXE', '') <> '');
+  HaveBsp := (FSearch('WOLF3DB.EXE', '') <> '') and not Plain8086 and not Shareware;
   Assign(f, CfgName);
   {$I-} Reset(f); {$I+}
   if IOResult <> 0 then Exit;
@@ -210,7 +224,9 @@ begin
     if SwOn[i] then Write('X') else Write(' ');
     WriteLn('] ', Pad(SwName[i], 10), '  ', SwText[i]);
   end;
-  if Plain8086 then
+  if Shareware then
+    WriteLn('       version:   ', Prog, ', the shareware episode: id''s picture exactly')
+  else if Plain8086 then
     WriteLn('       version:   WOLF3D8, for this 8086/8088: id''s picture exactly')
   else if HaveBsp then
   begin
