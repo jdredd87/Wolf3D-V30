@@ -1,10 +1,11 @@
 WOLFENSTEIN 3-D FOR 8086-CLASS PCs  --  optimized by StevenC and Claude
 =======================================================================
-Version 1.5, 2026-10-16
+Version 1.6, 2026-10-16
 
 id Software's Wolfenstein 3-D, rebuilt from id's released source to run
 as fast as an 8086, 8088, V20 or V30 PC allows -- and faster on anything
-better.  Four programs:
+better -- for the registered game and, since 1.6, the free shareware
+episode.  Six programs:
 
     WOLF3DV.EXE   id's game and id's picture exactly, from faster code:
                   every build is checked against id's renderer over the
@@ -22,6 +23,14 @@ better.  Four programs:
                   rebuilt for the V20/V30 and 186 (id's WOLF3D.EXE needs
                   a 286) -- for comparing speeds.  The same picture as
                   WOLF3DV.
+    WOLF3D1.EXE   WOLF3DV for the SHAREWARE episode (the free *.WL1
+                  files of version 1.4): the same code with id's own
+                  shareware settings, id's picture exactly.
+    WOLF3D18.EXE  the same for a plain 8086 or 8088.
+
+WOLF3DV, WOLF3D8, WOLF3DB and WOLF3DO need the registered *.WL6 files;
+WOLF3D1 and WOLF3D18 need the shareware's *.WL1.  PLAY picks the right
+one by itself.
 
 On an NEC V30 (8086 class), demo 0 at full detail runs at 2.8 frames a
 second in id's code, 5.0 in WOLF3DV, 5.3 in WOLF3DB; the detail switches
@@ -42,6 +51,13 @@ FLATWALLS, a wall's artwork kept in memory while its plain twin is
 fetched.  WOLF3DV, WOLF3D8 and WOLF3DB were checked again over the
 whole attract loop.
 
+New in 1.6: the shareware episode.  WOLF3D1 and WOLF3D18 play the free
+shareware Wolfenstein 3-D 1.4 (Episode 1, "Escape from Wolfenstein", ten
+floors), checked against id's renderer built the same way: the attract
+loop, and generated demos on all ten floors.  WOLF3D1 runs the shareware's
+demo at 5.0 frames a second on an 8 MHz V30.  PLAY now runs in whatever
+folder it is started from (before, it always went to C:\WOLF3D).
+
 The network game -- up to four players, deathmatch or co-op, a server
 for DOS, Windows or Python -- is its own download, W3DMP.ZIP, on the
 same releases page; SETUP.md (in the repository) sets it up step by step.
@@ -49,13 +65,20 @@ same releases page; SETUP.md (in the repository) sets it up step by step.
 
 WHAT YOU NEED
 -------------
-* The game data from the REGISTERED Wolfenstein 3-D, version 1.4 -- the
-  *.WL6 files (VSWAP.WL6, VGAGRAPH.WL6, AUDIOT.WL6, GAMEMAPS.WL6 and the
-  rest).  None of it is in this package; it is id's and you need your own.
-  The shareware *.WL1 files will not work.
+* Wolfenstein 3-D's game data, version 1.4 -- none of it is in this
+  package; it is id's:
+    - the REGISTERED game's *.WL6 files (VSWAP.WL6, VGAGRAPH.WL6,
+      AUDIOT.WL6, GAMEMAPS.WL6 and the rest) for all six episodes, or
+    - the free SHAREWARE episode's *.WL1 files.  The shareware is free to
+      copy: it is 1WOLF14.ZIP, on most DOS game archives (for one,
+      https://www.dosgamesarchive.com/download/wolfenstein-3d).  Unzip it
+      and run its INSTALL: it puts the game's files in the folder you
+      choose.  On an 8086 or V30 it says the game needs a 286 and asks
+      whether to install anyway (id's game did; these builds do not).
 * An 8086 or better, VGA, DOS.  A coprocessor is not used.  On a plain
-  Intel 8086 or 8088, run WOLF3D8; WOLF3DV, WOLF3DB and WOLF3DO need the
-  80186 instructions a V20/V30, a 186 or a 286 has.
+  Intel 8086 or 8088, run WOLF3D8 (WOLF3D18 for the shareware);
+  WOLF3DV, WOLF3D1, WOLF3DB and WOLF3DO need the 80186 instructions a
+  V20/V30, a 186 or a 286 has.
 * The free conventional memory id's own game wants; any more than that
   becomes page cache, and fewer pauses.
 * XMS or EMS helps and is used if present (XMS first).
@@ -64,7 +87,7 @@ WHAT YOU NEED
 INSTALLING
 ----------
 Copy the files from this package into the directory that holds your
-*.WL6 files.  Nothing of id's is replaced.
+*.WL6 (or *.WL1) files.  Nothing of id's is replaced.
 
 
 PLAYING
@@ -73,6 +96,7 @@ PLAYING
                         size, then play
     WOLF3DV             the game, as id made it
     WOLF3DB             the faster version
+    WOLF3D1             the shareware episode
     WOLF3DV LOWDETAIL   ... with switches (any combination, either
                         version):
 

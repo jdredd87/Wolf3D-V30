@@ -41,6 +41,7 @@ build and run programs on a real DOS machine as if it were a test suite.
 |---|---|---|
 | `WOLF3DV.EXE` | `v30-8086` (default) | **id's game exactly**, as fast as it goes.  The default picture is id's, pixel for pixel; every speed-for-picture trade is a switch you turn on |
 | `WOLF3D8.EXE` | `v30-8086` | **the same, for a plain 8086/8088**: `WOLF3DV` with every 186 instruction spelled the 8086 way, built by `w3dbuild.py build8086` -- below |
+| `WOLF3D1.EXE`, `WOLF3D18.EXE` | `v30-8086` | **the same for the free shareware episode** (version 1.4's `*.WL1`), for a V20/V30 and up and for a plain 8086/8088: `w3dbuild.py buildwl1` / `buildwl18` -- below |
 | `WOLF3DB.EXE` | `bsp` | **the BSP version**: allowed to change the game a little for speed -- far walls drawn in less detail by default, or the whole world from a BSP tree instead of id's rays (`BSP`) -- [BSPNOTES.md](https://github.com/jdredd87/Wolf3D-V30/blob/bsp/BSPNOTES.md) on that branch |
 | `WOLF3DM.EXE` | `multiplayer` | **the network game**: everything `WOLF3DV` is, plus up to four players over UDP -- [MULTIPLAYER.md](https://github.com/jdredd87/Wolf3D-V30/blob/multiplayer/MULTIPLAYER.md) on that branch |
 
@@ -80,6 +81,24 @@ newer, use `WOLF3DV` all the same.  It is in the download since v1.5
 (2026-10-16), and the `PLAY` menu runs it by itself on an 8086 or 8088.
 Nobody here has an 8088 to run it on: if you have one, we would like to
 hear.
+
+**`WOLF3D1.EXE` plays the free shareware episode** (2026-10-16, in the
+download since v1.6), so nobody needs the registered game to try it.
+`WOLF3D18.EXE` is the same for a plain 8086/8088.  id's source builds the
+shareware with `UPLOAD` defined, but its `GFXV_WL1.H` describes an older
+shareware's graphics (556 chunks); 1.4's `VGAGRAPH.WL1` has 156.
+`mkgfxw14.py` writes `GFXV_W14.H` for it: the registered layout plus the
+12 pictures of the shareware's help screens, every picture's size checked
+against the data's own table.  The rest of 1.4's shareware data is laid
+out as the registered game's -- 288 sound chunks, 663 VSWAP pages whose 26
+missing digitized sounds are exactly the ones id's `UPLOAD` code leaves
+out, and ten floors byte for byte the registered Episode 1's.  Checked
+against id's renderer built the same way (`refsrc.py` with `UPLOAD`): the
+attract loop (view `987C8F2A`, screen `B5A49A73`) and 40 generated demos
+on the ten floors, both builds, on the 486; and on the V30, 5.0 frames a
+second.  `PLAY` picks `WOLF3D1` or `WOLF3D18` by itself in a folder with
+`*.WL1` and no `*.WL6`.  The shareware is free to copy (`1WOLF14.ZIP`,
+from any DOS game archive), but none of it is in this repository.
 
 ## Status
 

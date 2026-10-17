@@ -5,7 +5,7 @@
     python mkrelease.py
 
 The zip holds what a player copies beside their own *.WL6 files --
-WOLF3DV.EXE, WOLF3D8.EXE, WOLF3DB.EXE (the bsp branch's build) and WOLF3DO.EXE (id's
+WOLF3DV.EXE, WOLF3D8.EXE, WOLF3D1.EXE and WOLF3D18.EXE (the shareware), WOLF3DB.EXE (the bsp branch's build) and WOLF3DO.EXE (id's
 code, refsrc.py's build), both taken from stage/deploy, the menu
 (W3MENU.EXE, PLAY.BAT), the demo reel (SHOWCASE.BAT and SHOW?.BAT),
 release/README.TXT and id's LICENSE.DOC -- and none of id's game data.
@@ -53,6 +53,12 @@ def main():
     # printed below, to be matched with what the boxes run.  2026-10-14:
     # WOLF3D8.EXE, the 8086/8088 build of this same source
     others = [("WOLF3D8.EXE", open(EXE8, "rb").read())]
+    # 2026-10-16: the shareware 1.4 builds, w3dbuild.py buildwl1 and buildwl18
+    for name in ("WOLF3D1.EXE", "WOLF3D18.EXE"):
+        p = os.path.join(HERE, "WOLFSRC", name)
+        if not os.path.exists(p) or os.path.getmtime(p) < src_time:
+            sys.exit("%s is missing or older than the source: python w3dbuild.py buildwl1 / buildwl18" % name)
+        others.append((name, open(p, "rb").read()))
     for name in ("WOLF3DB.EXE", "WOLF3DO.EXE"):
         p = os.path.join(HERE, "stage", "deploy", name)
         if not os.path.exists(p):
