@@ -41,6 +41,7 @@ build and run programs on a real DOS machine as if it were a test suite.
 |---|---|---|
 | `WOLF3DV.EXE` | `v30-8086` (default) | **id's game exactly**, as fast as it goes.  The default picture is id's, pixel for pixel; every speed-for-picture trade is a switch you turn on |
 | `WOLF3D8.EXE` | `v30-8086` | **the same, for a plain 8086/8088**: `WOLF3DV` with every 186 instruction spelled the 8086 way, built by `w3dbuild.py build8086` -- below |
+| `SPEARV.EXE`, `SPEAR8.EXE` | `v30-8086` | **Spear of Destiny**, the same code built as id built Spear (`*.SOD`), for a V20/V30 and up and for a plain 8086/8088: `w3dbuild.py buildsod` / `buildsod8` -- below |
 | `WOLF3D1.EXE`, `WOLF3D18.EXE` | `v30-8086` | **the same for the free shareware episode** (version 1.4's `*.WL1`), for a V20/V30 and up and for a plain 8086/8088: `w3dbuild.py buildwl1` / `buildwl18` -- below |
 | `WOLF3DB.EXE` | `bsp` | **the BSP version**: allowed to change the game a little for speed -- far walls drawn in less detail by default, or the whole world from a BSP tree instead of id's rays (`BSP`) -- [BSPNOTES.md](https://github.com/jdredd87/Wolf3D-V30/blob/bsp/BSPNOTES.md) on that branch |
 | `WOLF3DM.EXE`, `WOLF3DM1.EXE` | `multiplayer` | **the network game**: everything `WOLF3DV` is, plus up to four players over UDP; `WOLF3DM1` is the same on the free shareware (since v1.6) -- [MULTIPLAYER.md](https://github.com/jdredd87/Wolf3D-V30/blob/multiplayer/MULTIPLAYER.md) on that branch |
@@ -99,6 +100,30 @@ on the ten floors, both builds, on the 486; and on the V30, 5.0 frames a
 second.  `PLAY` picks `WOLF3D1` or `WOLF3D18` by itself in a folder with
 `*.WL1` and no `*.WL6`.  The shareware is free to copy (`1WOLF14.ZIP`,
 from any DOS game archive), but none of it is in this repository.
+
+**`SPEARV.EXE` is Spear of Destiny** (2026-10-17, in the download since
+v1.7) -- every optimisation of `WOLF3DV`, on Spear's 21 floors; `SPEAR8.EXE`
+is the same for a plain 8086/8088.  The build's `VERSION.H` is id's
+`SODVER.H` plus `GOODTIMES` (id's switch for the release without the
+manual's quiz).  id's released source would not build Spear as it was:
+`WL_TEXT.C` (help and end text, which Spear has none of) is now empty
+under `SPEAR`, as id's Spear project left it out; and `BossKey`, called
+for Spear, was defined only for Wolfenstein.  Spear's data needs nothing
+else -- its graphics and sound are what `GFXV_SOD.H` and `AUDIOSOD.H`
+say (169 and 267 chunks).  Checked against id's renderer built the same
+way: the attract loop (view `CC0F2638`, screen `1CA328B4`, both builds)
+and 84 generated demos on all 21 floors (`gendemo.py --data ... --ext
+SOD`), on the 486; 25% faster than id's code there (90.3 against 72.4
+frames a second).  **id's start-up check asked 257,000 bytes for Spear,
+more than an 8 MHz V30 has** -- so the V30 played the 42 demos past it
+(`debugmode`, id's own way round it), every floor, with the 486's
+checksums, and Spear now asks Wolfenstein's 235,000.  On the V30 it
+plays demo 0 at 5.2 frames a second.  `FLATWALLS` keeps colours for 128
+wall pages and knows Wolfenstein's artwork by its page numbers, so on
+Spear's 134 walls those switches are approximate: the artwork goes flat
+too, and six walls share colours.  `PLAY` runs `SPEARV` (or `SPEAR8`) by
+itself in a folder with `*.SOD` and no Wolfenstein data.  Spear is id's
+and not free: none of its data is in this repository.
 
 ## Status
 

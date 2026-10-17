@@ -222,6 +222,34 @@ def cmd_buildwl1(plain8086=False):
     print("built:", os.path.join(home, name + ".EXE"), "(the shareware build%s)" % (", plain 8086" if plain8086 else ""))
 
 
+def cmd_buildsod(plain8086=False):
+    """Spear of Destiny (2026-10-16): a copy of WOLFSRC whose VERSION.H is id's
+    SODVER.H (SPEAR) plus GOODTIMES -- id's switch for the release without the
+    manual quiz, which nobody can answer over the bridge -- built in C:\\W3DS,
+    back as WOLFSRC\\SPEARV.EXE (buildsod8: through to8086.py, SPEAR8.EXE)."""
+    global SRC, REMOTE
+    dst = os.path.join(STAGE, "srcsod")
+    if os.path.exists(dst):
+        shutil.rmtree(dst)
+    shutil.copytree(SRC, dst, ignore=shutil.ignore_patterns("*.EXE", "*.MAP", "*.exe", "*.map"))
+    t = open(os.path.join(dst, "SODVER.H"), "rb").read()
+    nl = b"\r\n" if b"\r\n" in t else b"\n"
+    open(os.path.join(dst, "VERSION.H"), "wb").write(t.rstrip(b"\r\n") + nl + b"#define GOODTIMES" + nl)
+    home = SRC
+    name, REMOTE = "SPEARV", REMOTE + "S"
+    if plain8086:
+        dst8 = os.path.join(STAGE, "srcsod8")
+        r = subprocess.run([sys.executable, os.path.join(HERE, "to8086.py"), dst, dst8])
+        if r.returncode:
+            sys.exit("to8086.py failed")
+        dst, name, REMOTE = dst8, "SPEAR8", REMOTE + "8"
+    SRC = dst
+    cmd_build()
+    for ext in ("EXE", "MAP"):
+        shutil.copyfile(os.path.join(SRC, "WOLF3DV." + ext), os.path.join(home, name + "." + ext))
+    print("built:", os.path.join(home, name + ".EXE"), "(Spear of Destiny%s)" % (", plain 8086" if plain8086 else ""))
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     cmd = sys.argv[1] if len(sys.argv) > 1 else ""
@@ -235,6 +263,10 @@ def main():
         cmd_buildwl1()
     elif cmd == "buildwl18":
         cmd_buildwl1(plain8086=True)
+    elif cmd == "buildsod":
+        cmd_buildsod()
+    elif cmd == "buildsod8":
+        cmd_buildsod(plain8086=True)
     elif cmd == "deploy":
         cmd_deploy()
     elif cmd == "listings":

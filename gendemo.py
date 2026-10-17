@@ -1,6 +1,6 @@
 """Generated demos for every map, for TIMEDEMO GEN n.  StevenC & Claude.
 
-    python gendemo.py [frames] [--ship]
+    python gendemo.py [frames] [--ship] [--set N] [--data DIR --ext SOD --out DIR]
 
 For each of the 60 maps of the WL6 data, two demos: one from the map's own
 start, one from a random open floor tile (an area tile with no object on
@@ -67,11 +67,19 @@ def rlew(words, tag, n):
     return out
 
 
+DATADIR, EXT = BSPDIR, "WL6"     # --data DIR --ext SOD: another game's maps (2026-10-16)
+
+
+def map_count():
+    head = open(os.path.join(DATADIR, "MAPHEAD." + EXT), "rb").read()
+    return sum(1 for o in struct.unpack_from("<100L", head, 2) if o)
+
+
 def load_map(n):
-    head = open(os.path.join(BSPDIR, "MAPHEAD.WL6"), "rb").read()
+    head = open(os.path.join(DATADIR, "MAPHEAD." + EXT), "rb").read()
     tag = struct.unpack_from("<H", head, 0)[0]
     offs = struct.unpack_from("<100L", head, 2)
-    g = open(os.path.join(BSPDIR, "GAMEMAPS.WL6"), "rb").read()
+    g = open(os.path.join(DATADIR, "GAMEMAPS." + EXT), "rb").read()
     ps = struct.unpack_from("<3L", g, offs[n])
     pl = struct.unpack_from("<3H", g, offs[n] + 12)
     name = g[offs[n] + 22:offs[n] + 38].split(b"\0")[0].decode("latin-1")
@@ -117,13 +125,20 @@ def inputs(rnd, frames):
 def main():
     frames = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 500
     dset = int(sys.argv[sys.argv.index("--set") + 1]) if "--set" in sys.argv else 0
+    global DATADIR, EXT, OUT
+    if "--data" in sys.argv:
+        DATADIR = sys.argv[sys.argv.index("--data") + 1]
+    if "--ext" in sys.argv:
+        EXT = sys.argv[sys.argv.index("--ext") + 1].upper()
+    if "--out" in sys.argv:
+        OUT = sys.argv[sys.argv.index("--out") + 1]
     os.makedirs(OUT, exist_ok=True)
     index = []
     idx = os.path.join(OUT, "INDEX.TXT")
     old = [l for l in open(idx).read().splitlines()] if os.path.exists(idx) else []
     base = 120 * dset
     old = [l for l in old if not base <= int(l[1:l.index(".")]) < base + 120]
-    for m in range(60):
+    for m in range(map_count()):
         name, (walls, objs) = load_map(m)
         open_tiles = [(x, y) for y in range(64) for x in range(64)
                       if walls[y * 64 + x] >= AREATILE and objs[y * 64 + x] == 0]

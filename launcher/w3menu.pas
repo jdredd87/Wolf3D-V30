@@ -69,6 +69,7 @@ var
   HaveBsp: Boolean;           { WOLF3DB.EXE is here }
   Plain8086: Boolean;         { an 8086/8088, and WOLF3D8.EXE is here }
   Shareware: Boolean;         { *.WL1 and no *.WL6 here: WOLF3D1, WOLF3DM1 }
+  Spear: Boolean;             { *.SOD and neither of those: SPEARV, SPEAR8 }
   Force8086: Boolean;         { /8086 }
   UseBsp: Boolean;            { T: run it rather than WOLF3DV }
   BspTree: Boolean;           { K: BSP, the tree rather than id's rays }
@@ -125,7 +126,11 @@ end;
 
 function Prog: string;
 begin
-  if Shareware then
+  if Spear then
+  begin
+    if Plain8086 then Prog := 'SPEAR8' else Prog := 'SPEARV';
+  end
+  else if Shareware then
   begin
     if Plain8086 then Prog := 'WOLF3D18' else Prog := 'WOLF3D1';
   end
@@ -287,11 +292,17 @@ begin
   { the shareware 1.4 (*.WL1, and no *.WL6 here) is WOLF3D1, or WOLF3D18 on
     an 8086/8088 (2026-10-16); WOLF3DB needs the registered data }
   Shareware := (FSearch('VSWAP.WL6', '') = '') and (FSearch('VSWAP.WL1', '') <> '');
-  if Shareware then
+  { Spear of Destiny (*.SOD, and neither Wolf3D's here) is SPEARV, or SPEAR8 on
+    an 8086/8088 (2026-10-16) }
+  Spear := (FSearch('VSWAP.WL6', '') = '') and (FSearch('VSWAP.WL1', '') = '')
+           and (FSearch('VSWAP.SOD', '') <> '');
+  if Spear then
+    Plain8086 := (Force8086 or not Has186) and (FSearch('SPEAR8.EXE', '') <> '')
+  else if Shareware then
     Plain8086 := (Force8086 or not Has186) and (FSearch('WOLF3D18.EXE', '') <> '')
   else
     Plain8086 := (Force8086 or not Has186) and (FSearch('WOLF3D8.EXE', '') <> '');
-  HaveBsp := (FSearch('WOLF3DB.EXE', '') <> '') and not Plain8086 and not Shareware;
+  HaveBsp := (FSearch('WOLF3DB.EXE', '') <> '') and not Plain8086 and not Shareware and not Spear;
   Assign(f, CfgName);
   {$I-} Reset(f); {$I+}
   if IOResult <> 0 then Exit;
@@ -405,7 +416,9 @@ begin
     if SwOn[i] then Write('X') else Write(' ');
     WriteLn('] ', Pad(SwName[i], 10), '  ', SwText[i]);
   end;
-  if Shareware then
+  if Spear then
+    WriteLn('       version:   ', Prog, ', Spear of Destiny: id''s picture exactly')
+  else if Shareware then
     WriteLn('       version:   ', Prog, ', the shareware episode: id''s picture exactly')
   else if Plain8086 then
     WriteLn('       version:   WOLF3D8, for this 8086/8088: id''s picture exactly')

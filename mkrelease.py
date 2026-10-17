@@ -54,10 +54,10 @@ def main():
     # WOLF3D8.EXE, the 8086/8088 build of this same source
     others = [("WOLF3D8.EXE", open(EXE8, "rb").read())]
     # 2026-10-16: the shareware 1.4 builds, w3dbuild.py buildwl1 and buildwl18
-    for name in ("WOLF3D1.EXE", "WOLF3D18.EXE"):
+    for name in ("WOLF3D1.EXE", "WOLF3D18.EXE", "SPEARV.EXE", "SPEAR8.EXE"):   # + Spear (buildsod, buildsod8)
         p = os.path.join(HERE, "WOLFSRC", name)
         if not os.path.exists(p) or os.path.getmtime(p) < src_time:
-            sys.exit("%s is missing or older than the source: python w3dbuild.py buildwl1 / buildwl18" % name)
+            sys.exit("%s is missing or older than the source: python w3dbuild.py buildwl1 / buildwl18 / buildsod / buildsod8" % name)
         others.append((name, open(p, "rb").read()))
     for name in ("WOLF3DB.EXE", "WOLF3DO.EXE"):
         p = os.path.join(HERE, "stage", "deploy", name)
