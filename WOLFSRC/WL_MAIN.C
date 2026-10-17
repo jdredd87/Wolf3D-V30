@@ -1279,7 +1279,10 @@ void InitGame (void)
 #ifndef SPEAR
 	if (mminfo.mainmem < 235000L)
 #else
-	if (mminfo.mainmem < 257000L && !MS_CheckParm("debugmode"))
+	// id asked 257,000 for Spear; an 8 MHz V30 has less, and played all 21
+	// floors' generated demos in it with the same checksums as a 486 -- so
+	// Spear asks what Wolfenstein does (StevenC & Claude, 2026-10-17)
+	if (mminfo.mainmem < 235000L && !MS_CheckParm("debugmode"))
 #endif
 	{
 		memptr screen;
