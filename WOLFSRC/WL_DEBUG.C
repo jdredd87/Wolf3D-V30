@@ -4,6 +4,15 @@
 #pragma hdrstop
 #include <BIOS.H>
 
+#ifdef NETGAME
+// The network game (WOLF3DM, the multiplayer branch's VERSION.H) has no debug
+// keys: a cheat on one machine would part its game from the others' -- and an
+// 8 MHz V30 needs their 3 KB for the memory id's start-up check asks
+// (StevenC & Claude, 2026-10-17).  Their callers find these:
+int DebugKeys (void) { return 0; }
+void PicturePause (void) {}
+#else
+
 /*
 =============================================================================
 
@@ -720,3 +729,4 @@ void ViewMap (void)
 }
 #endif
 
+#endif	// NETGAME
