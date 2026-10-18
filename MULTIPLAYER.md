@@ -2157,3 +2157,19 @@ pictures a second; the asm renderer is a quarter of its time, the rest is
 spread thin: the game's own steps, the context swaps, LOWWALLS' C loop
 copying wall heights (2-3%, on `v30-8086`), each item 1-3%.
 
+## The V30's AdLib on the 06-16 firmware: eight hours clean -- 2026-10-18
+
+StevenC rolled the V30's PicoMEM 2 back to BIOS 2026-06-16 (`PMINFO`).
+`stage/logs/long18.py`, long16.py's run with the V30 as it normally plays --
+**AdLib on**, no `NOAL`, its emulated Sound Blaster and EMS on, `LOWEST VIEW
+10` -- with the 486, P3 and a server bot: deathmatch, 60-minute floors,
+the hunting test bot (`huntbot.py --quit 600`), the Python server.
+
+**503,946 steps in 8 h 0 min (17.50 a second), 0 desyncs, nobody dropped,
+no packet dropped by the server; the V30 froze 0 times and its WiFi went
+deaf 0 times**, playing every step from its snapshot join (step 633) to
+the last, 4.2 pictures a second.  On the 09-27 firmware the same run had
+frozen it once and deafened its WiFi three times in eight hours.  So the
+09-27 firmware's AdLib is the likeliest cause, and the 06-16 firmware is
+the one to run; the V30 no longer needs `NOAL`.
+
