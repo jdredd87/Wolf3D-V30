@@ -187,6 +187,7 @@ static char far *Who (int i)
 static char far notes[NOTES][NOTELEN];		// the oldest first
 static byte far notecol[NOTES];
 static long far noteuntil[NOTES];
+static byte far notefit[NOTES];		// cut to the screen's width already (Overlay)
 
 static void Notice (int color, char far *fmt, ...)
 {
@@ -203,11 +204,13 @@ static void Notice (int color, char far *fmt, ...)
 		_fmemcpy (notes[i],notes[i+1],NOTELEN);
 		notecol[i] = notecol[i+1];
 		noteuntil[i] = noteuntil[i+1];
+		notefit[i] = notefit[i+1];
 	}
 	s[NOTELEN-1] = 0;
 	_fstrcpy (notes[NOTES-1],(char far *)s);
 	notecol[NOTES-1] = color;
 	noteuntil[NOTES-1] = TimeCount + NOTETICS;
+	notefit[NOTES-1] = 0;
 }
 
 static long far ovnow;				// TimeCount, read once for the overlay
@@ -2942,7 +2945,13 @@ static void Overlay (long dead)
 	for (i=NOTES-show;i<NOTES && !mpshowscores;i++)	// not under the scores
 		if (Live (i))
 		{
-			Text (2,y,Fit (t,notes[i],320-6),notecol[i]);
+			if (!notefit[i])		// cut to the screen once, not twice a frame
+			{
+				Fit (t,notes[i],320-6);
+				_fstrcpy (notes[i],(char far *)t);
+				notefit[i] = 1;
+			}
+			Text (2,y,notes[i],notecol[i]);
 			y += lh;
 		}
 	if (dead >= 0)
