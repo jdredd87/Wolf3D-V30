@@ -1239,10 +1239,29 @@ void WallRefresh (void)
 	}
 	if (pixstep > 1)			// NEC V30 build (step 79): LOWDETAIL cast every
 	{							// other column (LOWWALLS4, step 97: every fourth);
-		int	i, k;				// the sprites clip against them all
-		for (i = 0; i < viewwidth; i += pixstep)
-			for (k = 1; k < pixstep; k++)
-				wallheight[i+k] = wallheight[i];
+								// the sprites clip against them all.  The cast
+								// column's height to the columns after it, in asm
+								// (2026-10-17, StevenC & Claude): in C, with an
+								// index a copy, it was 2-3% of a V30 on LOWEST
+asm		push	si
+asm		push	di
+asm		mov		ax,ds
+asm		mov		es,ax
+asm		mov		si,OFFSET wallheight
+asm		mov		dx,[viewwidth]
+asm		mov		bx,[pixstep]
+asm		cld
+pixcopy:
+asm		lodsw						// the cast column's height
+asm		mov		di,si
+asm		mov		cx,bx
+asm		dec		cx					// to the pixstep-1 after it
+asm		rep		stosw
+asm		mov		si,di
+asm		sub		dx,bx
+asm		jg		pixcopy				// as many groups as C's i < viewwidth made
+asm		pop		di
+asm		pop		si
 	}
 	if (flatwalls)
 		FlatRender ();			// NEC V30 build (step 81): the walls, at last
