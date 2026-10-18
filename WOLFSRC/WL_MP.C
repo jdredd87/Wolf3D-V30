@@ -3383,6 +3383,7 @@ static long far snapsize;
 static int far snaph = -1;			// MPSNAP.TMP, open: being served, or received
 static int far snapgetting;			// a joiner: 1 asking, 2 has it all, 3 none
 static long far snapgot, far snaptotal, far snapstep;
+static int far snapheard;			// ... the server has answered at all
 int		far	mpsnapped;				// started from one: NetLoop leaves the
 									// player's globals as the snapshot has them
 
@@ -3435,6 +3436,7 @@ static void SnapTake (byte far *d, unsigned len)
 	case 18:						// SNAPDATA: a joiner's
 		if (snapgetting != 1 || len < 18)
 			break;
+		snapheard = 1;
 		if (!GetL (d+8))
 		{
 			if (step != -1l)		// "none": play from the first step
@@ -3458,6 +3460,20 @@ static void SnapTake (byte far *d, unsigned len)
 		}
 		break;
 	}
+}
+
+// the file, closed and gone
+static void SnapGone (void)
+{
+	char	name[16];
+
+	if (snaph < 0)
+		return;
+	_dos_close (snaph);
+	snaph = -1;
+	snaphave = -1;
+	_fstrcpy ((char far *)name,snapfile);
+	unlink (name);
 }
 
 // a player's: the one SNAPREQ asked for, now (the end of step snapwant)
@@ -3503,7 +3519,9 @@ static int SnapFetch (snaphead_t *hd)
 	snapgetting = 1;
 	snapgot = 0;
 	snapstep = -1;
-	while (snapgetting == 1 && TimeCount - began < 30*70)
+	snapheard = 0;
+	while (snapgetting == 1 && TimeCount - began < 30*70
+	&& (snapheard || TimeCount - began < 3*70))	// a server older than this: no answer
 	{
 		Pump ();
 		if (TimeCount - last >= 18 || (snapgot != asked && TimeCount - last >= 2))
@@ -4254,8 +4272,7 @@ void MPNetGame (void)
 
 		if (!SnapRead (snaph))
 			NetQuit (bad);
-		_dos_close (snaph);
-		snaph = -1;
+		SnapGone ();				// read: MPSNAP.TMP goes
 		mpplayed = mphave = mpjoinstep = hd.step;
 		mpsnapped = 1;
 		for (i=0;i<7;i++)
@@ -4291,6 +4308,7 @@ void MPNetGame (void)
 	mppkt[4] = MYSLOT;
 	NetSend (mppkt,5);
 	NetStop ();
+	SnapGone ();					// a snapshot this machine gave: its file goes
 	{
 		static char far p[] = "PROFILE: %lu samples of catching up in PROF.BIN\n";
 		unsigned long n = profiling ? ProfWrite () : 0;	// before ShutdownId

@@ -20,7 +20,8 @@ done in the first week.  Since then:
   that keeps running -- lockstep over UDP, so a V30 and a Pentium II play
   the same game step for step.  The game **finds** the servers on its
   network, up to four people can **watch**, and a server can **record** a
-  whole game for anyone to **replay** (v1.8).
+  whole game for anyone to **replay** (v1.8); a late joiner starts from a
+  **snapshot** of the game, not its first step (v1.9).
 * **It has a server you can drive.** A server -- Python, DOS or Windows -- keeps the clock;
   its console kicks, bans, pauses, sends messages to every screen, changes
   the floor and the limits mid-game, and shows the scores.

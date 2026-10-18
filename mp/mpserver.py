@@ -6,7 +6,7 @@
                           [--port 31992] [--bind 0.0.0.0] [--steps N] [--once]
                           [--drop-after 60] [--record GAME.MPR] [--drop 0.0] [--quiet]
                           [--control 31999] [--txgap 1000] [--name NAME]
-                          [--joinwait 60]
+                          [--joinwait 60] [--nosnap]
 
 It keeps the clock and passes controls along; it knows nothing of the game.
 MULTIPLAYER.md, "Protocol, version 1", is what it speaks.
@@ -60,6 +60,13 @@ server measures each joiner's gap every second; if, at the rate it is
 closing, the joiner would not be in within SECS (60), everyone waits --
 "Waiting for NAME to catch up" -- until what is left can be closed in half
 that with the game going.  0: never wait.
+
+A joiner into a game more than 30 s old does not replay it from the first
+step (2026-10-17): the server asks a player in the game for a snapshot of
+it -- everything the game is, at the end of a step two seconds ahead --
+and gives it to the joiner, which starts from there.  It keeps the
+snapshot for the next joiner for a minute.  If none comes in 20 s the
+joiner plays from the first step, as before.  --nosnap: never.
 
 --record writes each game, when it ends, as an Mn.DEM for TIMEDEMO MGEN.
 --drop P throws away that fraction of packets each way, for testing.
@@ -148,6 +155,7 @@ class Server:
         # back, and a late joiner's catch-up is a burst of them (2026-10-16)
         self.txgap = arg("--txgap", 1000, int) / 1e6
         self.joinwait = arg("--joinwait", 60, float)
+        self.nosnap = "--nosnap" in sys.argv
         self.silence = sorted(tuple(int(x) for x in w.split(":"))
                               for w in arg("--silence", "").split(",") if w)
         self.blackout = 0.0         # perf_counter() the outage ends at
@@ -189,6 +197,9 @@ class Server:
         self.next_paused = 0.0
         self.waitfor = None         # everyone waits for this joiner (--joinwait)
         self.next_join = 0.0
+        self.snapshot = None        # (step, bytes): the game, for joiners
+        self.pull = None            # one being asked for from a player
+        self.snap_rest = 0.0        # after a failure: none asked for until then
         self.scores = None          # (step, [(frags, deaths)]) from the last SYNC
         self.live = {}              # limits changed in play, for status
         for k in range(self.bots):              # a new game's bots play anew
@@ -334,6 +345,12 @@ class Server:
         i = self.slot_of(addr)
         if i is not None:
             self.get(i).heard = time.perf_counter()
+        if kind == P.SNAPGET and i is not None:     # a joiner wants the game
+            self.snap_give(i, *P.un_snapget(b))
+            return
+        if kind == P.SNAPDATA and i is not None:    # a player sends what was asked
+            self.snap_take(i, *P.un_snapdata(b))
+            return
         if kind == P.HELLO:
             name, build, want = P.un_hello(b)
             if want == 0xFE:                    # to watch (NET WATCH, 2026-10-17)
@@ -378,7 +395,8 @@ class Server:
             if not s.ready:
                 s.ready = True
                 self.log("%s has loaded the level%s" % (self.who(i), "" if self.state == "wait"
-                         else ": catching up from step 0 of %d" % len(self.history)))
+                         else ": catching up from step %d of %d" % (
+                             played + 1 if played not in (None, P.NOBODY) else 0, len(self.history))))
             if have != P.NOBODY and (s.have == P.NOBODY or have > s.have):
                 s.have = have
             if played is not None:
@@ -395,8 +413,9 @@ class Server:
                     self.rec_open()
                     self.log("%s has loaded the level: the game starts" % self.who(i))
                 else:
-                    self.log("%s has loaded the level: catching up from step 0 of %d"
-                             % (self.who(i), len(self.history)))
+                    self.log("%s has loaded the level: catching up from step %d of %d"
+                             % (self.who(i), played + 1 if played not in (None, P.NOBODY) else 0,
+                                len(self.history)))
             if s.seq is None or P.seq_newer(seq, s.seq):
                 s.seq = seq
                 s.controls = bytes([buttons, turn & 0xFF, move & 0xFF])
@@ -535,6 +554,8 @@ class Server:
                 if self.state == "play" and now >= self.next_join:
                     self.next_join = now + 1.0
                     self.joiners(now)
+                if self.pull:
+                    self.snap_pull(now)
                 held = self.paused or self.waitfor is not None
                 if self.state == "play" and held:
                     if now >= self.next_paused:     # why no steps come, every half second
@@ -603,6 +624,87 @@ class Server:
         for k in range(3):
             for i in self.everyone():
                 self.send(P.paused(0), self.get(i).addr)
+
+    # ---- the snapshot a joiner starts from (2026-10-17)
+
+    SNAP_MIN = 525                  # steps: a game younger than 30 s is replayed
+    SNAP_STALE = 1050               # steps: a snapshot a minute old is asked for again
+
+    def snap_give(self, i, step, off):
+        """A joiner's SNAPGET: pieces of the snapshot, or why there are none."""
+        addr = self.get(i).addr
+        newest = len(self.history) - 1
+        now = time.perf_counter()
+        if self.nosnap or self.state != "play" or newest < self.SNAP_MIN:
+            self.send(P.snapdata(0, 0, 0), addr)
+            return
+        snap = self.snapshot
+        if snap and (snap[0] >= newest - self.SNAP_STALE or self.pull is None and now < self.snap_rest):
+            data = snap[1]
+            for k in range(P.SNAPWIN):
+                o = off + k * P.SNAPCHUNK
+                if o >= len(data):
+                    break
+                self.send(P.snapdata(snap[0], len(data), o, data[o:o + P.SNAPCHUNK]), addr)
+            return
+        if self.pull is None and now >= self.snap_rest:
+            self.snap_ask(now)
+        if self.pull is None:
+            self.send(P.snapdata(0, 0, 0), addr)            # nobody to ask: none
+        else:
+            self.send(P.snapdata(P.SNAP_ANY, 0, 0), addr)   # not yet
+
+    def snap_ask(self, now, tries=0):
+        """Ask the player least behind for a snapshot two seconds ahead."""
+        newest = len(self.history) - 1
+        best = None
+        for k, s in enumerate(self.slots):
+            if s and not s.bot and s.present and s.played is not None and (
+                    best is None or s.played > self.slots[best].played):
+                best = k
+        if best is None or tries > 3:
+            self.snap_rest = now + 30
+            self.pull = None
+            return
+        step = newest + 35
+        self.pull = dict(donor=best, step=step, buf=bytearray(), total=0, began=now, asked=0.0,
+                         tries=tries)
+        self.send(P.snapreq(step), self.slots[best].addr)
+        self.log("asked %s for a snapshot at step %d" % (self.who(best), step))
+
+    def snap_pull(self, now):
+        p = self.pull
+        d = self.slots[p["donor"]]
+        if d is None or now - p["began"] > 20:
+            self.log("no snapshot came (%s): a joiner replays from the first step"
+                     % ("its player left" if d is None else "20 s"))
+            self.pull = None
+            self.snap_rest = now + 30
+            return
+        if now - p["asked"] < (0.1 if p["total"] else 0.5):
+            return
+        p["asked"] = now
+        if not p["total"] and len(self.history) - 1 < p["step"]:
+            self.send(P.snapreq(p["step"]), d.addr)        # until the step has come
+        else:
+            self.send(P.snapget(p["step"], len(p["buf"])), d.addr)
+
+    def snap_take(self, i, step, total, off, data):
+        p = self.pull
+        if not p or i != p["donor"] or step != p["step"]:
+            return
+        if not total:                                       # it missed the step: again
+            self.snap_ask(time.perf_counter(), p["tries"] + 1)
+            return
+        p["total"] = total
+        if off == len(p["buf"]) and data:
+            p["buf"] += data
+            p["asked"] = 0.0                                # the next ones, now
+            if len(p["buf"]) >= total:
+                self.snapshot = (step, bytes(p["buf"][:total]))
+                self.pull = None
+                self.log("a snapshot of step %d from %s: %d bytes in %.1f s"
+                         % (step, self.who(i), total, time.perf_counter() - p["began"]))
 
     # ---- a joiner that cannot catch up (--joinwait, 2026-10-17)
 

@@ -18,9 +18,21 @@ PAUSED = 14
 # (and its build) on the port; every server answers INFO -- what it is
 # playing, and who -- to the address it came from
 DISCOVER, INFO = 15, 16
+# SNAPREQ / SNAPDATA / SNAPGET (2026-10-17): the snapshot a joiner starts
+# from instead of the first step.  The server asks a player for one at a
+# step to come (SNAPREQ: step), pulls it in pieces (SNAPGET: step, offset;
+# the player answers SNAPDATA: step, total, offset, length, bytes), and
+# gives it to a joiner the same way (its SNAPGET's step is FFFFFFFFh).
+# SNAPDATA with total 0: none -- step 0 "none to be had", FFFFFFFFh "not
+# yet, ask again", the step asked for "missed it"
+SNAPREQ, SNAPDATA, SNAPGET = 17, 18, 19
+SNAPCHUNK = 900                 # a piece: a 960-byte frame, in the game's 1 KB slots
+SNAPWIN = 4                     # pieces for each SNAPGET
+SNAP_ANY = 0xFFFFFFFF
 NAMES = {HELLO: "HELLO", WELCOME: "WELCOME", START: "START", INPUT: "INPUT", STEPS: "STEPS",
          SYNC: "SYNC", DESYNC: "DESYNC", BYE: "BYE", CHAT: "CHAT", CHATMSG: "CHATMSG",
-         PLAYERS: "NAMES", HANG: "HANG", PAUSED: "PAUSED", DISCOVER: "DISCOVER", INFO: "INFO"}
+         PLAYERS: "NAMES", HANG: "HANG", PAUSED: "PAUSED", DISCOVER: "DISCOVER", INFO: "INFO",
+         SNAPREQ: "SNAPREQ", SNAPDATA: "SNAPDATA", SNAPGET: "SNAPGET"}
 # the server's events (2026-10-13), in STEPS' tail: each at a step, so every
 # machine -- and every joiner, replaying -- applies it at the same one
 EV_NEXTFLOOR, EV_MAP, EV_TIMELIMIT, EV_FRAGLIMIT = 1, 2, 4, 5
@@ -200,6 +212,27 @@ def un_info(b):
     names = [b[34 + 16 * k:50 + 16 * k].split(b"\0")[0].decode("latin-1") for k in range(4)]
     return dict(playing=v[0], slots=v[1], people=v[2], bots=v[3], watchers=v[4], map=v[5], skill=v[6],
                 rules=v[7], rules2=v[8], step=v[10], build=v[11], name=name, names=names)
+
+
+def snapreq(step):
+    return head(SNAPREQ) + struct.pack("<I", step & 0xFFFFFFFF)
+
+
+def snapget(step, off):
+    return head(SNAPGET) + struct.pack("<II", step & 0xFFFFFFFF, off)
+
+
+def snapdata(step, total, off, data=b""):
+    return head(SNAPDATA) + struct.pack("<IIIH", step & 0xFFFFFFFF, total, off, len(data)) + data
+
+
+def un_snapget(b):
+    return struct.unpack_from("<II", b)
+
+
+def un_snapdata(b):
+    step, total, off, n = struct.unpack_from("<IIIH", b)
+    return step, total, off, bytes(b[14:14 + n])
 
 
 def paused(on, slot=0):

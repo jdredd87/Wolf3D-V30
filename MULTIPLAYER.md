@@ -1122,6 +1122,9 @@ server that disagrees with it is wrong.
 | 10 | `CHATMSG` | server | slot (u8), message number (u8), length (u8), text -- to every player; the sender's own copy is its acknowledgement |
 | 11 | `NAMES` | server | count (u8), then each slot's name (16 bytes, NUL-padded; empty: nobody) -- when anyone comes or goes, and every 2 s (since 2026-10-08) |
 | 15 | `DISCOVER` | client | build (u32) -- broadcast to 255.255.255.255 (since 2026-10-17) |
+| 17 | `SNAPREQ` | server | step (u32): write a snapshot of the game at the end of this step (since 2026-10-17; "Starting from a snapshot" below) |
+| 18 | `SNAPDATA` | either | step (u32), total (u32), offset (u32), length (u16), the bytes (up to 900) -- a piece of a snapshot; total 0 says there is none: step 0 "none to be had", FFFFFFFFh "not yet, ask again", the step asked for "missed it" |
+| 19 | `SNAPGET` | either | step (u32; FFFFFFFFh from a joiner: whatever the server has), offset (u32): pieces from there, four at a time |
 | 16 | `INFO` | server | state (u8: 0 waiting, 1 playing), slots, people, bots, watchers, map, skill, rules, rules2, pad (u8 each), step (u32), the build being played (u32, 0 if nobody), the server's name (16 bytes), each player slot's name (4 x 16) -- 98 bytes; the answer to `DISCOVER`, sent to whoever asked |
 
 Type 12 is `HANG` (a test build's hang report) and 14 `PAUSED` (the console paused the game, 1, or let it go on, 0; since 2026-10-17 also 2, everyone waits for a joiner to catch up, and the slot waited for after it); 13 is unused.
@@ -2046,6 +2049,85 @@ A box that changed size left the bigger one's edge on the screen; every
 box of these is one size now.  The V30 has 204,160 bytes for id's check
 (it asks 200,000).
 
-Still to come: the joiner starting from a snapshot of the game, not step
-0 -- item 15 -- which takes the wait away instead of shortening it.
+The joiner starting from a snapshot of the game, not step 0, came the
+same day: the next section.
+
+## Starting from a snapshot -- 2026-10-17
+
+The "pause everyone" above makes a slow joiner safe; this makes it quick.
+**A joiner no longer replays the game from its first step: it starts from
+a snapshot of the game that a machine already in it writes down.**
+
+### What a snapshot is
+
+Everything the game is, at the end of a step -- and nothing else.  Every
+machine runs the same EXE, so every static array is at the same address on
+every machine, and the near pointers inside them (the actors' list,
+`actorat`, the doors, each player's `ob`, the flags) mean the same thing on
+the machine that reads them.  So a snapshot is a table of regions copied
+byte for byte (`snapregs`, `WL_MP.C`): id's `gamestate`, `LevelRatios`,
+`tilemap`, `actorat`, `areaconnect`, `areabyplayer`, the whole `objlist`
+with its free list and `lastobj`, `statobjlist`, the doors and pushwall,
+`US_RndT`'s index (the word before `rndtable`, `ID_US_A.ASM`), the player
+globals the context swap moves, every player's context and `mpcur` as they
+stand (no swap first: `Save` would merge keys, and change the donor's own
+game), the chained sum, the item respawns, the flags and the live limits
+-- 68 regions, 31,143 bytes.  id's save game could not have done it: it
+packs the actors together and leaves `actorat`'s pointers stale.
+
+`mp/mapvars.py` lists every variable in a build from its map, which is
+where the list came from.
+
+### The proof
+
+`WOLF3DM REPLAY FILE.MPR FAST SNAPTEST n` replays a recording at eight
+times (`FAST`, new), and at the end of step n writes the snapshot, sets
+the floor up again from nothing (`SetupGameLevel`, `MPSpawn`), lays the
+snapshot over it and plays on.  Every sum after must be a plain replay's.
+On P3, at nine points of four recordings -- deathmatch over two floors
+(also on the second), team deathmatch with bots, capture the flag with
+the flags in play, and co-op with enemies in which every player died three
+times -- **every one of them was identical**, all 51 to 64 sums and every
+player's end position.  And the instrument can fail: a build without
+`US_RndT`'s index differed at the very next check, step 1550.
+
+### Over the network
+
+The server asks, when a player HELLOs into a game more than 525 steps
+(30 s) old: `SNAPREQ` for a step 35 ahead (two seconds), to the player
+least behind.  That player writes `MPSNAP.TMP` at the end of the step and
+answers the server's `SNAPGET`s with `SNAPDATA` pieces read from it (built
+in place in the network's send buffer: no new buffer, for the V30).  The
+joiner asks the server as soon as `START` has come, writes the pieces to
+its own `MPSNAP.TMP`, sets up the snapshot's floor, reads the snapshot over
+it, and starts at its step: it tells the server it holds and has played
+that step, and the server sends it the rest.  NetLoop leaves the player
+globals as the snapshot has them (`mpsnapped`).  The server keeps the
+snapshot a minute for the next joiner; none in 20 s, or a player who
+missed the step four times, and the joiner replays from step 0 as before.
+A server older than this never answers: after 3 s the joiner replays.
+Both machines delete `MPSNAP.TMP` when done.  `--nosnap` turns it off.
+
+All three servers, the 486 and the V30, no desync in any run:
+
+| server | gave the snapshot | joined | snapshot | joiner in the game |
+|---|---|---|---|---|
+| Python | 486 | V30, 3 min in, co-op with enemies | step 3363, 3.7 s | 22 s after its HELLO; 351 steps to catch up, 2 s |
+| MPSRVW | 486 | V30, 3 min in | step 3170, 3.2 s | 22 s; 341 steps, 2 s |
+| MPSRV on P3 | **V30** | 486 | step 2842, 4.3 s | 7.5 s |
+| Python | 486 | P3, **watching**, 3 min in | step 3522, 3.2 s | 64 steps to catch up |
+| Python | -- | V30, 15 s in: replayed from 0, as it should | -- | 22 s |
+| 1.8.1's MPSRV | -- | V30 with this build: no answer, replayed from 0 after 3 s | -- | 30 s |
+
+Most of a V30's 22 s is loading the floor, as it always was; before, it
+then replayed 3,300 steps (about 30 s more at 127 a second) -- and an hour
+of play, 63,000 steps, about ten minutes (110 a second gained).
+
+### Memory
+
+The snapshot code and its table cost the V30 4.5 KB, and left it 224 bytes
+above id's 200,000.  The network game never shows id's single-player
+intermission, high scores or PG13 screen, and is never saved, so under
+`NETGAME` those are stubs too (`WL_INTER.C`, `WL_MAIN.C`, on `v30-8086`;
+`WOLF3DV` still `A18AA5AE`): **207,376 bytes** with everything in.
 

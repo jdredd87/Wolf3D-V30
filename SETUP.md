@@ -177,12 +177,19 @@ are listed, and you pick one by its number.
 | ESC | asks, then leaves the game |
 
 The game starts as soon as the first player has loaded the level.  Anyone
-who joins later sees **"Catching up: N steps to go"** while their machine
-replays the game so far, then walks in -- and under it, after a few
-seconds, **about how long is left** ("about 1:20 left", or "not gaining
-yet").  A 486 or better catches up an hour's game in under a minute; an
-8 MHz V30 takes six to fifteen minutes.  A network dropout of up to a
-minute is ridden out the same way.
+who joins a game more than half a minute old **starts where the game is**:
+the server asks a machine already playing for a snapshot of the game --
+everything in it, about 31 KB -- and the joiner sees **"Getting the game:
+N KB of 31"** for a few seconds, then plays the last moments to catch up
+and walks in.  An 8 MHz V30 joining an hour-old game is in within half a
+minute.  (A younger game is simply replayed from its start, which is
+quicker than fetching it; and with a server older than 1.9, or `--nosnap`,
+every joiner replays the game so far, as before.)
+
+While it catches up the box says **"Catching up: N steps to go"** and,
+after a few seconds, **about how long is left** ("about 1:20 left", or
+"not gaining yet").  A network dropout of up to a minute is ridden out the
+same way.
 
 The game goes on while a joiner catches up, so a slow machine joining a
 long, busy game could fall behind for good.  The server will not let it:

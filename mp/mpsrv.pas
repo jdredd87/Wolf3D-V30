@@ -45,6 +45,10 @@ const
   VERSION = 1;
   HELLO = 1; WELCOME = 2; START = 3; INPUTP = 4; STEPS = 5; SYNC = 6;
   DESYNC = 7; BYE = 8; CHAT = 9; CHATMSG = 10; NAMESP = 11; HANG = 12; PAUSEDP = 14;
+  SNAPREQP = 17; SNAPDATAP = 18; SNAPGETP = 19;     { the snapshot (2026-10-17) }
+  SNAPCHUNK = 900; SNAPWIN = 4;       { a piece; pieces for each SNAPGET }
+  SNAP_MIN = 525; SNAP_STALE = 1050;  { steps: younger, replayed; older, asked again }
+  SNAPMAX = 49152;                    { the biggest snapshot taken (WOLF3DM's: 31 KB) }
   DISCOVERP = 15; INFOP = 16;     { LAN discovery: a game's NET FIND (2026-10-17) }
   EV_NEXTFLOOR = 1; EV_MAP = 2; EV_TIMELIMIT = 4; EV_FRAGLIMIT = 5;
   BYE_END = 0; BYE_FULL = 1; BYE_BUILD = 2; BYE_DROPPED = 3; BYE_KICKED = 4;
@@ -77,6 +81,8 @@ type
   TRow = packed array[0..ROWB - 1] of Byte;
   TRing = array[0..RINGN - 1] of TRow;
   TName = string[16];
+  TSnapBuf = array[0..49151] of Byte;
+  PSnapBuf = ^TSnapBuf;
   TSlot = record
     Used, Bot: Boolean;
     Watch: Boolean;              { a watcher: sent every step, in none }
@@ -129,6 +135,12 @@ var
   DropAfter: LongInt;            { ticks }
   { the game }
   Playing, Paused: Boolean;
+  NoSnap: Boolean;               { --nosnap }
+  Snap, PullBuf: PSnapBuf;       { the snapshot, for joiners; one being pulled }
+  SnapStep, SnapLen: LongInt;    { SnapLen 0: none }
+  PullOn: Boolean;
+  PullDonor, PullTries: Integer;
+  PullStep, PullTotal, PullGot, PullBegan, PullAsked, SnapRest: LongInt;
   WaitFor: Integer;              { everyone waits for this joiner (--joinwait), -1 none }
   JoinWait: LongInt;             { seconds; 0 never }
   NextJoin, NextFeed: LongInt;
@@ -857,6 +869,8 @@ begin
   Playing := False;
   Paused := False;
   WaitFor := -1;
+  SnapLen := 0;
+  PullOn := False;
   HistReset;
   SumsClear;
   NEv := 0;
@@ -1041,6 +1055,130 @@ begin
   InfoLen := 102;
 end;
 
+{ the first step a joiner plays: after its snapshot's, if it began from one }
+function FromStr: ShortString;
+begin
+  if (RxLen >= 18) and (GetL(14) <> NOBODY) then FromStr := I2S(LongInt(GetL(14)) + 1)
+  else FromStr := '0';
+end;
+
+{ ------------------------------------- the snapshot a joiner starts from (2026-10-17) }
+
+{ A joiner into a game more than 30 s old does not replay it from the first
+  step: the server asks the player least behind for a snapshot of the game
+  at a step two seconds ahead (SNAPREQ), pulls it in pieces (SNAPGET,
+  SNAPDATA), keeps it a minute for the next joiner, and gives it to joiners
+  the same way.  None in 20 s: the joiner replays from the first step. }
+
+procedure SnapNone(I: Integer; Step: LongWord);
+begin
+  Head(SNAPDATAP); PutL(4, Step); PutL(8, 0); PutL(12, 0); Tx[16] := 0; Tx[17] := 0;
+  SendTo(I, 18);
+end;
+
+procedure SnapAsk(Tries: Integer);
+var K, Best: Integer;
+begin
+  Best := -1;
+  for K := 0 to Players - 1 do
+    with Slots[K] do
+      if Used and not Bot and Present and HasPlayed and ((Best < 0) or (Played > Slots[Best].Played)) then
+        Best := K;
+  if (Best < 0) or (Tries > 3) then
+  begin
+    PullOn := False;
+    SnapRest := Ticks + 30 * T_SEC;
+    Exit;
+  end;
+  PullOn := True; PullDonor := Best; PullStep := Newest + 35; PullTotal := 0; PullGot := 0;
+  PullBegan := Ticks; PullAsked := Ticks; PullTries := Tries;
+  Head(SNAPREQP); PutL(4, PullStep);
+  SendTo(Best, 8);
+  Log('asked ' + Who(Best) + ' for a snapshot at step ' + I2S(PullStep));
+end;
+
+{ a joiner's SNAPGET: pieces of the snapshot, or why there are none }
+procedure SnapGive(I: Integer);
+var K: Integer; Off, O, N: LongInt;
+begin
+  Off := GetL(8);
+  if NoSnap or not Playing or (Newest < SNAP_MIN) then begin SnapNone(I, 0); Exit; end;
+  if (SnapLen > 0) and ((SnapStep >= Newest - SNAP_STALE) or (not PullOn and (Ticks < SnapRest))) then
+  begin
+    for K := 0 to SNAPWIN - 1 do
+    begin
+      O := Off + LongInt(K) * SNAPCHUNK;
+      if O >= SnapLen then Break;
+      N := SnapLen - O;
+      if N > SNAPCHUNK then N := SNAPCHUNK;
+      Head(SNAPDATAP); PutL(4, SnapStep); PutL(8, SnapLen); PutL(12, O);
+      Tx[16] := Lo(Word(N)); Tx[17] := Hi(Word(N));
+      Move(Snap^[O], Tx[18], N);
+      SendTo(I, 18 + N);
+    end;
+    Exit;
+  end;
+  if not PullOn and (Ticks >= SnapRest) then SnapAsk(0);
+  if PullOn then SnapNone(I, $FFFFFFFF) else SnapNone(I, 0);
+end;
+
+{ the player's SNAPDATA: the next piece, or "missed" -- asked again }
+procedure SnapTake(I: Integer);
+var Total, O: LongInt; N: Word; P: PSnapBuf;
+begin
+  if not PullOn or (I <> PullDonor) or (LongInt(GetL(4)) <> PullStep) then Exit;
+  Total := GetL(8);
+  if Total = 0 then begin SnapAsk(PullTries + 1); Exit; end;
+  if Total > SNAPMAX then
+  begin
+    Log('a snapshot of ' + I2S(Total) + ' bytes: too big');
+    PullOn := False; SnapRest := Ticks + 30 * T_SEC;
+    Exit;
+  end;
+  PullTotal := Total;
+  O := GetL(12);
+  N := Rx[16] or (Word(Rx[17]) shl 8);
+  if (O = PullGot) and (N > 0) and (RxLen >= 18 + N) and (O + N <= SNAPMAX) then
+  begin
+    Move(Rx[18], PullBuf^[O], N);
+    Inc(PullGot, N);
+    PullAsked := Ticks - T_SEC;          { the next pieces, now }
+    if PullGot >= PullTotal then
+    begin
+      P := Snap; Snap := PullBuf; PullBuf := P;
+      SnapLen := PullTotal; SnapStep := PullStep; PullOn := False;
+      Log('a snapshot of step ' + I2S(SnapStep) + ' from ' + Who(I) + ': ' + I2S(SnapLen)
+          + ' bytes in ' + Secs(Ticks - PullBegan) + ' s');
+    end;
+  end;
+end;
+
+{ in the loop: ask again, or for the next pieces }
+procedure SnapPull;
+var T, Wait: LongInt;
+begin
+  T := Ticks;
+  if not Slots[PullDonor].Used or (T - PullBegan > 20 * T_SEC) then
+  begin
+    Log('no snapshot came: a joiner replays from the first step');
+    PullOn := False; SnapRest := T + 30 * T_SEC;
+    Exit;
+  end;
+  if PullTotal > 0 then Wait := T_SEC div 10 else Wait := T_SEC div 2;
+  if T - PullAsked < Wait then Exit;
+  PullAsked := T;
+  if (PullTotal = 0) and (Newest < PullStep) then
+  begin
+    Head(SNAPREQP); PutL(4, PullStep);
+    SendTo(PullDonor, 8);
+  end
+  else
+  begin
+    Head(SNAPGETP); PutL(4, PullStep); PutL(8, PullGot);
+    SendTo(PullDonor, 12);
+  end;
+end;
+
 procedure HandleGame;
 var
   I, K, N: Integer;
@@ -1074,6 +1212,8 @@ begin
   end;
   I := SlotOf;
   if I >= 0 then Slots[I].Heard := Ticks;
+  if (Kind = SNAPGETP) and (I >= 0) and (RxLen >= 12) then begin SnapGive(I); Exit; end;
+  if (Kind = SNAPDATAP) and (I >= 0) and (RxLen >= 18) then begin SnapTake(I); Exit; end;
   case Kind of
     HELLO:
       begin
@@ -1120,7 +1260,7 @@ begin
           begin
             Slots[I].Ready := True;
             if Playing then
-              Log(Who(I) + ' has loaded the level: catching up from step 0 of ' + I2S(Newest + 1))
+              Log(Who(I) + ' has loaded the level: catching up from step ' + FromStr + ' of ' + I2S(Newest + 1))
             else
               Log(Who(I) + ' has loaded the level');
           end;
@@ -1148,7 +1288,7 @@ begin
             RecOpen;
           end
           else
-            Log(Who(I) + ' has loaded the level: catching up from step 0 of ' + I2S(Newest + 1));
+            Log(Who(I) + ' has loaded the level: catching up from step ' + FromStr + ' of ' + I2S(Newest + 1));
         end;
         if (not Slots[I].HaveSeq) or SeqNewer(GetW(8), Slots[I].Seq) then
         begin
@@ -2385,6 +2525,8 @@ begin
   WriteLn('  --joinwait S     a player joining late who would take more than S      (60)');
   WriteLn('                   seconds to catch up has everyone wait for them --');
   WriteLn('                   until the rest can be closed in S/2; 0: never wait');
+  WriteLn('  --nosnap         a player joining late replays the game from the first');
+  WriteLn('                   step -- not from a snapshot of it (the default)');
   WriteLn('  --once           stop when the game ends, instead of waiting for the next');
   WriteLn('  --record FILE    record each game, every floor, for WOLF3DM REPLAY FILE');
   WriteLn('                   (GAME.MPR; a second game is GAMEB.MPR, and so on)');
@@ -2535,6 +2677,16 @@ begin
   DropAfter := Arg('--drop-after', 60) * T_SEC;
   JoinWait := Arg('--joinwait', 60);
   WaitFor := -1;
+  NoSnap := Flag('--nosnap');
+  SnapLen := 0; PullOn := False; SnapRest := 0;
+  Snap := nil; PullBuf := nil;
+  if not NoSnap then
+  begin
+    ReturnNilIfGrowHeapFails := True;
+    GetMem(Snap, Word(SNAPMAX));        { (SizeOf: a 16-bit SizeInt, 49152 is out of it) }
+    GetMem(PullBuf, Word(SNAPMAX));
+    if (Snap = nil) or (PullBuf = nil) then NoSnap := True;
+  end;
   NxMap := -1; NxSkill := -1; NxBots := -1; NxTime := -1; NxFrag := -1;
   NxResp := -1; NxMode := -1; NxEnemies := -1; NxFF := -1;
   NBanned := 0; Said := 0; Games := 0;
@@ -2677,6 +2829,7 @@ begin
       NextJoin := T + T_SEC;
       Joiners;
     end;
+    if PullOn then SnapPull;
     if Playing and (Paused or (WaitFor >= 0)) then
     begin
       if T >= NextPausedT then
