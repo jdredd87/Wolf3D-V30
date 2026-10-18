@@ -2131,3 +2131,29 @@ intermission, high scores or PG13 screen, and is never saved, so under
 `NETGAME` those are stubs too (`WL_INTER.C`, `WL_MAIN.C`, on `v30-8086`;
 `WOLF3DV` still `A18AA5AE`): **207,376 bytes** with everything in.
 
+## The V30's picture with text over it -- 2026-10-17
+
+Item 11 on StevenC's list, "more V30 speed".  `mp/profbuild.py` builds a
+test WOLF3DM with the sampling profiler back in (`NETGAME` leaves it out
+for the memory), with `--live` sampling every picture rather than only
+catching up, and line numbers in its map; `mp/profline.py` charges the
+samples to source lines (`profmap.py` charges a static function to the
+public before it, which made the overlay look like `MPDeadLook`).  A test
+build's sums never match the real one's -- the sum reads pointer values,
+and the layout moves -- so test it against itself only.
+
+Profiled live on the V30 (`LOWEST VIEW 10`): **28% of its time was the
+text over the view** -- notices, the scores (TAB), "Killed by", the chat
+line -- whenever any was up: `Text1`'s inner loop found a pixel's row with
+a multiply (`src[r*cw]`) a pixel.  Now that column loop is in asm: the
+plane's mask, then a compare and a store a row.  The same letters (checked
+on the capture card).  Solo bench (MPSRVW `--players 1`, the V30's NETBOT,
+which shows the scores half of the time, 2,500 steps): **11.5 -> 13.2
+pictures a second**, two runs each agreeing.  Notices are also cut to the
+screen's width once, not twice a frame (not measurable on that bench).
+
+Profiled without text, replaying a co-op recording, the V30 draws 16.2
+pictures a second; the asm renderer is a quarter of its time, the rest is
+spread thin: the game's own steps, the context swaps, LOWWALLS' C loop
+copying wall heights (2-3%, on `v30-8086`), each item 1-3%.
+

@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D, MULTIPLAYER  --  by StevenC and Claude (Anthropic)
 ==================================================================
-Version 1.9, 2026-10-17
+Version 1.9.1, 2026-10-17
 
 id Software's Wolfenstein 3-D for up to four players over a network:
 deathmatch, team deathmatch, capture the flag or co-op, each with or
@@ -58,6 +58,9 @@ within half a minute.  Proved exact: a game started from a snapshot plays
 on with the same checksums, step for step, as one that never stopped.
 --nosnap on a server turns it off.  WOLF3DM leaves out the single-player
 intermission and save game, which it never used, for the V30's memory.
+1.9.1: the text over the view -- notices, the scores (TAB), "Killed by",
+chat -- drawn in assembly: on an 8 MHz V30 the picture with text up went
+from 11.5 to 13.2 frames a second.
 
 SETUP.TXT walks through setting it all up, step by step -- the network
 on each DOS machine, the game, the server, joining, and troubleshooting.
