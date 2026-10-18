@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D FOR 8086-CLASS PCs  --  optimized by StevenC and Claude
 =======================================================================
-Version 1.7, 2026-10-17
+Version 1.10, 2026-10-18
 
 id Software's Wolfenstein 3-D, rebuilt from id's released source to run
 as fast as an 8086, 8088, V20 or V30 PC allows -- and faster on anything
@@ -70,8 +70,15 @@ these ask what Wolfenstein does.  Spear has no manual quiz here (id's
 own setting for its later release).  FLATWALLS and FLATART are
 approximate on Spear: its artwork goes flat too.
 
-The network game -- up to four players, deathmatch or co-op, a server
-for DOS, Windows or Python -- is its own download, W3DMP.ZIP, on the
+New in 1.10: LOWWALLS and LOWWALLS4 a little faster -- the copy of each
+cast column's height to the columns beside it is in assembly: 1.8% with
+LOWWALLS4 on an 8 MHz V30.  Every program's picture is exactly what it
+was: each checked against its 1.7 build over the attract loop, every
+checksum the same, in the full mode and with LOWWALLS4.
+
+The network game -- up to four players, deathmatch, team deathmatch,
+capture the flag or co-op, a server for DOS, Windows or Python -- is its
+own download, W3DMP.ZIP, on the
 same releases page; SETUP.md (in the repository) sets it up step by step.
 
 
