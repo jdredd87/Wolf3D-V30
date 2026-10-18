@@ -2681,10 +2681,10 @@ static void Text1 (int x, int y, char far *s, int color)
 	fontstruct	far *font = (fontstruct far *)grsegs[STARTFONT];
 	unsigned	step = linewidth*rows, h = font->height, r;
 	byte		far *dest = MK_FP(SCREENSEG,bufferofs+ylookup[y]+(x>>2));
-	byte		far *src, far *d;
-	byte		mask = 1 << (x&3), ch;
+	byte		far *src;
+	byte		pmask = 1 << (x&3), ch;
 	int			w,cw;
-	unsigned	r0 = 0, r1 = h;
+	unsigned	r0 = 0, r1 = h, n;
 
 	if (measure)
 	{
@@ -2706,24 +2706,51 @@ static void Text1 (int x, int y, char far *s, int color)
 			return;
 		dest += r0*step;
 	}
+	n = r1 - r0;
 	while ((ch = *s++) != 0)
 	{
 		cw = w = font->width[ch];
-		src = (byte far *)font + font->location[ch];
+		src = (byte far *)font + font->location[ch] + r0*cw;	// its first row drawn
 		while (w--)
 		{
 			if (!clip || (x >= cx0 && x < cx1))
 			{
-				outport (SC_INDEX,SC_MAPMASK | (mask << 8));
-				for (d = dest,r=r0;r<r1;r++,d += step)
-					if (src[r*cw])
-						*d = color;
+				// NEC V30 build (2026-10-17, StevenC & Claude): a column of the letter
+				// in asm -- the plane's mask, then the colour a row wherever the font
+				// has a pixel.  In C every pixel's row cost a multiply (src[r*cw]):
+				// text over the view took the V30 a quarter of its time
+asm				push	si
+asm				push	di
+asm				push	ds
+asm				mov		dx,SC_INDEX
+asm				mov		al,SC_MAPMASK
+asm				mov		ah,[pmask]
+asm				out		dx,ax
+asm				mov		cx,[n]			// (the locals first: SI and DI may hold some)
+asm				mov		bx,[cw]
+asm				mov		dx,[step]
+asm				mov		al,BYTE PTR [color]
+asm				les		di,[dest]
+asm				lds		si,[src]
+asm				jcxz	textdone
+textrow:
+asm				cmp		BYTE PTR [si],0
+asm				je		textskip
+asm				mov		[es:di],al
+textskip:
+asm				add		si,bx
+asm				add		di,dx
+asm				loop	textrow
+textdone:
+asm				pop		ds
+asm				pop		di
+asm				pop		si
 			}
 			x++;
 			src++;
-			if ((mask <<= 1) == 16)
+			if ((pmask <<= 1) == 16)
 			{
-				mask = 1;
+				pmask = 1;
 				dest++;
 			}
 		}
