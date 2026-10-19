@@ -2072,8 +2072,10 @@ with its free list and `lastobj`, `statobjlist`, the doors and pushwall,
 globals the context swap moves, every player's context and `mpcur` as they
 stand (no swap first: `Save` would merge keys, and change the donor's own
 game), the chained sum, the item respawns, the flags and the live limits
--- 68 regions, 31,143 bytes.  id's save game could not have done it: it
-packs the actors together and leaves `actorat`'s pointers stale.
+-- 68 regions, 31,143 bytes -- **and, since 2026-10-19, the map's two
+planes** (16 KB; "The map's planes" below): 47,527 bytes.  id's save game
+could not have done it: it packs the actors together and leaves
+`actorat`'s pointers stale.
 
 `mp/mapvars.py` lists every variable in a build from its map, which is
 where the list came from.
@@ -2173,3 +2175,63 @@ frozen it once and deafened its WiFi three times in eight hours.  So the
 09-27 firmware's AdLib is the likeliest cause, and the 06-16 firmware is
 the one to run; the V30 no longer needs `NOAL`.
 
+## Two more eight hours, and the snapshot's missing planes -- 2026-10-19
+
+Two more runs of long18's eight hours (`long19.py`, `long20.py`), the V30's
+AdLib on, its PicoMEM 2 on BIOS 06-16:
+
+| run | steps | V30 froze | V30's WiFi deaf | desyncs |
+|---|---|---|---|---|
+| long19 | 503,978 | 0 | 0 | 0 |
+| long20 | 503,828 | 0 | 0 | 4,315 -- the 486's, below |
+
+So three nights of eight hours each, and the V30 never froze nor went
+deaf.  In long20 **the 486 hung twice** (09:08 and 09:45; the script cut
+its plug and it rejoined) -- the 486 has the PicoMEM 1 and a real OPL3,
+and those hangs are its own, not the V30's.
+
+**Its second rejoin desynced from its first check, and that was ours.**
+The server asked P3 for a snapshot at step 291,022, 4 h 37 min in; the 486
+started from it, and its sum differed from every other machine's at the
+first check after and every one to the end.  The first rejoin, at step
+599, had been exact -- and so had every SNAPTEST.  What the late floor had
+that none of those had: **a pushwall moved.**  `PushWall` and `MovePWalls`
+(`WL_ACT1.C`) write the map's planes -- plane 1 loses the wall's
+`PUSHABLETILE`, and plane 0 gets an area number on every tile the wall
+leaves -- and the planes, `mapsegs[0]` and `[1]`, were not in the
+snapshot: the joiner loaded them fresh from `GAMEMAPS`.  A player standing
+where the wall was then has the wall's number for an area, and the next
+door's `ConnectAreas` indexes `areabyplayer` with it -- past the end of
+the array.
+
+The proof, `mp/pushrec.py`: a recording made to order, two players on
+E1M1 -- player 2 beside the pushwall at 10,13, who pushes it at step 10
+and at step 410 steps onto the tile it left; player 1 beside the door at
+28,11, who opens it at 450 and 520.  On P3, `REPLAY PUSH0.MPR FAST` against
+`... SNAPTEST 300`:
+
+| build | snapshot | sums after |
+|---|---|---|
+| 1.10.1 | 68 regions | the same to step 500, **different from step 550** (after the door at 520) |
+| 1.10.2 | 68 regions and the planes ("the map's planes CHANGED in play -- a pushwall") | **the same, every one, to 600** |
+
+So the snapshot carries both planes now -- "WMS2"; a joiner and a donor
+of different versions refuse each other's and the joiner replays from
+step 0.  SNAPTEST says whether the planes it saved differ from the
+floor's start.  47,527 bytes, under MPSRV's 48 KB buffer; every earlier
+SNAPTEST recording was run again on it:
+
+| recording | steps | SNAPTEST at | planes | sums after |
+|---|---|---|---|---|
+| T1, T2, T3 | 2,550 | 867, 1,733 | as the floor began | the same |
+| T4 | 3,000 | 1,017, 2,033 | as the floor began | the same |
+| T5, T6, C1 | 3,200 | 1,067, 2,133 | as the floor began | the same |
+| PUSH0, on the 486 and the V30 too | 600 | 300 | changed | the same, and P3's |
+
+And live, the 486 and P3 playing and the V30 joining a minute and a half
+in, 4,500 steps with each server:
+
+| server | snapshot | the V30 | desyncs |
+|---|---|---|---|
+| Python | step 1608 from the 486, 47,527 bytes in 4.0 s | 373 steps to catch up, 2 s | 0 |
+| MPSRVW | step 1572 from the 486, 47,527 bytes in 3.8 s | 370 steps, 2 s | 0 |
