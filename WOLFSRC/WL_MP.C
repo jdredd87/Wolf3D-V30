@@ -3355,7 +3355,16 @@ typedef struct
 	int			regs;					// SNAPREGS: the same build
 } snaphead_t;
 
-static char far snapmagic[] = "WMS1";
+static char far snapmagic[] = "WMS2";	// 2 (2026-10-19): the map's planes too
+
+// The map's two planes, after the table: a pushwall that moves writes both
+// (WL_ACT1.C: the area under it, its "pushable" mark gone), and the game
+// reads them back -- actors' areas, the next push.  A joiner given only the
+// table played a map with every pushwall where the floor began: one moved
+// four hours into a long run, and a rejoin there desynced from its first
+// check (2026-10-19).  They are CA's memory, not a static array, so not in
+// the table: their own two writes
+#define SNAPPLANE	(64*64*2)
 
 // the snapshot, written to a file (h): true if every byte went
 static int SnapWrite (int h, long step)
@@ -3373,6 +3382,9 @@ static int SnapWrite (int h, long step)
 		return 0;
 	for (i=0;i<SNAPREGS;i++)
 		if (!CA_FarWrite (h,(byte far *)snapregs[i].p,snapregs[i].n))
+			return 0;
+	for (i=0;i<2;i++)
+		if (!CA_FarWrite (h,(byte far *)mapsegs[i],SNAPPLANE))
 			return 0;
 	return 1;
 }
@@ -3392,7 +3404,23 @@ static int SnapRead (int h)
 	for (i=0;i<SNAPREGS;i++)
 		if (!CA_FarRead (h,(byte far *)snapregs[i].p,snapregs[i].n))
 			return 0;
+	for (i=0;i<2;i++)
+		if (!CA_FarRead (h,(byte far *)mapsegs[i],SNAPPLANE))
+			return 0;
 	return 1;
+}
+
+// the map's planes, summed: SNAPTEST says whether play had changed them
+static unsigned long PlaneSum (void)
+{
+	unsigned	far *w;
+	unsigned long	n = 0;
+	int			i,k;
+
+	for (i=0;i<2;i++)
+		for (w = (unsigned far *)mapsegs[i],k=0;k<SNAPPLANE/2;k++)
+			n = n*31 + w[k];
+	return n;
 }
 
 static char far snapfile[] = "MPSNAP.TMP";
@@ -3601,11 +3629,13 @@ static int SnapFetch (snaphead_t *hd)
 //
 static void SnapTest (void)
 {
-	static char far fok[] = "snaptest: step %ld saved and loaded (%u regions)\n",
-		far fbad[] = "snaptest: step %ld FAILED (%d)\n";
+	static char far fok[] = "snaptest: step %ld saved and loaded (%u regions; the map's planes %Fs)\n",
+		far fbad[] = "snaptest: step %ld FAILED (%d)\n", far fsame[] = "as the floor began",
+		far fmoved[] = "CHANGED in play -- a pushwall";
 	snaphead_t	hd;
 	char		name[16];
 	int			h,ok = 0;
+	unsigned long	fresh = 0;
 
 	_fstrcpy ((char far *)name,snapfile);
 	if (!_dos_creat (name,0,&h))
@@ -3618,6 +3648,7 @@ static void SnapTest (void)
 		ClearMemory ();				// the floor, from nothing
 		SetupGameLevel ();
 		MPSpawn (mpstart+4);
+		fresh = PlaneSum ();		// the planes as the floor began
 		ok = -2;
 		if (!_dos_open (name,O_RDONLY,&h))
 		{
@@ -3627,7 +3658,7 @@ static void SnapTest (void)
 		PM_CheckMainMem ();
 	}
 	if (ok == 1)
-		mprintf (fok,mpplayed,(unsigned)SNAPREGS);
+		mprintf (fok,mpplayed,(unsigned)SNAPREGS,PlaneSum () == fresh ? (char far *)fsame : (char far *)fmoved);
 	else
 		mprintf (fbad,mpplayed,ok);
 }
