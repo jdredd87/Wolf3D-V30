@@ -4222,6 +4222,12 @@ void MPNetGame (void)
 
 	if (!mpname[0])
 		_fstrcpy (mpname,defname);
+	// The start-up screen (id's memory and sound boxes) is on the page shown;
+	// the boxes below are drawn on the other and copied over a 16-pixel block
+	// at a time, and every block marked -- the intro's bars among them -- came
+	// over from a page that was black there: black squares over the screen
+	// (StevenC, 2026-10-18).  The shown page into the other first
+	VW_ScreenToScreen (displayofs,bufferofs,80,200);
 	if (mpreplay)					// a recording: WELCOME and START come from it
 	{
 		static char far cant[] = "Cannot read the recording (not a WOLF3DM --record file?)";
