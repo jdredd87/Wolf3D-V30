@@ -275,7 +275,11 @@ machine from their own data and never committed.
 **Phase 4 -- the game on the network -- works, 2026-10-06.**
 `WOLF3DM NET server [PORT n] [NAME x] [NETBOT]` joins the server and plays
 the map it names: each frame this player's controls go out as `INPUT`
-(`NETBOT`: random ones of its own, for tests with nobody at a keyboard),
+(`NETBOT`: random ones of its own, for tests with nobody at a keyboard --
+and, since 2026-10-20, only that: `NETBOT SHOW` adds what a camera needs
+to see, the scores 5 s in every 10, a chat line every 20 s and a pretend
+death 5 s in every 20; plain `NETBOT`, an opponent for people, showed all
+three to them),
 every step that has arrived is played exactly as a demo's step, and the
 picture is drawn once.  `WOLFSRC/WL_NET.C` is the network -- the packet
 driver, ARP (answered, always), IPv4 and UDP -- and `WL_NETA.ASM` the

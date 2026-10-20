@@ -1631,7 +1631,7 @@ void MPFace (void)
 
 						THE NETWORK GAME
 
-WOLF3DM NET server [PORT n] [NAME x] [NETBOT]: join the server, and play the
+WOLF3DM NET server [PORT n] [NAME x] [NETBOT [SHOW]]: join the server, and play the
 map it names, every step from it.  MULTIPLAYER.md's "Protocol, version 1".
 Each frame: this player's controls (or NETBOT's random ones, for testing
 with nobody at the keyboard) to the server as INPUT; every packet in; every
@@ -1668,6 +1668,7 @@ int		far	mpspect;			// a watcher: its number from the server (4-7), 0 a player.
 byte	far	mpserver[4];
 unsigned far mpport = 31992;
 int		far	mpbot;				// NETBOT: random controls of its own
+int		far	mpbotshow;			// NETBOT SHOW: and the camera's displays (2026-10-20)
 char	far	mpname[17];
 int		far	mpstate;			// 0 hello, 1 welcomed, 2 started, 3 over
 unsigned far mpfraglimit;		// WELCOME: deathmatch ends a level at these
@@ -2040,7 +2041,7 @@ static void NetQuit (char far *why)
 }
 
 //
-// The command line: NET [a.b.c.d] [PORT n] [NAME x] [NETBOT].  The server,
+// The command line: NET [a.b.c.d] [PORT n] [NAME x] [NETBOT [SHOW]].  The server,
 // the port and the name are remembered in WOLF3DM.CFG, a text file beside
 // the game that the PLAY menu writes too:
 //
@@ -2306,7 +2307,7 @@ int MPNetArgs (void)
 	static int far done;
 	static char far wnet[] = "net", far wport[] = "port", far wname[] = "name", far wbot[] = "netbot",
 		far wfind[] = "find", far wwatch[] = "watch", far wreplay[] = "replay",
-		far wsnaptest[] = "snaptest", far wfast[] = "fast";
+		far wsnaptest[] = "snaptest", far wfast[] = "fast", far wshow[] = "show";
 	int		i,net = 0,given = 0,find = 0;
 	byte	d[4];
 
@@ -2356,6 +2357,8 @@ int MPNetArgs (void)
 		}
 		if (Is (a,wbot))
 			mpbot = 1;
+		if (Is (a,wshow))			// with NETBOT: the scores, a chat line, a death
+			mpbotshow = 1;			// screen now and then, for a camera
 		if (Is (a,wwatch))
 			mpwatch = 1;
 		if (Is (a,wfind))
@@ -2536,8 +2539,10 @@ static void Chat (void)
 }
 
 //
-// NETBOT, a test with nobody at the keyboard: the scores 5 s in every 10,
-// and a chat line every 20 s -- what TAB and T do, for a camera to see
+// NETBOT SHOW, a test with nobody at the keyboard: the scores 5 s in every
+// 10, and a chat line every 20 s -- what TAB and T do, for a camera to see.
+// Plain NETBOT only plays (2026-10-20): as an opponent for people, its
+// chat lines were on every screen and its pretend deaths on its own
 //
 static void BotShow (void)
 {
@@ -2561,7 +2566,7 @@ static void BotShow (void)
 
 //
 // How long this machine's player has lay dead, for the picture (-1: alive).
-// NETBOT also looks dead 5 s in every 20 -- the picture only, not the game
+// NETBOT SHOW also looks dead 5 s in every 20 -- the picture only, not the game
 // (nothing here is summed) -- so the death screen can be photographed
 //
 long MPDeadLook (void)
@@ -2570,7 +2575,7 @@ long MPDeadLook (void)
 
 	if (c->dead && !c->absent)
 		return c->deadtime;
-	if (mpbot && mpnet && (TimeCount / 350) % 4 == 2)
+	if (mpbot && mpbotshow && mpnet && (TimeCount / 350) % 4 == 2)
 		return TimeCount % 350;
 	return -1;
 }
@@ -3878,7 +3883,7 @@ static void NetLoop (void)
 						}
 			}
 			mpshowscores = !mpchatting && !asking && Keyboard[sc_Tab];
-			if (mpbot)
+			if (mpbot && mpbotshow)
 				BotShow ();
 			if ((n || !frameon) && !asking)
 			{

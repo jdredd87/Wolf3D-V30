@@ -249,7 +249,10 @@ MP = [
 		}
 		if (Keyboard[sc_Escape] && !asking && !mpchatting)'''),
     # the real NETBOT's pretend death (MPDeadLook) would hide the real one
-    ('''	if (mpbot && mpnet && (TimeCount / 350) % 4 == 2)''', '''	if (0)'''),
+    ('''	if (mpbot && mpbotshow && mpnet && (TimeCount / 350) % 4 == 2)''', '''	if (0)'''),
+    # SHOW's scores and chat line always (2026-10-20, when plain NETBOT
+    # stopped showing them): the soaks read the "here, step N" lines
+    ('''int		far	mpbotshow;''', '''int		far	mpbotshow = 1;	// TEST: always SHOW'''),
     ('''	if (mpchatting)
 	{
 		Fmt (u,fsay''', '''	if (mpchatting || (mpbot && (ovnow / 350) % 4 == 3))	// TEST: a typed line
@@ -1029,9 +1032,9 @@ void Trace (char far *fmt, ...);	// TEST --trace (WL_NET.C)
 				Status ();''', '''			if (n)
 				Status ();
 			{ static char far f[] = "Z"; Trace (f); }'''),
-    ('''			if (mpbot)
+    ('''			if (mpbot && mpbotshow)
 				BotShow ();''', '''			{ static char far f[] = "z"; Trace (f); }
-			if (mpbot)
+			if (mpbot && mpbotshow)
 				BotShow ();
 			{ static char far f[] = "B"; Trace (f); }'''),
     ('''			if (!asking && !mpchatting)
