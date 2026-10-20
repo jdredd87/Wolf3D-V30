@@ -2184,9 +2184,14 @@ AdLib on, its PicoMEM 2 on BIOS 06-16:
 |---|---|---|---|---|
 | long19 | 503,978 | 0 | 0 | 0 |
 | long20 | 503,828 | 0 | 0 | 4,315 -- the 486's, below |
+| long21 (v1.10.2, 2026-10-20) | 503,940 | 0 | 0 | **0** -- and the 486 never hung |
 
-So three nights of eight hours each, and the V30 never froze nor went
-deaf.  In long20 **the 486 hung twice** (09:08 and 09:45; the script cut
+So four nights of eight hours each, and the V30 never froze nor went
+deaf.  long21, on v1.10.2 at StevenC's request: the V30 joined 45 s in from
+the 486's snapshot (47,527 bytes in 5.2 s) and played every step to the
+last at 4.2 pictures a second; P3 and the 486 at 16.2-16.3; no packet
+dropped, nobody recovered, so no late rejoin came up to test the fix live
+-- `PUSH0.MPR`'s SNAPTEST and the live joins above are its proof.  In long20 **the 486 hung twice** (09:08 and 09:45; the script cut
 its plug and it rejoined) -- the 486 has the PicoMEM 1 and a real OPL3,
 and those hangs are its own, not the V30's.
 
