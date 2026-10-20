@@ -2189,6 +2189,7 @@ AdLib on, its PicoMEM 2 on BIOS 06-16:
 | long19 | 503,978 | 0 | 0 | 0 |
 | long20 | 503,828 | 0 | 0 | 4,315 -- the 486's, below |
 | long21 (v1.10.2, 2026-10-20) | 503,940 | 0 | 0 | **0** -- and the 486 never hung |
+| long22 (v1.10.3, one hour, 2026-10-20) | 62,969 | 0 | 0 | **0** |
 
 So four nights of eight hours each, and the V30 never froze nor went
 deaf.  long21, on v1.10.2 at StevenC's request: the V30 joined 45 s in from
