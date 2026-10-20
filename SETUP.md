@@ -381,8 +381,11 @@ forwarded to it -- UDP, to the machine running the server; nothing else
 (never the console port).  Players join by the router's public address:
 `WOLF3DM NET <public address>`.  `FIND` only searches the local network.
 
-What the first try over the Internet (2026-10-20) ran into -- the forward
-itself worked at once:
+**It works** (2026-10-20): a Windows PC running the game in DOSBox-X
+(`[ne2000] backend=slirp`, mTCP's `DHCP`) played across the Internet against
+two DOS machines and a server bot, with `MPSRV` on a DOS machine behind a
+home router serving.  What the first try ran into before that -- the
+forward itself worked at once:
 
 * **A firewall rule for the local network only.**  A Windows rule whose
   remote addresses are *LocalSubnet* (or one for the *Public* profile on a

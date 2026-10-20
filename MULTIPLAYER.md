@@ -2240,3 +2240,22 @@ in, 4,500 steps with each server:
 |---|---|---|---|
 | Python | step 1608 from the 486, 47,527 bytes in 4.0 s | 373 steps to catch up, 2 s | 0 |
 | MPSRVW | step 1572 from the 486, 47,527 bytes in 3.8 s | 370 steps, 2 s | 0 |
+
+## Across the Internet -- 2026-10-20
+
+**It works.**  `MPSRV` on P3, behind StevenC's home router with UDP 31992
+forwarded to it; the 486 and the V30 as `NETBOT`s and a server bot
+(`--bots 1`), deathmatch on E1L1; and a Windows PC somewhere else on the
+Internet running `WOLF3DM` in DOSBox-X (NE2000, `backend=slirp`, mTCP's
+`DHCP` for slirp's 10.0.2.15) -- joining by the router's public address and
+playing.  Same build everywhere: v1.10.2.
+
+The first tries did not, and none of it was the game: the server on the
+Windows PC answered into a VPN that routes the remote's whole address block
+(the server shows such a player `loading`, `0 inputs`, forever); that PC's
+firewall let only the local subnet in on 31992 and Python in only on the
+Public profile; and the first remote machine's network let UDP out but not
+back in (mTCP's `SNTP` timed out while DNS worked; the joining box read
+`sent 52 in 1`).  SETUP.md's troubleshooting has each, and how to tell them
+apart.
+
