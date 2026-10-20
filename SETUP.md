@@ -377,8 +377,30 @@ network, so whichever server you run will get through.
 
 **Across a router or the Internet.**  The game sends to its `GATEWAY` for a
 server on another subnet, and a server behind a home router needs UDP 31992
-forwarded to it.  We've only played on one home network, so this is the
-untested part.
+forwarded to it -- UDP, to the machine running the server; nothing else
+(never the console port).  Players join by the router's public address:
+`WOLF3DM NET <public address>`.  `FIND` only searches the local network.
+
+What the first try over the Internet (2026-10-20) ran into -- the forward
+itself worked at once:
+
+* **A firewall rule for the local network only.**  A Windows rule whose
+  remote addresses are *LocalSubnet* (or one for the *Public* profile on a
+  *Private* network) drops a player from outside.  The rule has to allow any
+  remote address on the network's own profile.
+* **A VPN on the server's PC.**  A VPN can route a whole block of Internet
+  addresses through itself; if the player's address is in it, the server's
+  answers go into the VPN and never reach them -- the server shows them
+  `loading` with `0 inputs`, forever.  Disconnect it, or run the server on a
+  machine that has none (a DOS machine with `MPSRV` is ideal).
+* **A network that lets UDP out but not back in** -- many work networks.
+  The joining box shows it: `sent` climbs and `in` stays at 1 or 2 (`in`
+  counts every frame, ARP included).  In DOSBox-X (`backend=slirp`), mTCP's
+  `SNTP pool.ntp.org` (after `SET TZ=EST5EDT`) is the test: no time back,
+  no game.  Check Windows Firewall for a **Block** rule on `dosbox-x.exe`
+  first; if Windows itself gets nothing (`w32tm /stripchart
+  /computer:pool.ntp.org /samples:3 /dataonly`), it is the network, and
+  only another connection will do.
 
 ## Quick reference
 
