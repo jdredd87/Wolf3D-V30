@@ -31,7 +31,9 @@
 // nobody out -- a shareware WOLF3DM1 could join a registered game.  Now the
 // release whose network play it is, and the data: 6 registered, 1 shareware.
 // A release that changes what the game does in a network game raises MPVER.
-#define MPVER		0x0108
+// 1.11 (2026-10-21): the sum reads a state by what it is, not where it is
+// (StateSum, below) -- so 1.10 and 1.11 are kept apart.
+#define MPVER		0x0111
 #ifdef UPLOAD
 #define MPBUILD		(((unsigned long)MPVER << 16) | 1)
 #else
@@ -1552,6 +1554,20 @@ static void Sum (unsigned long v)	// mpsum = (mpsum << 5) + (mpsum >> 27) + v,
 				  lo = sl_ + ((unsigned *)&sv_)[0];									\
 				  hi = sh_ + ((unsigned *)&sv_)[1] + (lo < sl_); }
 
+//
+// A state in the sum: its frame, its time and whether it rotates -- what it
+// is, not where it is (2026-10-21).  The sum read the state's address, which
+// is the same on every DOS machine running one EXE and means nothing to any
+// other build: a Win32 one has its own addresses, 32 bits wide.  These three
+// numbers are the same everywhere
+//
+static unsigned StateSum (statetype *s)
+{
+	if (!s)
+		return 0;
+	return (unsigned)s->shapenum*131 + (unsigned)s->tictime*2 + (s->rotate != 0);
+}
+
 void MPStep (void)
 {
 	objtype		*ob;
@@ -1578,7 +1594,7 @@ void MPStep (void)
 		SUMV (ob->y);
 		SUMV (ob->angle);
 		SUMV (ob->hitpoints);
-		SUMV ((unsigned)ob->state);
+		SUMV (StateSum (ob->state));
 		SUMV (ob->ticcount);
 		SUMV (ob->flags & ~FL_VISABLE);
 		SUMV (ob->active);
