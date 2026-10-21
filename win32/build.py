@@ -28,7 +28,7 @@ WATCOM = r"C:\WATCOM"
 # id's files, built as they are (with W32's #ifdefs)
 GAME = ["WL_ACT1", "WL_ACT2", "WL_AGENT", "WL_STATE", "WL_GAME", "WL_PLAY", "WL_MP"]
 # ours, in src/
-OWN = ["w32main", "w32stub", "w32ca", "w32logic", "w32tab", "w32fmt"]
+OWN = ["w32main", "w32stub", "w32ca", "w32logic", "w32tab", "w32fmt", "w32net"]
 EXE = os.path.join(HERE, "W3DREP.EXE")
 
 
@@ -100,6 +100,7 @@ def main():
     lnk = os.path.join(OBJ, "w3drep.lnk")
     with open(lnk, "w") as f:
         f.write("system nt\nname %s\noption quiet, map=%s, stack=1m\ndebug all\n"
+                "library wsock32\n"         # Winsock 1.1: Windows 95 and later
                 % (EXE, os.path.join(OBJ, "w3drep.map")))
         for n in GAME + OWN:
             f.write("file %s\n" % os.path.join(OBJ, n + ".obj"))

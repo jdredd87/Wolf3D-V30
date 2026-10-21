@@ -3593,11 +3593,16 @@ static void SnapTake (byte far *d, unsigned len)
 	switch (d[3])
 	{
 	case 17:						// SNAPREQ: one at the end of that step, if it is
+#ifdef W32
+		SnapSend (step,0,0,0);		// Win32 (2026-10-21): never -- a snapshot is this
+		break;						// machine's memory, which a DOS joiner cannot read
+#else
 		if (step > mpplayed && !mpcatching && !mpreplay)	// still to come and this
 			snapwant = step;		// machine plays live; else "missed"
 		else if (step != snapwant && step != snaphave)
 			SnapSend (step,0,0,0);
 		break;
+#endif
 	case 19:						// SNAPGET: pieces of the one in the file
 		if (len < 12)
 			break;
@@ -3688,6 +3693,9 @@ static int SnapFetch (snaphead_t *hd)
 
 	if (mpreplay)
 		return 0;
+#ifdef W32
+	return 0;						// Win32: from step 0 -- a DOS machine's snapshot is
+#endif								// its memory; and a PC replays an hour in seconds
 	_fstrcpy ((char far *)name,snapfile);
 	if (_dos_creat (name,0,&h))
 		return 0;

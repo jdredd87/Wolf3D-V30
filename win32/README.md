@@ -28,7 +28,20 @@ the same game from the same inputs, so the port is proven, not assumed.
    And the DOS release build is **byte-identical** with every change below in
    (`C39ED932`): all of it is `#ifdef W32`, a typedef that is `unsigned` on
    DOS, or the `SUMDUMP` test build's.
-3. Next: the Windows layer -- GDI for the picture, `waveOut` and an OPL
+3. **Live, with DOS machines -- 0 desyncs, 2026-10-21.**  The network on
+   Winsock 1.1 (`src/w32net.c`), and the same headless build joined real
+   games as a NETBOT, with the 486 and P3 on DOS 1.11, a Python server:
+
+   | | steps | desyncs |
+   |---|---|---|
+   | the DOS machines first, Win32 joining 40 s in (replaying from step 0) | 4,000 | 0 |
+   | Win32 first, the 486 joining 50 s in (asked of Win32, a snapshot is declined: the 486 replays from step 0) | 3,500 | 0 |
+
+   A Win32 machine never gives a snapshot (it is its memory, which a DOS
+   joiner cannot read) nor takes one (a PC replays an hour in seconds).  The
+   server still asks it, four times, before the joiner replays: teaching the
+   server to ask a DOS player instead is to do.
+4. Next: the Windows layer -- GDI for the picture, `waveOut` and an OPL
    emulator for sound, Winsock 1.1 for the network -- all of it there since
    Windows 95, so one EXE runs from 95 to 11.  Then a game with DOS and
    Windows machines on one server.
@@ -47,6 +60,7 @@ whose Win32 programs still run on Windows 9x.  `python win32/build.py`.
 | `src/w32ca.c` | the maps (MAPHEAD, GAMEMAPS: Carmack and RLEW, read 16 bits at a time), memory from `malloc`, the DOS file calls |
 | `src/w32stub.c` | the picture, sound, input and network as nothing; `FixedByFrac`, id's random table, the context swap (`MPSwapIn/Out`), `AutomapPickup` |
 | `src/w32fmt.c` | `printf` and friends without Borland's `%Fs` far-pointer sizes |
+| `src/w32net.c` | the network: WL_NET.C's calls on Winsock 1.1 UDP (`wsock32`, Windows 95 and later) |
 | `src/w32main.c` | a 70 Hz `TimeCount` thread, the tables `InitGame` builds, then the game's own `MPNetArgs` and `MPNetGame` |
 
 `W3DREP REPLAY FILE.MPR FAST` in a folder with the game's `*.WL6` prints the

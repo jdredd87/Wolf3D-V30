@@ -44,10 +44,6 @@ char		PageFileName[13] = "VSWAP.";
 word		PMSpriteStart,PMSoundStart;
 unsigned long pmcount[5];
 LRstruct	LevelRatios[8];
-int			netany,netearly;
-byte		netfrom[4];
-long		netsentn,netrecvn;
-byte		nettx[1514];
 
 // the menu's items: the game only renames one (WL_GAME.C, after a high score)
 CP_itemtype	MainMenu[16],NewEMenu[16];
@@ -177,16 +173,7 @@ byte IN_MouseButtons (void) { return 0; }
 void IN_SetKeyHook (void (*hook)()) {}
 void INL_GetJoyDelta (word joy,int *dx,int *dy) { *dx = *dy = 0; }
 
-//
-// the network: a replay reads a file, and sends nothing
-//
-void NetAsk (void) {}
-void NetPump (void (*take) (byte far *data, unsigned len)) {}
-int NetReady (void) { return 1; }
-void NetSend (byte far *data, unsigned len) {}
-int NetStart (byte far *server, unsigned port, char far * far *why) { return 1; }
-void NetStatus (char *s) { *s = 0; }
-void NetStop (void) {}
+// the network: w32net.c (Winsock)
 
 //
 // the page manager: nothing is drawn, so no page is needed
