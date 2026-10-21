@@ -75,7 +75,12 @@ the same game from the same inputs, so the port is proven, not assumed.
    each (`stage/logs/mix1`).
 6. **The mouse**: a click in the window gives it to the game (the cursor
    hidden and kept there; a move turns, or steps up and down, as on DOS);
-   F12 or leaving the window gives it back.  **A Win32 machine gives no
+   F12 or leaving the window gives it back.  Left fires, **right opens
+   doors**, middle strafes -- `RIGHTSTRAFE` for id's own (right strafes,
+   middle opens); `NOMOUSEY`: the mouse only turns.  Under Remote Desktop
+   each move is read from the last place, not the window's middle (Remote
+   Desktop sends where the far mouse is: put back in the middle, the view
+   spun), so the window's edge ends a turn there.  **A Win32 machine gives no
    snapshot**: its HELLO says so (FDh, where FFh is to play), and the Python
    server and MPSRV/MPSRVW never ask it -- a joiner takes a DOS machine's, or
    replays from step 0.
