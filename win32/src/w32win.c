@@ -13,6 +13,7 @@
 void	W32Key (int scan, int down);	// w32in.c: id's Keyboard[], LastScan
 void	W32Char (int ascii);
 void	W32Mouse (int dx, int dy, int buttons);
+void	W32MouseOn (int on);				// w32in.c: id's mouseenabled
 void	Quit (char *error);
 int		W32Run (void);					// w32main.c: the game
 
@@ -22,8 +23,51 @@ static struct
 	BITMAPINFOHEADER	h;
 	RGBQUAD				pal[256];
 } bmi;
-static int		lastmx = -1, lastmy = -1, mousebuttons;
+static int		mousebuttons;
 static unsigned char	*shown;			// the last frame, for WM_PAINT
+static int		captured;				// the mouse is the game's
+
+//
+// the mouse: a click in the window gives it to the game -- the cursor hidden
+// and kept in the window, every move a turn (or a step, up and down), as
+// the DOS mouse driver gave id's game; F12 or leaving the window gives it
+// back
+//
+static void Center (POINT *c)
+{
+	RECT	r;
+
+	GetClientRect (win,&r);
+	c->x = r.right/2;
+	c->y = r.bottom/2;
+	ClientToScreen (win,c);
+}
+
+static void Capture (int on)
+{
+	POINT	c;
+	RECT	r;
+
+	if (on == captured)
+		return;
+	captured = on;
+	if (on)
+	{
+		GetClientRect (win,&r);
+		ClientToScreen (win,(POINT *)&r.left);
+		ClientToScreen (win,(POINT *)&r.right);
+		ClipCursor (&r);
+		ShowCursor (FALSE);
+		Center (&c);
+		SetCursorPos (c.x,c.y);
+	}
+	else
+	{
+		ClipCursor (NULL);
+		ShowCursor (TRUE);
+	}
+	W32MouseOn (on);
+}
 
 static void Blit (HDC dc)
 {
@@ -40,6 +84,11 @@ static LRESULT CALLBACK Proc (HWND w, UINT m, WPARAM wp, LPARAM lp)
 	{
 	case WM_KEYDOWN:
 	case WM_SYSKEYDOWN:
+		if (wp == VK_F12)
+		{
+			Capture (0);				// the mouse back to Windows
+			return 0;
+		}
 		W32Key ((lp >> 16) & 0xff,1);
 		return 0;						// (Alt alone does not open a menu)
 	case WM_KEYUP:
@@ -53,21 +102,34 @@ static LRESULT CALLBACK Proc (HWND w, UINT m, WPARAM wp, LPARAM lp)
 		if ((wp & 0xfff0) == SC_KEYMENU)
 			return 0;
 		break;
-	case WM_LBUTTONDOWN: mousebuttons |= 1; W32Mouse (0,0,mousebuttons); return 0;
+	case WM_LBUTTONDOWN:
+		if (!captured)
+		{
+			Capture (1);				// the first click takes the mouse, fires nothing
+			return 0;
+		}
+		mousebuttons |= 1;
+		W32Mouse (0,0,mousebuttons);
+		return 0;
 	case WM_LBUTTONUP: mousebuttons &= ~1; W32Mouse (0,0,mousebuttons); return 0;
 	case WM_RBUTTONDOWN: mousebuttons |= 2; W32Mouse (0,0,mousebuttons); return 0;
 	case WM_RBUTTONUP: mousebuttons &= ~2; W32Mouse (0,0,mousebuttons); return 0;
 	case WM_MOUSEMOVE:
+		if (captured)
 		{
-			int	x = (short)LOWORD (lp), y = (short)HIWORD (lp);
+			POINT	c, p;
 
-			if (lastmx >= 0)
-				W32Mouse (x - lastmx,y - lastmy,mousebuttons);
-			lastmx = x;
-			lastmy = y;
+			Center (&c);
+			GetCursorPos (&p);
+			if (p.x != c.x || p.y != c.y)
+			{
+				W32Mouse (p.x - c.x,p.y - c.y,mousebuttons);
+				SetCursorPos (c.x,c.y);	// back to the middle: moves, not places
+			}
 		}
 		return 0;
 	case WM_KILLFOCUS:
+		Capture (0);
 		{
 			int	i;
 

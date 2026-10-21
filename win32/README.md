@@ -68,8 +68,19 @@ the same game from the same inputs, so the port is proven, not assumed.
    `VSWAPM.WL6`, for the players as BJ).  `WOLF3DMW.LOG` beside it has the
    game's report.  Windows Firewall asks the first time it opens the
    network; answer for your network's type.
-5. Next: the mouse, a long mixed soak, and listening to the OPL2 against a
-   real AdLib.
+5. **An hour, DOS and Windows in one game -- 2026-10-21, 02:27-03:27.**
+   The Python server with a bot; the 486 and P3 on DOS 1.11; the windowed
+   game on the Windows 10 PC (all NETBOT SHOW): **63,000 steps, 0 desyncs,
+   no packet dropped**, every machine every step, 17.4 pictures a second on
+   each (`stage/logs/mix1`).
+6. **The mouse**: a click in the window gives it to the game (the cursor
+   hidden and kept there; a move turns, or steps up and down, as on DOS);
+   F12 or leaving the window gives it back.  **A Win32 machine gives no
+   snapshot**: its HELLO says so (FDh, where FFh is to play), and the Python
+   server and MPSRV/MPSRVW never ask it -- a joiner takes a DOS machine's, or
+   replays from step 0.
+7. Next: a DOS 1.11 release with the Win32 game beside it; listening to the
+   OPL2 against a real AdLib; menus (it goes straight into the network game).
 
 ## How it is built
 

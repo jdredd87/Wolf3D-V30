@@ -50,6 +50,22 @@ void W32MouseDelta (int *dx, int *dy)
 }
 
 byte IN_MouseButtons (void) { return (byte)mousebtn; }
+
+//
+// the window took the mouse (a click) or gave it back (F12, away): id's
+// mouseenabled, which the game reads every step
+//
+void W32MouseOn (int on)
+{
+	extern boolean	mouseenabled;
+
+	mouseenabled = on ? true : false;
+	MousePresent = mouseenabled;
+	if (!mouseadjustment)
+		mouseadjustment = 5;			// id's default sensitivity
+	mousedx = mousedy = 0;
+	mousebtn = 0;
+}
 byte IN_JoyButtons (void) { return 0; }
 void INL_GetJoyDelta (word joy,int *dx,int *dy) { *dx = *dy = 0; }
 void IN_SetKeyHook (void (*hook)()) { keyhook = hook; }
