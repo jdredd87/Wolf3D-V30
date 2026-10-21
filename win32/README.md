@@ -89,7 +89,7 @@ the same game from the same inputs, so the port is proven, not assumed.
    snapshot**: its HELLO says so (FDh, where FFh is to play), and the Python
    server and MPSRV/MPSRVW never ask it -- a joiner takes a DOS machine's, or
    replays from step 0.
-7. Next: a DOS 1.11 release with the Win32 game beside it; listening to the
+8. Next: a DOS 1.11 release with the Win32 game beside it; listening to the
    OPL2 against a real AdLib; menus (it goes straight into the network game).
 
 ## How it is built
