@@ -26,6 +26,15 @@
 #include <bios.h>
 #include <dos.h>
 
+// 16 bits, as DOS's unsigned: what the game relies on wrapping at 65536 --
+// the sum's halves, the random numbers of a deathmatch start, the face and
+// NETBOT.  On Win32 an unsigned is 32 bits (2026-10-21)
+#ifdef W32
+typedef unsigned short	word16;
+#else
+typedef unsigned		word16;
+#endif
+
 // The build, in HELLO and DISCOVER: the server keeps two builds out of one
 // game.  It was a constant 12345678h until v1.8 (2026-10-17), so it kept
 // nobody out -- a shareware WOLF3DM1 could join a registered game.  Now the
@@ -100,7 +109,7 @@ unsigned long far mpsum;		// the game state's checksum, every step
 long	far	mpsteps;
 #define MAXCHECKS	64
 unsigned long far mpcheck[MAXCHECKS];	// the sum at every 50th step
-unsigned far mprnd;				// the face's own random numbers (see MPFace)
+word16 far mprnd;				// the face's own random numbers (see MPFace)
 int		far	mpnoise;			// who made this step's noise (madenoise)
 int		far	mprules;			// the server's rules (MULTIPLAYER.md):
 #define RULE_DM			1		//   deathmatch, not co-op
@@ -956,7 +965,8 @@ boolean MPDead (void)
 //
 static void DMStart (int i, byte *x, byte *y)
 {
-	unsigned	n,k,tries;
+	word16		n;
+	unsigned	k,tries;
 	int			tx,ty,j;
 	objtype		*o;
 
@@ -1215,6 +1225,7 @@ static void Init (int players)
 {
 	static char far bad[] = "WOLF3DM: mpctx_t is not the layout MPSwapIn/Out copy";
 
+#ifndef W32							// (Win32 copies the fields by name: w32stub.c)
 	if ((sizeof(gametype) & 1) || FOFS(gs) != 2 || FOFS(controlx) != 2+sizeof(gametype)
 	|| FOFS(controly) != FOFS(controlx)+2 || FOFS(buttonstate) != FOFS(controlx)+4
 	|| FOFS(buttonheld) != FOFS(buttonstate)+16 || FOFS(running) != FOFS(buttonheld)+16
@@ -1227,6 +1238,7 @@ static void Init (int players)
 		_fstrcpy ((char far *)s,bad);
 		Quit (s);
 	}
+#endif
 	mpplayers = players < 1 ? 1 : players > MAXPLAYERS ? MAXPLAYERS : players;
 	_fmemset (mpctx,0,sizeof(mpctx));
 	_fmemset (mptook,0,sizeof(mptook));
@@ -1528,6 +1540,10 @@ void MPCamera (boolean on)
 	}
 }
 
+// The sum's arithmetic is in 16-bit halves (word16, above): read as 32-bit
+// on Win32, the high half was written over mpcur, beside mpsum (2026-10-21)
+typedef word16	sumword;
+
 //
 // The game state's checksum, once a step: every actor, door, item and
 // player.  Two machines -- or two cameras -- playing the same demo must agree
@@ -1535,24 +1551,24 @@ void MPCamera (boolean on)
 //
 static void Sum (unsigned long v)	// mpsum = (mpsum << 5) + (mpsum >> 27) + v,
 {								// in 16-bit halves: the 32-bit shifts were two
-	unsigned	lo = ((unsigned far *)&mpsum)[0];	// runtime calls a value
-	unsigned	hi = ((unsigned far *)&mpsum)[1];
-	unsigned	nl = (lo << 5) | (hi >> 11);		// the rotate by 5
-	unsigned	nh = (hi << 5) | (lo >> 11);
-	unsigned	s = nl + ((unsigned *)&v)[0];
+	sumword	lo = ((sumword far *)&mpsum)[0];	// runtime calls a value
+	sumword	hi = ((sumword far *)&mpsum)[1];
+	sumword	nl = (lo << 5) | (hi >> 11);		// the rotate by 5
+	sumword	nh = (hi << 5) | (lo >> 11);
+	sumword	s = nl + ((sumword *)&v)[0];
 
-	((unsigned far *)&mpsum)[0] = s;
-	((unsigned far *)&mpsum)[1] = nh + ((unsigned *)&v)[1] + (s < nl);
+	((sumword far *)&mpsum)[0] = s;
+	((sumword far *)&mpsum)[1] = nh + ((sumword *)&v)[1] + (s < nl);
 }
 
 //
 // Sum's step on the locals lo, hi: the sum rotated left 5, plus v (as an
 // unsigned long, exactly as Sum's argument)
 //
-#define SUMV(v)	{ unsigned long sv_ = (v); unsigned sl_ = (lo << 5) | (hi >> 11);	\
-				  unsigned sh_ = (hi << 5) | (lo >> 11);								\
-				  lo = sl_ + ((unsigned *)&sv_)[0];									\
-				  hi = sh_ + ((unsigned *)&sv_)[1] + (lo < sl_); }
+#define SUMV(v)	{ unsigned long sv_ = (v); sumword sl_ = (lo << 5) | (hi >> 11);	\
+				  sumword sh_ = (hi << 5) | (lo >> 11);								\
+				  lo = sl_ + ((sumword *)&sv_)[0];									\
+				  hi = sh_ + ((sumword *)&sv_)[1] + (lo < sl_); }
 
 //
 // A state in the sum: its frame, its time and whether it rotates -- what it
@@ -1565,20 +1581,71 @@ static unsigned StateSum (statetype *s)
 {
 	if (!s)
 		return 0;
-	return (unsigned)s->shapenum*131 + (unsigned)s->tictime*2 + (s->rotate != 0);
+	return (sumword)((unsigned)s->shapenum*131 + (unsigned)s->tictime*2 + (s->rotate != 0));
 }
+
+#if defined(SUMDUMP) || defined(W32)
+//
+// SUMDUMP n (a test build's switch, 2026-10-21): the 50 steps to n, the whole
+// state the sum reads, one line a thing -- for a diff of two builds that
+// disagree.  DOS needs -DSUMDUMP; Win32 always has it.  It only reads
+//
+static int Is (char far *a, char far *w);
+static unsigned Num (char far *p);
+static long far dumpto = -1;
+
+static void Dump (void)
+{
+	static char far w[] = "sumdump";
+	static char far f1[] = "%ld ob%d c%d x%lX y%lX a%d h%d s%u t%d f%X act%d d%d ";
+	static char far f2[] = "tl%u,%u dist%lX sp%lX t1 %d t2 %d t3 %d\n";
+	static char far f3[] = "%ld st%d %d at %u,%u\n";
+	static char far f4[] = "%ld door%d %u\n";
+	static char far f5[] = "%ld p%d hp%d am%d k%d w%d sc%ld de%d fr%d\n";
+	objtype		*ob;
+	statobj_t	*st;
+	int			i,n;
+
+	if (dumpto < 0)
+	{
+		dumpto = 0;
+		for (i=1;i<_argc;i++)
+			if (Is (_argv[i],w) && i+1 < _argc)
+				dumpto = Num (_argv[i+1]);
+	}
+	if (mpsteps > dumpto || mpsteps + 50 <= dumpto)	// the 50 steps to n
+		return;
+	for (ob = &objlist[0],n=0;ob;ob = ob->next,n++)
+	{
+		mprintf (f1,mpsteps,n,(int)ob->obclass,ob->x,ob->y,ob->angle,ob->hitpoints,
+			StateSum (ob->state),ob->ticcount,ob->flags & ~FL_VISABLE,(int)ob->active,(int)ob->dir);
+		mprintf (f2,ob->tilex,ob->tiley,ob->distance,ob->speed,ob->temp1,ob->temp2,ob->temp3);
+	}
+	for (st = &statobjlist[0],n=0;st != laststatobj;st++,n++)
+		if (st->shapenum != -1)
+			mprintf (f3,mpsteps,n,st->shapenum,st->tilex,st->tiley);
+	for (i=0;i<doornum;i++)
+		mprintf (f4,mpsteps,i,doorposition[i]);
+	for (i=0;i<mpplayers;i++)
+		mprintf (f5,mpsteps,i,mpctx[i].gs.health,mpctx[i].gs.ammo,mpctx[i].gs.keys,
+			mpctx[i].gs.weapon,mpctx[i].gs.score,mpctx[i].deaths,mpctx[i].frags);
+}
+#endif
 
 void MPStep (void)
 {
 	objtype		*ob;
 	statobj_t	*st;
 	int			i;
-	unsigned	lo,hi;
+	sumword	lo,hi;
 
 	// the whole state is summed only every 50th step -- when it is compared
 	// -- each sum chained to the one before: summed every step it cost the
 	// V30 most of a frame (32-bit shifts are software on an 8086)
 	++mpsteps;
+#if defined(SUMDUMP) || defined(W32)
+	Dump ();
+#endif
 	Flags ();						// capture the flag
 	if (mpitemnext && mpsteps >= mpitemnext)
 		ItemsBack ();				// items taken a while ago come back
@@ -1586,8 +1653,8 @@ void MPStep (void)
 		return;
 	MPUse (0);
 	Save (0);
-	lo = ((unsigned far *)&mpsum)[0];	// Sum's arithmetic, in locals: a call
-	hi = ((unsigned far *)&mpsum)[1];	// and the far sum a value cost the V30
+	lo = ((sumword far *)&mpsum)[0];	// Sum's arithmetic, in locals: a call
+	hi = ((sumword far *)&mpsum)[1];	// and the far sum a value cost the V30
 	for (ob = &objlist[0];ob;ob = ob->next)	// 3% of its time catching up
 	{
 		SUMV (ob->x);
@@ -1614,10 +1681,20 @@ void MPStep (void)
 		SUMV (mpctx[i].deaths);
 		SUMV (mpctx[i].frags);
 	}
-	((unsigned far *)&mpsum)[0] = lo;
-	((unsigned far *)&mpsum)[1] = hi;
+	((sumword far *)&mpsum)[0] = lo;
+	((sumword far *)&mpsum)[1] = hi;
 	if (mpsteps/50 <= MAXCHECKS)
 		mpcheck[mpsteps/50-1] = mpsum;
+#ifdef W32
+	W32Check (mpsteps,mpsum);		// Win32: each sum as it is made (w32stub.c)
+#endif
+#ifdef SUMDUMP
+	{								// the test build: each sum as it is made, past
+		static char far fs[] = "w32 step %ld: %08lX\n";	// MAXCHECKS (as Win32's)
+
+		mprintf (fs,mpsteps,mpsum);
+	}
+#endif
 }
 
 //
@@ -1720,7 +1797,7 @@ long	far	mpplayed = -1;		// the highest step played
 unsigned far mpseq;
 long	far	mpdesync = -1;		// the first step a DESYNC named
 byte	far	mppkt[64+3*MAXPLAYERS*8];
-unsigned far mpbotrnd = 1;
+word16 far mpbotrnd = 1;
 int		far	mpbotleft, far mpbotx, far mpboty, far mpbotb;
 
 int		far	mpchatting;			// T: a line being typed
@@ -2236,7 +2313,11 @@ static void Find (void)
 	static char far why1[] = "WOLF3DM NET FIND: %Fs\n";
 	byte	any[4];
 	char	far *why;
+#ifdef W32
+	long	far *bt = &w32biosticks;	// Win32: the BIOS tick, kept by w32main.c
+#else
 	long	far *bt = (long far *)MK_FP(0x40,0x6c);
+#endif
 	long	t0;
 	int		i,k,sent = 0;
 
@@ -2743,6 +2824,15 @@ static void Text1 (int x, int y, char far *s, int color)
 				// in asm -- the plane's mask, then the colour a row wherever the font
 				// has a pixel.  In C every pixel's row cost a multiply (src[r*cw]):
 				// text over the view took the V30 a quarter of its time
+#ifdef W32
+				{					// Win32 (2026-10-21): the same column, a pixel a row
+					unsigned	k;
+
+					for (k=0;k<n;k++)
+						if (src[k*cw])
+							W32Plot (x,y+(r0+k)*rows,color);
+				}
+#else
 asm				push	si
 asm				push	di
 asm				push	ds
@@ -2769,6 +2859,7 @@ textdone:
 asm				pop		ds
 asm				pop		di
 asm				pop		si
+#endif
 			}
 			x++;
 			src++;

@@ -1417,7 +1417,11 @@ startplayloop:
 				#ifndef JAPAN
 				_fstrcpy(MainMenu[viewscores].string,STR_VS);
 				#endif
-				MainMenu[viewscores].routine = CP_ViewScores;
+	#ifdef W32
+			MainMenu[viewscores].routine = (void (*)(int))CP_ViewScores;
+#else
+			MainMenu[viewscores].routine = CP_ViewScores;
+#endif
 				#pragma warn +sus
 
 				return;
@@ -1439,7 +1443,11 @@ startplayloop:
 				#ifndef JAPAN
 				_fstrcpy(MainMenu[viewscores].string,STR_VS);
 				#endif
-				MainMenu[viewscores].routine = CP_ViewScores;
+	#ifdef W32
+			MainMenu[viewscores].routine = (void (*)(int))CP_ViewScores;
+#else
+			MainMenu[viewscores].routine = CP_ViewScores;
+#endif
 				#pragma warn +sus
 
 				return;
@@ -1511,7 +1519,11 @@ startplayloop:
 			#ifndef JAPAN
 			_fstrcpy(MainMenu[viewscores].string,STR_VS);
 			#endif
+#ifdef W32
+			MainMenu[viewscores].routine = (void (*)(int))CP_ViewScores;
+#else
 			MainMenu[viewscores].routine = CP_ViewScores;
+#endif
 			#pragma warn +sus
 
 			return;
@@ -1535,7 +1547,11 @@ startplayloop:
 			#ifndef JAPAN
 			_fstrcpy(MainMenu[viewscores].string,STR_VS);
 			#endif
+#ifdef W32
+			MainMenu[viewscores].routine = (void (*)(int))CP_ViewScores;
+#else
 			MainMenu[viewscores].routine = CP_ViewScores;
+#endif
 			#pragma warn +sus
 
 			return;

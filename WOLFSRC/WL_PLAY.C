@@ -212,10 +212,14 @@ long BiosTicks (void)
 {
 	long	t;
 
+#ifdef W32
+	t = (long)(W32Ms () * 91 / 5000);	// Win32 (2026-10-21): 18.2 a second, from the clock
+#else
 asm	pushf
 asm	cli
 	t = *(long far *)MK_FP(0x40,0x6c);
 asm	popf
+#endif
 	return t;
 }
 char		far *demoptr, far *lastdemoptr;
@@ -527,9 +531,13 @@ void PollMouseMove (void)
 {
 	int	mousexmove,mouseymove;
 
+#ifdef W32
+	W32MouseDelta (&mousexmove,&mouseymove);
+#else
 	Mouse(MDelta);
 	mousexmove = _CX;
 	mouseymove = _DX;
+#endif
 
 	controlx += mousexmove*10/(13-mouseadjustment);
 	controly += mouseymove*20/(13-mouseadjustment);

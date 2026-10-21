@@ -1,0 +1,7 @@
+obj/
+run/
+W3DREP.EXE
+test/*.EXE
+test/*.obj
+test/*.lnk
+*.err

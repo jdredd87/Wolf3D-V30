@@ -107,7 +107,11 @@ typedef	byte		ScanCode;
 #define	MDelta		11
 
 #define	MouseInt	0x33
+#ifdef W32
+#define	Mouse(x)	((void)(x))		// Win32: the mouse is read from window messages
+#else
 #define	Mouse(x)	_AX = x,geninterrupt(MouseInt)
+#endif
 
 typedef	enum		{
 						demo_Off,demo_Record,demo_Playback,demo_PlayDone
