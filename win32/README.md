@@ -41,10 +41,26 @@ the same game from the same inputs, so the port is proven, not assumed.
    joiner cannot read) nor takes one (a PC replays an hour in seconds).  The
    server still asks it, four times, before the joiner replays: teaching the
    server to ask a DOS player instead is to do.
-4. Next: the Windows layer -- GDI for the picture, `waveOut` and an OPL
-   emulator for sound, Winsock 1.1 for the network -- all of it there since
-   Windows 95, so one EXE runs from 95 to 11.  Then a game with DOS and
-   Windows machines on one server.
+4. **The game, in a window -- 2026-10-21: `WOLF3DMW.EXE`.**  The picture
+   (a new renderer in C, `src/w32draw.c`, drawn as id's draws: id's
+   projection, texture columns and flips, doors, jambs, the moving pushwall,
+   sprites with their eight rotations, the weapon), id's status bar, the
+   network game's overlay (notices, chat, scores) -- all through id's own code
+   where it is C -- into a 320x200 screen shown 4:3 in a window with GDI;
+   the keys from the window's messages.  On a Windows 10 PC, live, with the
+   486 and P3 on DOS 1.11: **3,000 steps, 0 desyncs, 17.4 pictures a second**
+   (it is paced by the game's 17.5 steps).  Replaying T1 in the window at
+   normal speed: every sum the same as DOS.  No sound yet, no menus: it
+   starts straight into the network game.
+
+   `WOLF3DMW` alone joins the last server (WOLF3DM.CFG) or finds one on the
+   network; `WOLF3DMW NET 192.168.1.10 NAME STEVE` as on DOS; `VIEW n` (4-20,
+   20 the default: the whole width).  Beside the game's own `*.WL6` (and
+   `VSWAPM.WL6`, for the players as BJ).  `WOLF3DMW.LOG` beside it has the
+   game's report.  Windows Firewall asks the first time it opens the
+   network; answer for your network's type.
+5. Next: sound (`waveOut`, and an OPL2 emulator for the AdLib), the mouse,
+   a mixed soak.
 
 ## How it is built
 
@@ -61,6 +77,11 @@ whose Win32 programs still run on Windows 9x.  `python win32/build.py`.
 | `src/w32stub.c` | the picture, sound, input and network as nothing; `FixedByFrac`, id's random table, the context swap (`MPSwapIn/Out`), `AutomapPickup` |
 | `src/w32fmt.c` | `printf` and friends without Borland's `%Fs` far-pointer sizes |
 | `src/w32net.c` | the network: WL_NET.C's calls on Winsock 1.1 UDP (`wsock32`, Windows 95 and later) |
+| `src/w32gfx.c` | the game: the page file (VSWAP, all of it in memory), the graphics file (Huffman: VGADICT, VGAHEAD, VGAGRAPH), fonts, pictures, and id's VL_/VWB_/US_ drawing calls into one 320x200 screen |
+| `src/w32draw.c` | the game: ThreeDRefresh -- walls, doors, the pushwall, sprites, the weapon -- then the network game's overlay |
+| `src/w32win.c`, `src/w32in.c` | the game: the window (GDI's StretchDIBits), its keys and mouse as id's Keyboard[] and IN_ calls |
+| `src/w32pal.c` | id's palette, from WOLFSRC/OBJ/GAMEPAL.OBJ (`tools/mkpal.py`) |
+| `src/w32null.c` | the replay: no picture, no input |
 | `src/w32main.c` | a 70 Hz `TimeCount` thread, the tables `InitGame` builds, then the game's own `MPNetArgs` and `MPNetGame` |
 
 `W3DREP REPLAY FILE.MPR FAST` in a folder with the game's `*.WL6` prints the
@@ -91,6 +112,9 @@ crashed it -- and none could be seen without the DOS sums to hold it to:
   so the first kill's notice ran zeros up the stack.
 * **`_argc`**: Watcom puts an underscore before data names, so defining one
   replaced the runtime's own `__argc`, and `main` was given 0.
+* **`TimeCount` written, not added to.**  The game sets it back to 0 and
+  counts on it climbing from there; written from the clock it never heard,
+  and a replay at normal speed stalled for 60 s and gave up.
 
 | `ref/` | |
 |---|---|

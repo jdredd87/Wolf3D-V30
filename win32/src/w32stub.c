@@ -1,7 +1,8 @@
 /*
- * w32stub.c -- what the game logic links against, for the headless Win32
- * replay: id's variables, and the picture, sound, input, menus and network
- * as nothing at all.  The game's state never depends on any of them -- the
+ * w32stub.c -- what the game logic links against on Win32, in both builds:
+ * id's variables, the logic the V30 keeps in assembly, and sound and menus as
+ * nothing.  The picture and input are w32null.c in the headless replay, and
+ * w32gfx.c, w32draw.c and w32win.c in the game.  The game's state never depends on any of them -- the
  * DOS machines stay in step with different windows, detail and sound -- so a
  * replay with none of them must reach the same sums.  The parts that matter
  * are elsewhere: w32logic.c (id's C for what the V30 keeps in assembly),
@@ -21,11 +22,10 @@ boolean		Keyboard[NumCodes];
 char		LastASCII;
 ScanCode	LastScan;
 boolean		Paused;
-word		PrintX,PrintY,WindowX,WindowY;
+word		PrintX,PrintY,WindowX,WindowY,WindowW,WindowH;
 byte		fontcolor,backcolor;
 int			fontnumber;
 long		frameon;
-byte		gamepal;				// (id's is an .OBJ's label: only its address is used)
 byte		grneeded[NUMCHUNKS];
 void		*grsegs[NUMCHUNKS];
 byte		*audiosegs[NUMSNDCHUNKS];
@@ -41,9 +41,9 @@ int			mouseadjustment;
 char		str[80],str2[20];
 char		extension[6] = "WL6";
 char		PageFileName[13] = "VSWAP.";
-word		PMSpriteStart,PMSoundStart;
 unsigned long pmcount[5];
 LRstruct	LevelRatios[8];
+pictabletype *pictable;			// (w32gfx.c fills it)
 
 // the menu's items: the game only renames one (WL_GAME.C, after a high score)
 CP_itemtype	MainMenu[16],NewEMenu[16];
@@ -54,66 +54,6 @@ CP_itemtype	MainMenu[16],NewEMenu[16];
 //
 longword	TimeCount;
 
-//
-// the picture: nothing.  A font for the text the game measures (WL_MP.C's
-// Text1 reads widths before it draws): every letter 8 wide, 8 high, blank
-//
-static struct
-{
-	int		height;
-	int		location[256];
-	char	width[256];
-	byte	data[64];
-} w32font;
-
-void W32FontInit (void)
-{
-	int	i;
-
-	w32font.height = 8;
-	for (i=0;i<256;i++)
-	{
-		w32font.location[i] = (byte *)w32font.data - (byte *)&w32font;
-		w32font.width[i] = 8;
-	}
-	grsegs[STARTFONT] = grsegs[STARTFONT+1] = &w32font;
-}
-
-void W32Plot (int x, int y, int color) { x = y = color; }
-void VL_Bar (int x, int y, int width, int height, int color) {}
-void VL_FadeIn (int start, int end, byte far *palette, int steps) {}
-void VL_FadeOut (int start, int end, int red, int green, int blue, int steps) {}
-void VL_Hlin (unsigned x, unsigned y, unsigned width, unsigned color) {}
-void VL_LowVert (int on) {}
-void VL_Plot (int x, int y, int color) {}
-void VL_ScreenToScreen (unsigned source, unsigned dest,int width, int height) {}
-void VL_SetPalette (byte far *palette) {}
-void VL_Vlin (int x, int y, int height, int color) {}
-void VL_WaitVBL (int vbls) {}
-void VWB_Bar (int x, int y, int width, int height, int color) {}
-void VWB_DrawPic (int x, int y, int chunknum) {}
-void VWB_Hlin (int x1, int x2, int y, int color) {}
-void VWB_Plot (int x, int y, int color) {}
-void VWB_Vlin (int y1, int y2, int x, int color) {}
-void VW_UpdateScreen (void) {}
-void LatchDrawPic (unsigned x, unsigned y, unsigned picnum) {}
-boolean FizzleFade (unsigned source, unsigned dest, unsigned width,unsigned height,
-	unsigned frames,boolean abortable) { return false; }
-void ThreeDRefresh (void) {}
-void FixOfs (void) {}
-void ClearSplitVWB (void) {}
-void NewViewSize (int width) { viewwidth = width*16; viewheight = width*16*HEIGHTRATIO; }
-void US_DrawWindow (word x,word y,word w,word h) {}
-void US_CPrint (char far *s) {}
-void US_Print (char far *s) {}
-boolean US_LineInput (int x,int y,char *buf,char *def,boolean escok,int maxchars,int maxwidth)
-	{ return false; }
-void Message (char far *string) {}
-void Write (int x,int y,char *string) {}
-void CacheLump (int lumpstart,int lumpend) {}
-void PreloadGraphics (void) {}
-void W32MouseDelta (int *dx, int *dy) { *dx = *dy = 0; }
-void CA_CacheGrChunk (int chunk) {}
 
 //
 // the automap (WL_DR_A.ASM's): drawing, but for AutomapPickup
@@ -160,23 +100,11 @@ void SD_Poll (void) {}
 void CA_CacheAudioChunk (int chunk) {}
 void CA_LoadAllSounds (void) {}
 
-//
-// input: nobody at the keyboard
-//
-void IN_Ack (void) {}
-boolean IN_CheckAck (void) { return true; }
-void IN_ClearKeysDown (void) {}
-void IN_StartAck (void) {}
-boolean IN_UserInput (longword delay) { return false; }
-byte IN_JoyButtons (void) { return 0; }
-byte IN_MouseButtons (void) { return 0; }
-void IN_SetKeyHook (void (*hook)()) {}
-void INL_GetJoyDelta (word joy,int *dx,int *dy) { *dx = *dy = 0; }
 
 // the network: w32net.c (Winsock)
 
 //
-// the page manager: nothing is drawn, so no page is needed
+// the page manager: w32gfx.c holds every page; nothing to make room for
 //
 void PM_CheckMainMem (void) {}
 void PM_Preload (boolean (*update)(word current,word total)) {}
@@ -403,11 +331,14 @@ boolean MS_CheckParm (char far *check)
 //
 // Quit: say why, and leave
 //
+void W32Message (char *s);			// w32win.c: a box (w32null.c: nothing)
+
 void Quit (char *error)
 {
 	if (error && *error)
 	{
 		printf ("%s\n",error);
+		W32Message (error);
 		exit (1);
 	}
 	exit (0);
@@ -436,4 +367,22 @@ void W32Tables (void)
 		nearmapylookup[i] = &tilemap[0][0]+MAPSIZE*i;
 		farmapylookup[i] = i*64;
 	}
+}
+
+//
+// NewViewSize and SetViewSize (WL_MAIN.C): the view's size, its centre and
+// its place.  (No scalers to build, no projection: w32draw.c works it out)
+//
+void NewViewSize (int width)
+{
+	if (width < 4)
+		width = 4;
+	if (width > 20)
+		width = 20;
+	viewsize = width;
+	viewwidth = (width*16)&~15;
+	viewheight = ((int)(width*16*HEIGHTRATIO))&~1;
+	centerx = viewwidth/2-1;
+	shootdelta = viewwidth/10;
+	screenofs = ((200-STATUSLINES-viewheight)/2*SCREENWIDTH+(320-viewwidth)/8);
 }

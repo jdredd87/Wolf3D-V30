@@ -1,6 +1,8 @@
 """build.py -- the Win32 build of WOLF3DM, with Open Watcom 2.0 (C:\\WATCOM).
 
-    python win32/build.py            the headless replay, win32/W3DREP.EXE
+    python win32/build.py            both: W3DREP.EXE and WOLF3DMW.EXE
+    python win32/build.py rep        the headless replay, win32/W3DREP.EXE (the gate)
+    python win32/build.py game       the game, win32/WOLF3DMW.EXE (a window)
     python win32/build.py clean
 
 WOLFSRC is shared with the DOS build and stays as it is: its files are copied
@@ -9,7 +11,9 @@ headers end with taken off -- Borland ignores it, Open Watcom does not.  A
 change the Win32 build needs inside WOLFSRC is made there, under #ifdef W32,
 so the DOS build's bytes do not change.  The files here (src/) are the Win32
 side: the compatibility header forced into every file, and what replaces
-id's managers for memory, files, sound, picture and input.
+id's managers for memory, files, sound, picture and input.  The two programs
+share all of it but their picture and input: w32null.c in the replay;
+w32gfx.c, w32draw.c, w32win.c and w32in.c in the game.
 
 By StevenC and Claude (Anthropic), 2026-10-21.
 """
@@ -27,9 +31,12 @@ WATCOM = r"C:\WATCOM"
 
 # id's files, built as they are (with W32's #ifdefs)
 GAME = ["WL_ACT1", "WL_ACT2", "WL_AGENT", "WL_STATE", "WL_GAME", "WL_PLAY", "WL_MP"]
-# ours, in src/
-OWN = ["w32main", "w32stub", "w32ca", "w32logic", "w32tab", "w32fmt", "w32net"]
-EXE = os.path.join(HERE, "W3DREP.EXE")
+# ours, in src/: in both, then each program's own
+COMMON = ["w32main", "w32stub", "w32ca", "w32logic", "w32tab", "w32fmt", "w32net", "w32pal"]
+TARGETS = {
+    "rep": ("W3DREP.EXE", "nt", ["w32null"]),
+    "game": ("WOLF3DMW.EXE", "nt_win", ["w32gfx", "w32draw", "w32win", "w32in"]),
+}
 
 
 def tool(name):
@@ -72,7 +79,7 @@ def compile_one(name, src):
            "-dW32", "-fo=" + obj, src]
     if name == "w32main":
         cmd.insert(1, "-s")      # its thread was not started by the runtime: no stack checks
-    r = subprocess.run(cmd, capture_output=True, text=True, env=env())
+    r = subprocess.run(cmd, capture_output=True, text=True, env=env(), cwd=OBJ)
     out = (r.stdout + r.stderr).strip()
     errors = [l for l in out.splitlines() if "Error!" in l]
     if out:
@@ -85,33 +92,47 @@ def compile_one(name, src):
     return True
 
 
-def main():
-    if sys.argv[1:] == ["clean"]:
-        shutil.rmtree(OBJ, ignore_errors=True)
-        return
-    copy_sources()
-    ok = True
-    for n in GAME:
-        ok &= compile_one(n, os.path.join(WSRC, n + ".C"))
-    for n in OWN:
-        ok &= compile_one(n, os.path.join(HERE, "src", n + ".c"))
-    if not ok:
-        sys.exit("compile failed")
-    lnk = os.path.join(OBJ, "w3drep.lnk")
+def link(target):
+    exe, system, own = TARGETS[target]
+    exe = os.path.join(HERE, exe)
+    base = os.path.splitext(os.path.basename(exe))[0].lower()
+    lnk = os.path.join(OBJ, base + ".lnk")
     with open(lnk, "w") as f:
-        f.write("system nt\nname %s\noption quiet, map=%s, stack=1m\ndebug all\n"
+        f.write("system %s\nname %s\noption quiet, map=%s, stack=1m\ndebug all\n"
                 "library wsock32\n"         # Winsock 1.1: Windows 95 and later
-                % (EXE, os.path.join(OBJ, "w3drep.map")))
-        for n in GAME + OWN:
+                % (system, exe, os.path.join(OBJ, base + ".map")))
+        for n in GAME + COMMON + own:
             f.write("file %s\n" % os.path.join(OBJ, n + ".obj"))
-    r = subprocess.run([tool("wlink"), "@" + lnk], capture_output=True, text=True, env=env())
+    r = subprocess.run([tool("wlink"), "@" + lnk], capture_output=True, text=True, env=env(), cwd=OBJ)
     out = (r.stdout + r.stderr).strip()
     if r.returncode:
         undef = sorted(set(l.split("undefined symbol")[-1].strip() for l in out.splitlines()
                            if "undefined symbol" in l))
         print(out[:3000] if not undef else "undefined (%d): %s" % (len(undef), " ".join(undef)))
+        return False
+    print("built", exe, os.path.getsize(exe), "bytes")
+    return True
+
+
+def main():
+    args = sys.argv[1:]
+    if args == ["clean"]:
+        shutil.rmtree(OBJ, ignore_errors=True)
+        return
+    targets = args or ["rep", "game"]
+    os.makedirs(OBJ, exist_ok=True)
+    copy_sources()
+    ok = True
+    for n in GAME:
+        ok &= compile_one(n, os.path.join(WSRC, n + ".C"))
+    for n in COMMON + sorted(set(m for t in targets for m in TARGETS[t][2])):
+        ok &= compile_one(n, os.path.join(HERE, "src", n + ".c"))
+    if not ok:
+        sys.exit("compile failed")
+    for t in targets:
+        ok &= link(t)
+    if not ok:
         sys.exit("link failed")
-    print("built", EXE, os.path.getsize(EXE), "bytes")
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ static DWORD	w32start;
 long		w32biosticks;
 
 void	W32CAStartup (void);
-void	W32FontInit (void);
+void	W32Startup (void);		// w32null.c (headless) or w32gfx.c (the game)
 void	W32Tables (void);
 int		MPNetArgs (void);
 void	MPNetGame (void);
@@ -35,10 +35,20 @@ unsigned long W32Ms (void)
 //
 static DWORD WINAPI Ticker (LPVOID arg)
 {
+	unsigned long	done = 0, due;
+
 	arg = arg;
 	for (;;)
 	{
-		TimeCount = W32Ms () * 7 / 100;
+		// ADDED to, as the interrupt does -- the game sets TimeCount back to 0
+		// (each floor, a replay's clock) and counts on it climbing from there.
+		// Written outright, it never heard: a replay stalled (2026-10-21)
+		due = W32Ms () * 7 / 100;
+		if (due > done)
+		{
+			TimeCount += due - done;
+			done = due;
+		}
 		w32biosticks = (long)(W32Ms () * 91 / 5000);
 		Sleep (2);
 	}
@@ -66,7 +76,11 @@ static LONG WINAPI Crashed (EXCEPTION_POINTERS *e)
 	return EXCEPTION_EXECUTE_HANDLER;
 }
 
-int main (void)
+//
+// the game, after its start: id's startup as far as the game needs it, then
+// the network game's own code with the command line it was given
+//
+int W32Run (void)
 {
 	DWORD	id;
 
@@ -83,11 +97,30 @@ int main (void)
 	CreateThread (NULL,0,Ticker,NULL,0,&id);
 	setvbuf (stdout,NULL,_IONBF,0);
 	W32CAStartup ();
-	W32FontInit ();
+	W32Startup ();
 	W32Tables ();
 	US_InitRndT (0);
+	{
+		// no NET and no REPLAY on the command line (double-clicked): NET --
+		// the last server (WOLF3DM.CFG), or FIND for one on the network.
+		// There is no single-player game here: the DOS game is that
+		static char	*argv2[64], net[] = "NET";
+		int			i, given = 0;
+
+		for (i=1;i<__argc;i++)
+			if (!stricmp (__argv[i],"net") || !stricmp (__argv[i],"replay"))
+				given = 1;
+		if (!given && __argc < 63)
+		{
+			for (i=0;i<__argc;i++)
+				argv2[i] = __argv[i];
+			argv2[__argc] = net;
+			__argv = argv2;
+			__argc++;
+		}
+	}
 	if (!MPNetArgs ())
-		Quit ("W3DREP REPLAY file FAST -- in a folder with the game's data");
+		Quit ("WOLF3DMW NET server [PORT n] [NAME x] -- in a folder with the game's data");
 	MPNetGame ();
 	Quit (NULL);
 	return 0;

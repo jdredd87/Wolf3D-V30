@@ -25,6 +25,8 @@ byte	netfrom[4];					// who sent the last one
 byte	nettx[1514];				// WL_MP.C builds some packets in place here
 long	netsentn, netrecvn;
 
+void	W32Events (void);			// the window's messages (w32win.c; none headless)
+
 static SOCKET	sock = INVALID_SOCKET;
 static struct sockaddr_in	srv;
 static int		started;
@@ -101,6 +103,7 @@ void NetPump (void (*take) (byte *data, unsigned len))
 	struct sockaddr_in	from;
 	int			n, fl;
 
+	W32Events ();					// the game's loop calls this all the time
 	if (sock == INVALID_SOCKET)
 		return;
 	for (;;)
