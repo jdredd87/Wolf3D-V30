@@ -485,26 +485,109 @@ void US_CPrint (char far *s)
 	}
 }
 
+//
+// an 8x8 tile (TILE8, id's window frame): planar as a picture is, 16 bytes
+// a plane, two a row
+//
+void VWB_DrawTile8 (int x, int y, int tile)
+{
+	byte	*src;
+	int		bx,by,i,j;
+
+	CA_CacheGrChunk (STARTTILE8);
+	src = grsegs[STARTTILE8];
+	if (!src || tile < 0 || tile >= NUMTILE8)
+		return;
+	src += tile*64;
+	Base (&bx,&by);
+	for (j=0;j<8;j++)
+		for (i=0;i<8;i++)
+			Put (bx+x+i,by+y+j,src[(i&3)*16 + j*2 + (i>>2)]);
+}
+
+void US_ClearWindow (void)
+{
+	VWB_Bar (WindowX,WindowY,WindowW,WindowH,WHITE);
+	PrintX = WindowX;
+	PrintY = WindowY;
+}
+
+//
+// id's (ID_US_1.C): white inside, the frame round it in tiles 0-7
+//
 void US_DrawWindow (word x,word y,word w,word h)
 {
+	word	i,sx,sy,sw,sh;
+
 	WindowX = x*8;
 	WindowY = y*8;
 	WindowW = w*8;
 	WindowH = h*8;
-	PrintX = WindowX;
-	PrintY = WindowY;
-	VWB_Bar (WindowX,WindowY,WindowW,WindowH,WHITE);
+	sx = (x-1)*8;
+	sy = (y-1)*8;
+	sw = (w+1)*8;
+	sh = (h+1)*8;
+	US_ClearWindow ();
+	VWB_DrawTile8 (sx,sy,0),VWB_DrawTile8 (sx,sy+sh,5);
+	for (i=sx+8;i<=sx+sw-8;i+=8)
+		VWB_DrawTile8 (i,sy,1),VWB_DrawTile8 (i,sy+sh,6);
+	VWB_DrawTile8 (i,sy,2),VWB_DrawTile8 (i,sy+sh,7);
+	for (i=sy+8;i<=sy+sh-8;i+=8)
+		VWB_DrawTile8 (sx,i,3),VWB_DrawTile8 (sx+sw,i,4);
+}
+
+//
+// id's Message and its window (WL_MENU.C): the big font, black on grey
+// (TEXTCOLOR), in a box outlined as the menus' are
+//
+#define TEXTCOLOR	0x17
+#define HIGHLIGHT	0x13
+#define BORD2COLOR	0x23
+#define DEACTIVE	0x2b
+
+void DrawOutline (int x,int y,int w,int h,int color1,int color2)
+{
+	VWB_Hlin (x,x+w,y,color2);
+	VWB_Vlin (y,y+h,x,color2);
+	VWB_Hlin (x,x+w,y+h,color1);
+	VWB_Vlin (y,y+h,x+w,color1);
+}
+
+void DrawWindow (int x,int y,int w,int h,int wcolor)
+{
+	VWB_Bar (x,y,w,h,wcolor);
+	DrawOutline (x,y,w,h,BORD2COLOR,DEACTIVE);
 }
 
 void Message (char far *string)
 {
-	CA_CacheGrChunk (STARTFONT);
-	fontnumber = 0;
-	fontcolor = 0;
-	PrintY = 100 - 10;
-	WindowX = 0;
-	WindowW = 320;
-	US_CPrint (string);
+	int			h,w = 0,mw = 0,i;
+	fontstruct	*font;
+
+	CA_CacheGrChunk (STARTFONT+1);
+	fontnumber = 1;
+	font = grsegs[STARTFONT+fontnumber];
+	if (!font)
+		return;
+	h = font->height;
+	for (i=0;string[i];i++)
+		if (string[i] == '\n')
+		{
+			if (w > mw)
+				mw = w;
+			w = 0;
+			h += font->height;
+		}
+		else
+			w += font->width[(byte)string[i]];
+	if (w+10 > mw)
+		mw = w+10;
+	PrintY = (WindowH/2) - h/2;
+	PrintX = WindowX = 160 - mw/2;
+	DrawWindow (WindowX-5,PrintY-5,mw+10,h+10,TEXTCOLOR);
+	DrawOutline (WindowX-5,PrintY-5,mw+10,h+10,0,HIGHLIGHT);
+	SETFONTCOLOR (0,TEXTCOLOR);
+	US_Print (string);
 	VW_UpdateScreen ();
 }
 
@@ -568,7 +651,13 @@ void VW_UpdateScreen (void)
 void VL_WaitVBL (int vbls) { W32Wait (vbls*1000/70); }
 void VL_LowVert (int on) {}
 void FixOfs (void) {}
-void ClearSplitVWB (void) {}
+void ClearSplitVWB (void)
+{
+	WindowX = 0;
+	WindowY = 0;
+	WindowW = 320;
+	WindowH = 160;
+}
 
 boolean FizzleFade (unsigned source, unsigned dest, unsigned width,unsigned height,
 	unsigned frames,boolean abortable)

@@ -73,7 +73,12 @@ the same game from the same inputs, so the port is proven, not assumed.
    game on the Windows 10 PC (all NETBOT SHOW): **63,000 steps, 0 desyncs,
    no packet dropped**, every machine every step, 17.4 pictures a second on
    each (`stage/logs/mix1`).
-6. **The mouse**: a click in the window gives it to the game (the cursor
+6. **The boxes** are id's, drawn as on DOS: ESC's question in the big font,
+   black on grey in an outlined panel (`Message`, WL_MENU.C), and every
+   other box white in the blue frame of TILE8's eight tiles
+   (`US_DrawWindow`).  The first build wrote ESC's question straight on to
+   the picture in the small font, black -- hard to read (StevenC).
+7. **The mouse**: a click in the window gives it to the game (the cursor
    hidden and kept there; a move turns, or steps up and down, as on DOS);
    F12 or leaving the window gives it back.  Left fires, **right opens
    doors**, middle strafes -- `RIGHTSTRAFE` for id's own (right strafes,
