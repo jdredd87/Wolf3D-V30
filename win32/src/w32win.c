@@ -26,6 +26,8 @@ static struct
 static int		mousebuttons;
 static unsigned char	*shown;			// the last frame, for WM_PAINT
 static int		captured;				// the mouse is the game's
+static int		remote;					// in a Remote Desktop session (below)
+static POINT	lastp;
 
 //
 // the mouse: a click in the window gives it to the game -- the cursor hidden
@@ -58,8 +60,16 @@ static void Capture (int on)
 		ClientToScreen (win,(POINT *)&r.right);
 		ClipCursor (&r);
 		ShowCursor (FALSE);
+		// Remote Desktop sends where the far mouse IS: a cursor put back in
+		// the middle here moves nothing there, and the next place is as far
+		// out as before -- the view spun (StevenC, 2026-10-21).  There each
+		// move is from the last place, and the window's edge is the end of a
+		// turn; at the machine, back to the middle every move
+		remote = GetSystemMetrics (0x1000) != 0;	// SM_REMOTESESSION
 		Center (&c);
-		SetCursorPos (c.x,c.y);
+		if (!remote)
+			SetCursorPos (c.x,c.y);
+		GetCursorPos (&lastp);
 	}
 	else
 	{
@@ -119,12 +129,20 @@ static LRESULT CALLBACK Proc (HWND w, UINT m, WPARAM wp, LPARAM lp)
 		{
 			POINT	c, p;
 
-			Center (&c);
 			GetCursorPos (&p);
-			if (p.x != c.x || p.y != c.y)
+			if (remote)					// from the last place (Capture, above)
 			{
-				W32Mouse (p.x - c.x,p.y - c.y,mousebuttons);
-				SetCursorPos (c.x,c.y);	// back to the middle: moves, not places
+				W32Mouse (p.x - lastp.x,p.y - lastp.y,mousebuttons);
+				lastp = p;
+			}
+			else
+			{
+				Center (&c);
+				if (p.x != c.x || p.y != c.y)
+				{
+					W32Mouse (p.x - c.x,p.y - c.y,mousebuttons);
+					SetCursorPos (c.x,c.y);	// back to the middle: moves, not places
+				}
 			}
 		}
 		return 0;
