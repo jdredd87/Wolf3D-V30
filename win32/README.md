@@ -50,8 +50,17 @@ the same game from the same inputs, so the port is proven, not assumed.
    the keys from the window's messages.  On a Windows 10 PC, live, with the
    486 and P3 on DOS 1.11: **3,000 steps, 0 desyncs, 17.4 pictures a second**
    (it is paced by the game's 17.5 steps).  Replaying T1 in the window at
-   normal speed: every sum the same as DOS.  No sound yet, no menus: it
-   starts straight into the network game.
+   normal speed: every sum the same as DOS.  No menus: it starts straight
+   into the network game.
+
+   **Sound** (`src/w32snd.c`, `src/w32wave.c`): the digitized sounds out of
+   the page file, the AdLib's effects and music on an OPL2 written here in C
+   from what the chip is documented to do (two operators a channel, four
+   waveforms, the chip's envelope rates, feedback), mixed at 22,050 Hz into
+   `waveOut` by a thread -- id's priorities and a sound's place left and
+   right; `NOAL`, `NOSB`, `NOMUSIC` as on DOS.  `W3DRAW=file` writes the mix
+   to a file instead (raw 22,050 Hz 16-bit stereo), which is how it was
+   checked: music all through a replay, the effects over it.
 
    `WOLF3DMW` alone joins the last server (WOLF3DM.CFG) or finds one on the
    network; `WOLF3DMW NET 192.168.1.10 NAME STEVE` as on DOS; `VIEW n` (4-20,
@@ -59,8 +68,8 @@ the same game from the same inputs, so the port is proven, not assumed.
    `VSWAPM.WL6`, for the players as BJ).  `WOLF3DMW.LOG` beside it has the
    game's report.  Windows Firewall asks the first time it opens the
    network; answer for your network's type.
-5. Next: sound (`waveOut`, and an OPL2 emulator for the AdLib), the mouse,
-   a mixed soak.
+5. Next: the mouse, a long mixed soak, and listening to the OPL2 against a
+   real AdLib.
 
 ## How it is built
 
@@ -80,6 +89,7 @@ whose Win32 programs still run on Windows 9x.  `python win32/build.py`.
 | `src/w32gfx.c` | the game: the page file (VSWAP, all of it in memory), the graphics file (Huffman: VGADICT, VGAHEAD, VGAGRAPH), fonts, pictures, and id's VL_/VWB_/US_ drawing calls into one 320x200 screen |
 | `src/w32draw.c` | the game: ThreeDRefresh -- walls, doors, the pushwall, sprites, the weapon -- then the network game's overlay |
 | `src/w32win.c`, `src/w32in.c` | the game: the window (GDI's StretchDIBits), its keys and mouse as id's Keyboard[] and IN_ calls |
+| `src/w32snd.c`, `src/w32wave.c` | the game: id's SD_ calls; an OPL2 in C, the digitized sounds, the mix into `waveOut` |
 | `src/w32pal.c` | id's palette, from WOLFSRC/OBJ/GAMEPAL.OBJ (`tools/mkpal.py`) |
 | `src/w32null.c` | the replay: no picture, no input |
 | `src/w32main.c` | a 70 Hz `TimeCount` thread, the tables `InitGame` builds, then the game's own `MPNetArgs` and `MPNetGame` |

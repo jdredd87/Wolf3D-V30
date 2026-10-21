@@ -35,7 +35,7 @@ GAME = ["WL_ACT1", "WL_ACT2", "WL_AGENT", "WL_STATE", "WL_GAME", "WL_PLAY", "WL_
 COMMON = ["w32main", "w32stub", "w32ca", "w32logic", "w32tab", "w32fmt", "w32net", "w32pal"]
 TARGETS = {
     "rep": ("W3DREP.EXE", "nt", ["w32null"]),
-    "game": ("WOLF3DMW.EXE", "nt_win", ["w32gfx", "w32draw", "w32win", "w32in"]),
+    "game": ("WOLF3DMW.EXE", "nt_win", ["w32gfx", "w32draw", "w32win", "w32in", "w32snd", "w32wave"]),
 }
 
 
@@ -99,7 +99,7 @@ def link(target):
     lnk = os.path.join(OBJ, base + ".lnk")
     with open(lnk, "w") as f:
         f.write("system %s\nname %s\noption quiet, map=%s, stack=1m\ndebug all\n"
-                "library wsock32\n"         # Winsock 1.1: Windows 95 and later
+                "library wsock32, winmm\n"  # Winsock 1.1, waveOut: Windows 95 and later
                 % (system, exe, os.path.join(OBJ, base + ".map")))
         for n in GAME + COMMON + own:
             f.write("file %s\n" % os.path.join(OBJ, n + ".obj"))

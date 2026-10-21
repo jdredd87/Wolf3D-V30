@@ -599,6 +599,11 @@ void W32Startup (void)
 	MPPageFile ();
 	W32PMStartup ();
 	InitRedShifts ();
+	{
+		void	W32SndStartup (void);	// w32snd.c: after the page file (its sounds)
+
+		W32SndStartup ();
+	}
 	for (i=1;i+1<_argc;i++)
 		if (!stricmp (_argv[i],"view"))
 			v = atoi (_argv[i+1]);

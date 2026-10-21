@@ -80,6 +80,30 @@ byte IN_MouseButtons (void) { return 0; }
 void IN_SetKeyHook (void (*hook)()) {}
 void INL_GetJoyDelta (word joy,int *dx,int *dy) { *dx = *dy = 0; }
 
+SDMode		SoundMode;
+SMMode		MusicMode;
+
+//
+// sound: nothing plays.  No game state waits on a sound in a network game
+// (WL_MP.C's MPFace replaced id's face, which skipped random numbers while
+// a sound played)
+//
+boolean SD_PlaySound (soundnames sound) { return false; }
+word SD_SoundPlaying (void) { return 0; }
+void SD_PositionSound (int leftvol,int rightvol) {}
+void SD_SetPosition (int leftvol,int rightvol) {}
+void SD_WaitSoundDone (void) {}
+void SD_StartMusic (MusicGroup far *music) {}
+void SD_MusicOn (void) {}
+void SD_MusicOff (void) {}
+boolean SD_SetSoundMode (SDMode mode) { return true; }
+boolean SD_SetMusicMode (SMMode mode) { return true; }
+void SD_SetDigiDevice (SDSMode mode) {}
+void SD_StopDigitized (void) {}
+void SD_Poll (void) {}
+void CA_CacheAudioChunk (int chunk) {}
+void CA_LoadAllSounds (void) {}
+
 void W32Events (void) {}				// no window
 void W32Present (byte *screen, byte *palette) {}
 void W32Message (char *s) {}
