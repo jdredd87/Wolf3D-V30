@@ -4412,7 +4412,11 @@ void MPNetGame (void)
 				_fmemset (mppkt+4,0,16);
 				_fstrcpy ((char far *)mppkt+4,mpname);
 				PutL (mppkt+20,MPBUILD);	// the build: release and data (MPVER)
+#ifdef W32
+				mppkt[24] = mpwatch ? 0xfe : 0xfd;	// FDh: to play, and give no snapshot
+#else
 				mppkt[24] = mpwatch ? 0xfe : 0xff;	// FEh: to watch
+#endif
 				NetSend (mppkt,25);
 			}
 			else

@@ -96,6 +96,7 @@ type
     HasWin: Boolean;             { catching up: its gap WinGap at Ticks WinT }
     WinT, WinGap: LongInt;
     Ready, Present: Boolean;
+    NoGive: Boolean;             { HELLO's FDh: gives no snapshot (a Win32 machine, 2026-10-21) }
     Inputs: LongInt;
     Heard: LongInt;              { Ticks of the last packet }
     SentFirst, SentLast: LongInt;
@@ -1082,7 +1083,7 @@ begin
   Best := -1;
   for K := 0 to Players - 1 do
     with Slots[K] do
-      if Used and not Bot and Present and HasPlayed and ((Best < 0) or (Played > Slots[Best].Played)) then
+      if Used and not Bot and not NoGive and Present and HasPlayed and ((Best < 0) or (Played > Slots[Best].Played)) then
         Best := K;
   if (Best < 0) or (Tries > 3) then
   begin
@@ -1239,6 +1240,7 @@ begin
           else Join(Name, Build, I);
           if I < 0 then Exit;
         end;
+        Slots[I].NoGive := Rx[24] = $FD;    { its snapshot is its memory: a DOS joiner cannot read it }
         Head(WELCOME);
         Tx[4] := I; Tx[5] := Players; Tx[6] := MapNum; Tx[7] := Skill; Tx[8] := Rules; Tx[9] := 0;
         PutW(10, Frags); PutW(12, Minutes);

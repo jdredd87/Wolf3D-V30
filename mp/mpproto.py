@@ -55,6 +55,13 @@ def parse(data):
     return data[3], data[4:]
 
 
+# HELLO's last byte, what the machine wants: FF to play, FE to watch (NET
+# WATCH), FD to play but give no snapshot (a Win32 machine, 2026-10-21: its
+# snapshot is its own memory, which a DOS joiner cannot read).  A server older
+# than FD takes it as FF.
+WANT_PLAY, WANT_WATCH, WANT_NOSNAP = 0xFF, 0xFE, 0xFD
+
+
 def hello(name, build, want=0xFF):
     return head(HELLO) + name.encode("latin-1")[:16].ljust(16, b"\0") + struct.pack("<IB", build, want)
 

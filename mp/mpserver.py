@@ -115,6 +115,7 @@ class Slot:
         self.inputs = 0
         self.heard = time.perf_counter()
         self.bot = None             # a bot: its input, a step at a time
+        self.nosnap = False         # gives no snapshot (HELLO's FD: a Win32 machine)
         self.sent_first = self.sent_last = None     # the last STEPS sent it
         self.sent_at = 0
 
@@ -381,6 +382,7 @@ class Server:
                 i = self.join(addr, name, build)
                 if i is None:
                     return
+            self.slots[i].nosnap = want == P.WANT_NOSNAP
             self.send(P.welcome(i, self.players, self.map, self.skill, self.rules,
                                 self.frags, self.minutes, len(self.history)), addr)
             self.send(self.start_packet(), addr)
@@ -659,7 +661,7 @@ class Server:
         newest = len(self.history) - 1
         best = None
         for k, s in enumerate(self.slots):
-            if s and not s.bot and s.present and s.played is not None and (
+            if s and not s.bot and not s.nosnap and s.present and s.played is not None and (
                     best is None or s.played > self.slots[best].played):
                 best = k
         if best is None or tries > 3:
