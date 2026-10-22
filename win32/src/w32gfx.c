@@ -655,6 +655,9 @@ void VL_GetPalette (byte far *palette)
 void VL_FadeOut (int start, int end, int red, int green, int blue, int steps)
 {
 	int	i;
+	extern int	w32wideview;			// w32win.c: leaving the play screen -- the
+										// widescreen bars black until a view again
+	w32wideview = 0;
 
 	for (i=start;i<=end;i++)
 	{

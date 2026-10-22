@@ -79,13 +79,95 @@ static void Capture (int on)
 	W32MouseOn (on);
 }
 
+//
+// 4:3 or widescreen (StevenC, 2026-10-21): the picture the game was made for
+// is 320x200 on a 4:3 screen; WIDE (or F11, remembered in W32VIEW.CFG) shows
+// it 16:9 -- a full-width view cast further each side (w32draw.c), the rest
+// of the 320 columns between bars.  Either way the window keeps its shape:
+// a picture never stretched, black bars round it when the window is not
+//
+#define WIDEW	426						// (w32draw.c's)
+#define WSIDE	((WIDEW-320)/2)
+int				w32widemode;			// the picture is 16:9
+int				w32wideview, w32viewtop, w32viewrows;	// (w32draw.c: the view's sides)
+unsigned char	w32wide[WIDEW*200];
+static int		shownw = 320;			// the width of the frame shown
+
 static void Blit (HDC dc)
 {
 	RECT	r;
+	int		w, h, x, y;
 
 	GetClientRect (win,&r);
-	StretchDIBits (dc,0,0,r.right,r.bottom,0,0,320,200,shown,(BITMAPINFO *)&bmi,
+	w = r.right;
+	h = r.bottom;
+	if (w*(w32widemode ? 9 : 3) > h*(w32widemode ? 16 : 4))
+		w = h*(w32widemode ? 16 : 4)/(w32widemode ? 9 : 3);		// bars left and right
+	else
+		h = w*(w32widemode ? 9 : 3)/(w32widemode ? 16 : 4);		// bars above and below
+	x = (r.right - w)/2;
+	y = (r.bottom - h)/2;
+	if (x > 0)
+	{
+		PatBlt (dc,0,0,x,r.bottom,BLACKNESS);
+		PatBlt (dc,x+w,0,r.right-x-w,r.bottom,BLACKNESS);
+	}
+	if (y > 0)
+	{
+		PatBlt (dc,0,0,r.right,y,BLACKNESS);
+		PatBlt (dc,0,y+h,r.right,r.bottom-y-h,BLACKNESS);
+	}
+	bmi.h.biWidth = shownw;
+	StretchDIBits (dc,x,y,w,h,0,0,shownw,200,shown,(BITMAPINFO *)&bmi,
 		DIB_RGB_COLORS,SRCCOPY);
+}
+
+//
+// the window's size for the shape, its height kept
+//
+static void Shape (void)
+{
+	RECT	r, c;
+
+	GetClientRect (win,&c);
+	if (c.bottom < 200)
+		c.bottom = 720;
+	r.left = r.top = 0;
+	r.right = c.bottom*(w32widemode ? 16 : 4)/(w32widemode ? 9 : 3);
+	r.bottom = c.bottom;
+	AdjustWindowRect (&r,WS_OVERLAPPEDWINDOW,FALSE);
+	SetWindowPos (win,NULL,0,0,r.right-r.left,r.bottom-r.top,SWP_NOMOVE|SWP_NOZORDER);
+}
+
+static void ViewChoice (int save)
+{
+	FILE	*f;
+	char	s[8];
+
+	if (save)
+	{
+		if ((f = fopen ("W32VIEW.CFG","w")) != NULL)
+		{
+			fputs (w32widemode ? "WIDE" : "4:3",f);
+			fclose (f);
+		}
+		return;
+	}
+	if ((f = fopen ("W32VIEW.CFG","r")) != NULL)
+	{
+		if (fgets (s,sizeof(s),f))
+			w32widemode = !strncmp (s,"WIDE",4);
+		fclose (f);
+	}
+	{
+		int	i;
+
+		for (i=1;i<__argc;i++)
+			if (!stricmp (__argv[i],"wide") || !stricmp (__argv[i],"widescreen"))
+				w32widemode = 1;
+			else if (!stricmp (__argv[i],"4:3") || !stricmp (__argv[i],"narrow"))
+				w32widemode = 0;
+	}
 }
 
 static LRESULT CALLBACK Proc (HWND w, UINT m, WPARAM wp, LPARAM lp)
@@ -97,6 +179,14 @@ static LRESULT CALLBACK Proc (HWND w, UINT m, WPARAM wp, LPARAM lp)
 		if (wp == VK_F12)
 		{
 			Capture (0);				// the mouse back to Windows
+			return 0;
+		}
+		if (wp == VK_F11)
+		{
+			w32widemode = !w32widemode;	// 4:3 or widescreen, kept for next time
+			ViewChoice (1);
+			Shape ();
+			InvalidateRect (win,NULL,FALSE);
 			return 0;
 		}
 		W32Key ((lp >> 16) & 0xff,1);
@@ -239,11 +329,12 @@ void W32Wait (int ms)
 // the frame the window shows: a copy, kept -- id's FizzleFade (w32gfx.c)
 // dissolves the new picture into the one on show
 //
-static unsigned char	frame[64000];
+static unsigned char	frame[WIDEW*200];	// as shown: 320, or 426 wide
+static unsigned char	last320[64000];		// the game's own 320x200 of it
 
 unsigned char *W32Shown (void)
 {
-	return frame;
+	return last320;
 }
 
 void W32Present (unsigned char *screen, unsigned char *palette)
@@ -253,7 +344,34 @@ void W32Present (unsigned char *screen, unsigned char *palette)
 
 	if (!win)
 		return;
-	memcpy (frame,screen,sizeof(frame));
+	memcpy (last320,screen,sizeof(last320));
+	if (!w32widemode)
+	{
+		memcpy (frame,screen,64000);
+		shownw = 320;
+	}
+	else
+	{
+		int	y;
+
+		for (y=0;y<200;y++)			// the 320 in the middle, and beside them
+		{							// the view's sides, or the row's own edge
+			unsigned char	*o = frame + y*WIDEW, *sr = screen + y*320;
+
+			memcpy (o + WSIDE,sr,320);
+			if (w32wideview && y >= w32viewtop && y < w32viewtop + w32viewrows)
+			{
+				memcpy (o,w32wide + y*WIDEW,WSIDE);
+				memcpy (o + WSIDE + 320,w32wide + y*WIDEW + WSIDE + 320,WIDEW - WSIDE - 320);
+			}
+			else
+			{
+				memset (o,w32wideview ? sr[0] : 0,WSIDE);
+				memset (o + WSIDE + 320,w32wideview ? sr[319] : 0,WIDEW - WSIDE - 320);
+			}
+		}
+		shownw = WIDEW;
+	}
 	screen = frame;
 	for (i=0;i<256;i++)
 	{
@@ -286,6 +404,10 @@ static void Open (void)
 {
 	WNDCLASS	wc;
 	RECT		r = {0,0,960,720};
+
+	ViewChoice (0);
+	if (w32widemode)
+		r.right = 1280;
 
 	memset (&wc,0,sizeof(wc));
 	wc.lpfnWndProc = Proc;

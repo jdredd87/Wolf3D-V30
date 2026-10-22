@@ -41,14 +41,33 @@ static int	weaponscale[NUMWEAPONS] = {SPR_KNIFEREADY,SPR_PISTOLREADY,
 static int	wdirangle[9] = {0,ANGLES/8,2*ANGLES/8,3*ANGLES/8,4*ANGLES/8,
 				5*ANGLES/8,6*ANGLES/8,7*ANGLES/8,ANGLES};
 
-static double	zbuf[320];			// each column's wall distance
+//
+// widescreen (w32win.c: WIDE, F11): a full-width view is cast WSIDE columns
+// further each side -- id's projection, a wider sight -- into w32wide, the
+// picture's sides, w32win.c putting them beside the 320 columns.  What the
+// game decides is still over id's 320 (w32vis.c): the aim, the actors seen,
+// the items taken, as on DOS
+//
+#define WIDEW		426					// 16:9 of a 4:3 320x200's 200 lines
+#define WSIDE		((WIDEW-320)/2)
+extern int		w32widemode;			// w32win.c: the window is 16:9
+extern int		w32wideview, w32viewtop, w32viewrows;	// the sides hold a view
+extern byte		w32wide[WIDEW*200];
+
+static double	zbufs[WIDEW];			// each column's wall distance
+#define zbuf	(zbufs+WSIDE)			// (x from -wext)
 static double	eyex,eyey,dirx,diry,rightx,righty,wscale;
 static int		vx0,vy0;			// the view's corner on the screen
+static int		wext;				// widescreen: columns cast beyond each side
 
-static void Put (int x, int y, int c)	// within the view
+static void Put (int x, int y, int c)	// within the view (and its sides)
 {
-	if ((unsigned)x < (unsigned)viewwidth && (unsigned)y < (unsigned)viewheight)
+	if ((unsigned)y >= (unsigned)viewheight)
+		return;
+	if ((unsigned)x < (unsigned)viewwidth)
 		w32screen[(vy0+y)*320 + vx0+x] = (byte)c;
+	else if (x >= -wext && x < viewwidth+wext)
+		w32wide[(vy0+y)*WIDEW + WSIDE + vx0 + x] = (byte)c;
 }
 
 //
@@ -239,10 +258,10 @@ static void Sprite (vissprite *v)
 	double	x0 = cx - h/2, top = viewheight/2.0 - h/2;
 	int		x, xa = (int)floor (x0 + left*h/64), xb = (int)ceil (x0 + (right+1)*h/64);
 
-	if (xa < 0)
-		xa = 0;
-	if (xb > viewwidth)
-		xb = viewwidth;
+	if (xa < -wext)
+		xa = -wext;
+	if (xb > viewwidth+wext)
+		xb = viewwidth+wext;
 	for (x=xa;x<xb;x++)
 	{
 		int		c = (int)((x + 0.5 - x0)*64/h), y;
@@ -375,7 +394,7 @@ static void Weapon (void)
 		return;
 	if (mpplayers && (MPDead () || MPDeadLook () >= 0))
 		return;							// dead: no gun in hand
-	for (x=0;x<viewwidth;x++)
+	for (x=-wext;x<viewwidth+wext;x++)
 		zbuf[x] = 1e30;
 	v.page = PMSpriteStart + weaponscale[gamestate.weapon] + gamestate.weaponframe;
 	v.lateral = 0;
@@ -428,8 +447,17 @@ void ThreeDRefresh (void)
 	eyex = player->x/65536.0 - fl*dirx;	// the eye: FOCALLENGTH behind the player
 	eyey = player->y/65536.0 - fl*diry;
 	wscale = (viewwidth/2.0) / (32768.0/44800.0);
+	// widescreen: a full-width view goes on past the 320 columns
+	wext = w32widemode && viewwidth == 320 ? WSIDE : 0;
+	w32wideview = 1;
+	w32viewtop = vy0;
+	w32viewrows = wext ? viewheight : 0;
 	for (y=0;y<viewheight;y++)			// VGAClearScreen: the ceiling, the floor
+	{
 		memset (&w32screen[(vy0+y)*320 + vx0],y < viewheight/2 ? ceiling : 0x19,viewwidth);
+		if (wext)
+			memset (&w32wide[(vy0+y)*WIDEW],y < viewheight/2 ? ceiling : 0x19,WIDEW);
+	}
 	{
 		static unsigned long	tw,ts,tp,nf,last,gap;
 		extern unsigned long	w32waited, w32waits;
@@ -446,7 +474,7 @@ void ThreeDRefresh (void)
 			W32Visibility ();
 		}
 #endif
-		for (x=0;x<viewwidth;x++)
+		for (x=-wext;x<viewwidth+wext;x++)
 			Ray (x);
 		t1 = W32Ms ();
 		Sprites ();
