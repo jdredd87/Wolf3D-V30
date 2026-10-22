@@ -16,6 +16,7 @@ drive the machines through DOS Bridge (`C:\dosbridgeDEV`) and the Windows PC
 | `doslocal.py [BOX...]` | DOS local play: each new build plays id's attract loop with `TIMEDEMO CRC` -- against id's own renderer's checksums, or the build the machine had (QUICK on the V30) |
 | `winlocal.py` | Windows local play on .37, start to quit: signon, title loop, a demo, the menu, a new game, a door, a save (F2), a floor's end and its tally, the next floor, a load (F3), widescreen and back (F11), Quit (F10, Y) -- a screenshot each |
 | `netmatrix.py KIND[@BOX] [STEPS]` | a network game of DOS and Windows machines on one server, one machine joining late: `python`, `mpsrv@p3` / `@dx486` / `@v30`, `mpsrvw`, `wl1` (the shareware), `soak` |
+| `winattract.py [MINUTES]` | WOLF3DW's attract loop left to run on .37: still running at the end, nothing in the crash log |
 | `keys37.py` | keys held in the game's window on .37 (used by `winlocal.py`) |
 
 The builds come from three trees: this one (the network game and the
@@ -83,6 +84,19 @@ crash in the log.
 
 Every machine in every game: all 4,000 steps, "no desync", ended by the
 server.
+
+**The soak** (`netmatrix.py soak 63000`, 01:08-02:08): MPSRVW on this PC,
+deathmatch, the next floor every 10 minutes; the 486, P3 and WOLF3DW in
+widescreen from the start, the V30 at step 1,968 -- **63,000 steps in
+3,599.94 s, every machine to the last, no desync, 0 at the server**; floors
+1 to 6 in .37's pictures, the kills, the respawns and the scores on its
+widescreen.
+
+### Windows, left running (`winattract.py 30`)
+
+WOLF3DW's attract loop for 30 minutes on .37 -- the title, the credits, the
+scores and id's demos, round and round (floors 38 and 44 among them): still
+running at the end, nothing in the crash log.
 
 ## Not covered
 
