@@ -128,7 +128,30 @@ game: id's own single-player Wolfenstein, menus and all -- `WOLF3DW.EXE`.
    pointers DOS reads harmlessly at DS:0 and Windows does not (the parameter
    lists, `Died` with no killer, the debug keys' "hurt self").  All under
    `#ifdef W32`: the DOS build is still `C39ED932`, byte for byte.
-9. Next: a DOS 1.11 release with the Win32 game beside it; listening to the
+9. **Shots hit -- what the DOS renderer decides, 2026-10-21.**  StevenC: "It
+   looks good but i can't hit any one."  On DOS the renderer decides more
+   than the picture: AsmRefresh's rays mark each tile in view, and
+   DrawScaleds wakes every actor beside one, marks it seen with its column
+   on the screen -- what the guns aim by -- and hands the player every item
+   in view within reach.  `src/w32vis.c` is id's own, in C: the ray walk of
+   id's WL_DR_A.ASM word for word, TransformActor, TransformTile and
+   DrawScaleds' tests, on id's projection.  The whole game only: the network
+   game aims and picks up by WL_MP.C's rules, as its DOS machines do.
+10. **Widescreen, 2026-10-21.**  StevenC: "options for widescreen vs 4:3
+   view that the game was made for".  Both Windows programs: `WIDE` on the
+   line, or F11 in the window, remembered in `W32VIEW.CFG`.  The view is
+   cast further each side -- id's projection, a wider sight, nothing
+   stretched -- growing 428/320 at any view size, id's bevel drawn round it
+   as grown; everything else is the 320 columns between bars.  The window
+   keeps its shape, 4:3 or 16:9, bars round the picture when it does not.
+   What the game decides is still over id's 320 columns (`w32vis.c`), so
+   play and the demos are DOS's.  428, not 426.7: a DIB's rows are whole
+   DWORDs, and 426 sheared the picture.  DOS has no widescreen: its picture
+   is the VGA's, 320x200 on a 4:3 screen.
+11. **Every build, every machine, 2026-10-22**: `../tests/README.md` -- all
+   the builds deployed and read back, DOS and Windows local play, network
+   games on all three servers (MPSRV on each DOS machine in turn).
+12. Next: a DOS 1.11 release with the Win32 game beside it; listening to the
    OPL2 against a real AdLib; the Victory and end text, which a test cannot
    reach without playing to the end of an episode.
 
@@ -156,6 +179,7 @@ whose Win32 programs still run on Windows 9x.  `python win32/build.py` (all thre
 | `src/w32sp.c` | the whole game: the managers' starts and ends, DOS's memory figures, ID_IN.C's `IN_ReadControl`, the signon, `Quit`, the boss key's prompt |
 | `src/w32dos.c` | `findfirst` and `findnext` (DIR.H) from `FindFirstFile` |
 | `obj/sp/w32sign.c` | made by `build.py` from WOLFSRC/OBJ/SIGNON.OBJ: id's signon picture (not kept in git) |
+| `src/w32vis.c` | the whole game: what id's renderer decides -- the tiles in view (AsmRefresh's ray walk), the actors seen and woken, their screen column for the aim, the items taken |
 | `src/w32main.c` | a 70 Hz `TimeCount` thread, the tables `InitGame` builds, then the game's own `MPNetArgs` and `MPNetGame` -- or, in the whole game, id's own start (`WL_MAIN.C`'s, as `W32IdMain`) |
 
 `W3DREP REPLAY FILE.MPR FAST` in a folder with the game's `*.WL6` prints the
