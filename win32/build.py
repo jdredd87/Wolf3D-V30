@@ -44,7 +44,7 @@ GUI = ["w32gfx", "w32draw", "w32win", "w32in", "w32snd", "w32wave"]
 TARGETS = {
     "rep": ("W3DREP.EXE", "nt", ["w32null"], [], []),
     "game": ("WOLF3DMW.EXE", "nt_win", GUI, [], []),
-    "sp": ("WOLF3DW.EXE", "nt_win", GUI + ["w32sp"], SPGAME, ["W32SP"]),
+    "sp": ("WOLF3DW.EXE", "nt_win", GUI + ["w32sp", "w32sign"], SPGAME, ["W32SP"]),
 }
 
 
@@ -79,6 +79,34 @@ def copy_sources():
 def objdir(target):
     """rep and game share obj/ (the same flags); sp is built apart (W32SP)"""
     return os.path.join(OBJ, "sp") if TARGETS[target][4] else OBJ
+
+
+def gen_signon():
+    """obj/sp/w32sign.c: the signon picture, 320x200, a byte a pixel, from id's
+    SIGNON.OBJ (WOLFSRC/OBJ) -- linked into the DOS game as introscn.  Made at
+    build time: id's picture, not ours to keep in git"""
+    out = os.path.join(OBJ, "sp", "w32sign.c")
+    src = os.path.join(WOLFSRC, "OBJ", "SIGNON.OBJ")
+    if os.path.exists(out) and os.path.getmtime(out) >= os.path.getmtime(src):
+        return out
+    d = open(src, "rb").read()
+    i, data = 0, bytearray()
+    while i < len(d):
+        t, n = d[i], d[i + 1] | (d[i + 2] << 8)
+        body = d[i + 3:i + 3 + n - 1]
+        if t in (0xA0, 0xA1):               # LEDATA: segment, offset, bytes
+            off = body[1] | (body[2] << 8)
+            chunk = body[3:]
+            if len(data) < off + len(chunk):
+                data.extend(bytes(off + len(chunk) - len(data)))
+            data[off:off + len(chunk)] = chunk
+        i += 3 + n
+    assert len(data) == 64000, len(data)
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    rows = [",".join(str(v) for v in data[k:k + 40]) + "," for k in range(0, 64000, 40)]
+    open(out, "w").write("/* w32sign.c -- id's signon picture (SIGNON.OBJ), made by build.py */\n"
+                         "unsigned char w32signon[64000] = {\n%s\n};\n" % "\n".join(rows))
+    return out
 
 
 def compile_one(name, src, target):
@@ -144,7 +172,8 @@ def main():
         for n in GAME + TARGETS[t][3]:
             ok &= compile_one(n, os.path.join(WSRC, n + ".C"), t)
         for n in COMMON + TARGETS[t][2]:
-            ok &= compile_one(n, os.path.join(HERE, "src", n + ".c"), t)
+            src = gen_signon() if n == "w32sign" else os.path.join(HERE, "src", n + ".c")
+            ok &= compile_one(n, src, t)
     if not ok:
         sys.exit("compile failed")
     for t in targets:

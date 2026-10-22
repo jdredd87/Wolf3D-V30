@@ -1189,6 +1189,12 @@ void Died (void)
 //
 // swing around to face attacker
 //
+#ifdef W32		// (no killer -- the menu's End Game: DOS reads through NULL at
+	if (!killerobj || killerobj == player)	// DS:0 and turns anywhere; Windows
+		iangle = player->angle;				// would fault.  No turn)
+	else
+	{
+#endif
 	dx = killerobj->x - player->x;
 	dy = player->y - killerobj->y;
 
@@ -1197,6 +1203,9 @@ void Died (void)
 		fangle = M_PI*2+fangle;
 
 	iangle = fangle/(M_PI*2)*ANGLES;
+#ifdef W32
+	}
+#endif
 
 	if (player->angle > iangle)
 	{

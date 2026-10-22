@@ -118,6 +118,15 @@ void W32MouseOn (int on)
 
 	extern int		buttonmouse[4];
 
+#ifdef W32SP
+	// the whole game: "Mouse Enabled" and the buttons are the player's, in
+	// id's Control menu and the config; taking the mouse only starts its
+	// moves afresh
+	on = on;
+	mousedx = mousedy = 0;
+	mousebtn = 0;
+	return;
+#endif
 	mouseenabled = on ? true : false;
 	MousePresent = mouseenabled;
 	// the buttons: left fires, right opens (a two-button mouse has no middle

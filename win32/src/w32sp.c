@@ -26,7 +26,21 @@ void PM_Startup (void) {}
 void PM_Shutdown (void) {}
 void SD_Startup (void) {}
 void SD_Shutdown (void) {}
-void IN_Startup (void) {}
+//
+// IN_Startup: a mouse (a Windows machine has one), and its buttons before the
+// config is read -- left fires, right opens doors, middle strafes, as the
+// network game has them (StevenC, 2026-10-21; RIGHTSTRAFE for id's own).  A
+// config, and id's Control menu, have the last word
+//
+void IN_Startup (void)
+{
+	extern int	buttonmouse[4];
+
+	MousePresent = true;
+	buttonmouse[0] = bt_attack;
+	buttonmouse[1] = MS_CheckParm ("rightstrafe") ? bt_strafe : bt_use;
+	buttonmouse[2] = MS_CheckParm ("rightstrafe") ? bt_use : bt_strafe;
+}
 void IN_Shutdown (void) {}
 void CA_Startup (void) {}
 void CA_Shutdown (void) {}
@@ -45,7 +59,7 @@ long MM_TotalFree (void) { return 4096l*1024; }		// (the menu's "shut up the AdL
 // what the DOS game's memory managers report: a Windows machine has enough
 // of everything, so these are DOS's largest figures
 //
-mminfotype	mminfo = {640l*1024,4096l*1024,4096l*1024};
+mminfotype	mminfo = {64l*1024,576l*1024,0,4096l*1024,640l*1024};	// near, far, EMS, XMS, main
 boolean		EMSPresent = false, XMSPresent = true, SoundSourcePresent = false;
 word		EMSPagesAvail = 0, XMSPagesAvail = 1024;
 int			MainPagesAvail = 64;
@@ -166,14 +180,17 @@ void IN_ReadControl (int player,ControlInfo *info)
 }									// let the machine breathe)
 
 //
-// the signon screen: DOS shows the picture linked into the program
-// (SIGNON.OBJ) while the managers start; here, the palette and a clear
-// screen, and FinishSignon's "Press a key" below it
+// the signon screen: the picture DOS links into the program (SIGNON.OBJ,
+// introscn) -- here built in by build.py -- while the managers start, and
+// FinishSignon's "Press a key" below it
 //
+extern unsigned char	w32signon[64000];	// (obj/sp/w32sign.c, made by build.py)
+extern byte				w32screen[];
+
 void W32Signon (void)
 {
 	VL_SetPalette (&gamepal);			// (id's headers: one byte, the palette at its address)
-	VWB_Bar (0,0,320,200,0);
+	memcpy (w32screen,w32signon,64000);
 	VW_UpdateScreen ();
 }
 

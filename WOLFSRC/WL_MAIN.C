@@ -1389,11 +1389,7 @@ void InitGame (void)
 // draw intro screen stuff
 //
 	if (!virtualreality)
-#ifdef W32
-		;							// (the signon's memory bars: DOS's memory)
-#else
 		IntroScreen ();
-#endif
 
 //
 // load in and lock down some basic chunks
