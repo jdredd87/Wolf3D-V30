@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D FOR 8086-CLASS PCs  --  optimized by StevenC and Claude
 =======================================================================
-Version 1.10, 2026-10-18
+Version 1.11, 2026-10-22
 
 id Software's Wolfenstein 3-D, rebuilt from id's released source to run
 as fast as an 8086, 8088, V20 or V30 PC allows -- and faster on anything
@@ -75,6 +75,14 @@ cast column's height to the columns beside it is in assembly: 1.8% with
 LOWWALLS4 on an 8 MHz V30.  Every program's picture is exactly what it
 was: each checked against its 1.7 build over the attract loop, every
 checksum the same, in the full mode and with LOWWALLS4.
+
+New in 1.11: two fixes found in the network game.  id's Quit, quitting
+for "Out of memory", asked the memory manager for its error screen, failed
+again and quit again, down the stack; and every message box lost one of
+the memory manager's 700 block handles, until "MM_ClearBlock: No purgable
+blocks!" hours into a game.  Neither changes a picture or a demo.  And WINDOWS:
+W3DWIN.ZIP, on the same releases page, has the whole game for Windows 95
+and later -- registered, shareware and Spear -- built from this source.
 
 The network game -- up to four players, deathmatch, team deathmatch,
 capture the flag or co-op, a server for DOS, Windows or Python -- is its
