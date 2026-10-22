@@ -391,6 +391,29 @@ static void Weapon (void)
 =============================================================================
 */
 
+//
+// the frame drawn, shown -- or, the first of a floor (fizzlein, set by
+// WL_GAME.C's SetupGameLevel), dissolved in over 20 frames, as id's
+// ThreeDRefresh does (WL_DRAW.C).  The whole game only: the network game's
+// floors start as its DOS machines' do (WL_MP.C)
+//
+static void Show (void)
+{
+#ifdef W32SP
+	extern boolean	fizzlein;
+	extern long		lasttimecount;
+
+	if (fizzlein)
+	{
+		FizzleFade (bufferofs+screenofs,displayofs+screenofs,viewwidth,viewheight,20,false);
+		fizzlein = false;
+		lasttimecount = TimeCount = 0;	// (no big tic count after it)
+		return;
+	}
+#endif
+	W32Present (w32screen,w32palette);
+}
+
 void ThreeDRefresh (void)
 {
 	double	a = player->angle * M_PI / 180, fl = 0x5700/65536.0;
@@ -436,7 +459,7 @@ void ThreeDRefresh (void)
 			bufferofs -= screenofs;
 		}
 		frameon++;
-		W32Present (w32screen,w32palette);
+		Show ();
 		tp += W32Ms () - t0;
 		return;
 	}
@@ -447,5 +470,5 @@ void ThreeDRefresh (void)
 		bufferofs -= screenofs;
 	}
 	frameon++;
-	W32Present (w32screen,w32palette);
+	Show ();
 }

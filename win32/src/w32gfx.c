@@ -684,11 +684,15 @@ void VW_UpdateScreen (void)
 // code draws on the screen the VGA shows and waits ("Press a key" below the
 // signon), where here a picture is only seen when presented
 //
+static int	fizzling;					// (FizzleFade, below, is showing its own)
+
 void W32Show (void)
 {
 	static unsigned long	last;
 	unsigned long			now = W32Ms ();
 
+	if (fizzling)
+		return;
 	if (now - last >= 14)
 	{
 		last = now;
@@ -709,11 +713,59 @@ void ClearSplitVWB (void)
 }
 #endif
 
+//
+// FizzleFade, id's (ID_VH.C before the V30's FizzleStep): the new picture
+// (the page at source) dissolved into the one on show (dest), every pixel of
+// width x height once, in the order of a 17-bit sequence -- its low 8 bits
+// less one the row, the next 9 the column -- 64000/frames pixels a 70th of
+// a second.  true if a key or button ended it (abortable)
+//
+unsigned char	*W32Shown (void);		// w32win.c: the frame on show
+
 boolean FizzleFade (unsigned source, unsigned dest, unsigned width,unsigned height,
 	unsigned frames,boolean abortable)
 {
-	VW_UpdateScreen ();
-	return false;
+	static byte		fz[64000];
+	unsigned		rs = source % SCREENSIZE, rd = dest % SCREENSIZE;
+	int				sx = (rs % SCREENBWIDE)*4, sy = rs / SCREENBWIDE;
+	int				dx = (rd % SCREENBWIDE)*4, dy = rd / SCREENBWIDE;
+	unsigned long	rnd = 1, frame = 0;
+	int				pixperframe = 64000/(frames ? frames : 1), p;
+	unsigned		x, y;
+
+	memcpy (fz,W32Shown (),sizeof(fz));
+	fizzling = 1;
+	IN_StartAck ();
+	TimeCount = 0;
+	for (;;)
+	{
+		if (abortable && IN_CheckAck ())
+		{
+			fizzling = 0;
+			VW_UpdateScreen ();
+			return true;
+		}
+		for (p=0;p<pixperframe;p++)
+		{
+			y = (rnd & 0xff) - 1;
+			x = (rnd >> 8) & 0x1ff;
+			rnd = (rnd & 1) ? (rnd >> 1) ^ 0x12000 : rnd >> 1;
+			if (x < width && y < height
+			&& (unsigned)(sx+x) < 320 && (unsigned)(sy+y) < 200
+			&& (unsigned)(dx+x) < 320 && (unsigned)(dy+y) < 200)
+				fz[(dy+y)*320 + dx+x] = w32screen[(sy+y)*320 + sx+x];
+			if (rnd == 1)				// the whole sequence: done
+			{
+				fizzling = 0;
+				VW_UpdateScreen ();
+				return false;
+			}
+		}
+		W32Present (fz,w32palette);
+		frame++;
+		while (TimeCount < frame)		// not too fast
+			W32Wait (1);
+	}
 }
 
 void	MPPageFile (void);

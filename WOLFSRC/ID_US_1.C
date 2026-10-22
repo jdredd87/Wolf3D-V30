@@ -42,8 +42,14 @@
 //	Internal variables
 #define	ConfigVersion	1
 
+#ifdef W32		// (US_CheckParm reads to an empty one: id's lists end
+				// without one, and on Windows what follows is not empty)
+static	char		*ParmStrings[] = {"TEDLEVEL","NOWAIT",""},
+					*ParmStrings2[] = {"COMP","NOCOMP",""};
+#else
 static	char		*ParmStrings[] = {"TEDLEVEL","NOWAIT"},
 					*ParmStrings2[] = {"COMP","NOCOMP"};
+#endif
 static	boolean		US_Started;
 
 		boolean		Button0,Button1,

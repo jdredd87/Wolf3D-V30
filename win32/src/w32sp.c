@@ -36,8 +36,10 @@ void VL_SetVGAPlaneMode (void) {}
 void VL_TestPaletteSet (void) {}
 void VL_SetScreen (int crtc, int pelpan) {}
 void LoadLatchMem (void) {}			// (w32gfx.c draws latched pictures from their chunks)
-void PicturePause (void) {}			// (id's screen grab, a debugging key)
-void alOut (byte n,byte b) {}		// (the menu's "shut up the AdLib" at the end)
+void alOut (byte n,byte b) {}
+void VL_ColorBorder (int color) {}	// (a debugging key: the VGA's overscan colour)
+long MM_UnusedMemory (void) { return 4096l*1024; }	// (the debugging key's memory report)
+long MM_TotalFree (void) { return 4096l*1024; }		// (the menu's "shut up the AdLib" at the end)
 
 //
 // what the DOS game's memory managers report: a Windows machine has enough

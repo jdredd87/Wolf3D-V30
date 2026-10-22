@@ -36,7 +36,7 @@ WATCOM = r"C:\WATCOM"
 GAME = ["WL_ACT1", "WL_ACT2", "WL_AGENT", "WL_STATE", "WL_GAME", "WL_PLAY", "WL_MP"]
 # id's single-player files, for the whole game (sp): built with W32SP, which
 # also leaves VERSION.H's NETGAME off -- the saves, tallies and help come back
-SPGAME = ["WL_MAIN", "WL_MENU", "WL_INTER", "WL_TEXT", "ID_US_1"]
+SPGAME = ["WL_MAIN", "WL_MENU", "WL_INTER", "WL_TEXT", "ID_US_1", "WL_DEBUG"]
 # ours, in src/: in both, then each program's own
 COMMON = ["w32main", "w32stub", "w32ca", "w32logic", "w32tab", "w32fmt", "w32net", "w32pal", "w32dos"]
 GUI = ["w32gfx", "w32draw", "w32win", "w32in", "w32snd", "w32wave"]

@@ -235,6 +235,17 @@ void W32Wait (int ms)
 
 #endif
 
+//
+// the frame the window shows: a copy, kept -- id's FizzleFade (w32gfx.c)
+// dissolves the new picture into the one on show
+//
+static unsigned char	frame[64000];
+
+unsigned char *W32Shown (void)
+{
+	return frame;
+}
+
 void W32Present (unsigned char *screen, unsigned char *palette)
 {
 	HDC		dc;
@@ -242,6 +253,8 @@ void W32Present (unsigned char *screen, unsigned char *palette)
 
 	if (!win)
 		return;
+	memcpy (frame,screen,sizeof(frame));
+	screen = frame;
 	for (i=0;i<256;i++)
 	{
 		bmi.pal[i].rgbRed = (BYTE)(palette[i*3] * 255 / 63);

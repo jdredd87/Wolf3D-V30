@@ -111,8 +111,8 @@ void LevelCompleted (void) {}
 void Victory (void) {}
 void US_ControlPanel (byte scancode) {}
 void ShutdownId (void) {}
+int DebugKeys (void) { return 0; }		// (WOLF3DW: WL_DEBUG.C's)
 #endif
-int DebugKeys (void) { return 0; }
 void ProfInit (void) {}
 void ProfStart (void) {}
 void ProfStop (void) {}

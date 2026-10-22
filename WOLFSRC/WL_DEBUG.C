@@ -148,6 +148,9 @@ void PicturePause (void)
 	int			i;
 	byte		p;
 	unsigned	x;
+#ifdef W32
+	return;					// (Windows: id's screen grab reads the VGA's memory)
+#else
 	byte		far	*dest,far *src;
 	memptr		buffer;
 
@@ -208,6 +211,7 @@ void PicturePause (void)
 	bioskey(0);
 	VW_WaitVBL(70);
 	Quit (NULL);
+#endif	// W32
 }
 
 
@@ -222,6 +226,9 @@ void PicturePause (void)
 ================
 */
 
+#ifdef W32
+void ShapeTest (void) {}	// (Windows: id's page viewer draws with the DOS scalers)
+#else
 #pragma warn -pia
 void ShapeTest (void)
 {
@@ -407,6 +414,7 @@ static	char	buf[10];
 	SD_StopDigitized();
 }
 #pragma warn +pia
+#endif	// W32
 
 
 
@@ -485,7 +493,11 @@ int DebugKeys (void)
 	if (Keyboard[sc_H])		// H = hurt self
 	{
 		IN_ClearKeysDown ();
+#ifdef W32			// (no attacker: DrawFace and Died read it -- DOS reads DS:0,
+		TakeDamage (16,player);	// Windows faults.  The player: Died turns to nobody)
+#else
 		TakeDamage (16,NULL);
+#endif
 	}
 	else if (Keyboard[sc_I])			// I = item cheat
 	{
