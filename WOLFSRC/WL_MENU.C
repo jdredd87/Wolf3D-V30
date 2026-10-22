@@ -642,8 +642,16 @@ void BossKey(void)
 	_AX = 3;
 	geninterrupt(0x10);
 	printf("C>");
+#ifdef W32
+	W32BossPrompt ();		// (w32sp.c: DOS's black text screen and its prompt,
+							// in the window: the printf reaches only the log)
+	IN_ClearKeysDown();		// and the keys cleared once: id's loop clears them as
+	while (!Keyboard[sc_Escape])	// fast as it looks, and a press that is not
+		W32Wait (10);		// held, repeating, slips between the two
+#else
 	while (!Keyboard[sc_Escape])
 	IN_ClearKeysDown();
+#endif
 
 	SD_MusicOn();
 	VL_SetVGAPlaneMode ();

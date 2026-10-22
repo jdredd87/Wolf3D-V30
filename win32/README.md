@@ -1,10 +1,18 @@
-# WOLF3DM for Win32 -- the network game on Windows 95 and later
+# Wolfenstein 3-D for Win32 -- the whole game and the network game, Windows 95 and later
 
 Written by **StevenC** and **Claude** (Anthropic), from 2026-10-21.
 
 The goal: a native Windows build of the network game that plays in the same
 game as the DOS machines.  Lockstep means every machine must compute exactly
-the same game from the same inputs, so the port is proven, not assumed.
+the same game from the same inputs, so the port is proven, not assumed.  Then
+(StevenC: "Do we have a regular version of Wolf3d for windows?") the whole
+game: id's own single-player Wolfenstein, menus and all -- `WOLF3DW.EXE`.
+
+| | |
+|---|---|
+| `WOLF3DW.EXE` | **the whole game**: id's signon, title, demos, menus, floors, tallies, saves, high scores -- and `NET server` plays the network game too |
+| `WOLF3DMW.EXE` | the network game alone: starts straight into it |
+| `W3DREP.EXE` | the gate: replays a recording, no window |
 
 ## Where it stands
 
@@ -89,13 +97,45 @@ the same game from the same inputs, so the port is proven, not assumed.
    snapshot**: its HELLO says so (FDh, where FFh is to play), and the Python
    server and MPSRV/MPSRVW never ask it -- a joiner takes a DOS machine's, or
    replays from step 0.
-8. Next: a DOS 1.11 release with the Win32 game beside it; listening to the
-   OPL2 against a real AdLib; menus (it goes straight into the network game).
+8. **The whole game -- 2026-10-21: `WOLF3DW.EXE`.**  id's own single-player
+   files built as they are -- `WL_MAIN.C`, `WL_MENU.C`, `WL_INTER.C`,
+   `WL_TEXT.C`, `WL_DEBUG.C`, `ID_US_1.C` -- with `W32SP`, which leaves
+   `VERSION.H`'s `NETGAME` off, so the saves, the tallies and the help are
+   back.  Seen on the Windows 10 PC, one at a time: the signon (id's picture,
+   its memory bars and lights, "Press a key"), PG-13, the title, the credits,
+   the high scores and a demo; the menus (episode, skill, Change View, View
+   Scores); a new game on E1L1, a door, a death and the floor again (the red
+   fizzle), "Floor 1 Completed" with the bonus counted in and Floor 2 after
+   it; a save and its load; End Game, the high score typed in, kept through a
+   Quit and a restart; the boss key (F1 with `GOODTIMES`: a black screen and
+   `C>` until Escape); sound and music throughout (recorded, `W3DRAW`).
+
+   Double-click it beside the game's `*.WL6`.  As on DOS: `GOOBERS` and
+   Backspace + Left Shift + Alt for id's debug keys (Tab+E ends a floor);
+   `NOWAIT`; `TEDLEVEL n`.  Left fires, right opens doors, middle strafes
+   until the Control menu says otherwise (`RIGHTSTRAFE` for id's).  Its own
+   `CONFIGW.WL6` and `SAVEGAW?.WL6`: an int is 4 bytes here, 2 on DOS, so the
+   DOS game's files are not this one's -- nor the other way round.  `F12`
+   gives the mouse back to Windows.
+
+   What it took, beside the network game's: the window has a thread of its
+   own, so `Keyboard[]` changes under id's waiting loops as the keyboard
+   interrupt changed it (`while (!LastScan);`), and the screen is shown while
+   id's code waits for a key; Borland's pseudo-registers and `geninterrupt`,
+   with INT 33h answered (the menus' mouse); `findfirst` for the saves;
+   `creat`, which is Open Watcom's *text* mode -- the first save came back out
+   of step; id's `FizzleFade` (before the V30's assembly) in C; three NULL
+   pointers DOS reads harmlessly at DS:0 and Windows does not (the parameter
+   lists, `Died` with no killer, the debug keys' "hurt self").  All under
+   `#ifdef W32`: the DOS build is still `C39ED932`, byte for byte.
+9. Next: a DOS 1.11 release with the Win32 game beside it; listening to the
+   OPL2 against a real AdLib; the Victory and end text, which a test cannot
+   reach without playing to the end of an episode.
 
 ## How it is built
 
 Open Watcom 2.0 (the 2026-10-01 build, unpacked into `C:\WATCOM`): the one
-whose Win32 programs still run on Windows 9x.  `python win32/build.py`.
+whose Win32 programs still run on Windows 9x.  `python win32/build.py` (all three; `rep`, `game` or `sp` for one).
 `WOLFSRC` is shared with the DOS build and compiled as it is, through:
 
 | | |
@@ -113,7 +153,10 @@ whose Win32 programs still run on Windows 9x.  `python win32/build.py`.
 | `src/w32snd.c`, `src/w32wave.c` | the game: id's SD_ calls; an OPL2 in C, the digitized sounds, the mix into `waveOut` |
 | `src/w32pal.c` | id's palette, from WOLFSRC/OBJ/GAMEPAL.OBJ (`tools/mkpal.py`) |
 | `src/w32null.c` | the replay: no picture, no input |
-| `src/w32main.c` | a 70 Hz `TimeCount` thread, the tables `InitGame` builds, then the game's own `MPNetArgs` and `MPNetGame` |
+| `src/w32sp.c` | the whole game: the managers' starts and ends, DOS's memory figures, ID_IN.C's `IN_ReadControl`, the signon, `Quit`, the boss key's prompt |
+| `src/w32dos.c` | `findfirst` and `findnext` (DIR.H) from `FindFirstFile` |
+| `obj/sp/w32sign.c` | made by `build.py` from WOLFSRC/OBJ/SIGNON.OBJ: id's signon picture (not kept in git) |
+| `src/w32main.c` | a 70 Hz `TimeCount` thread, the tables `InitGame` builds, then the game's own `MPNetArgs` and `MPNetGame` -- or, in the whole game, id's own start (`WL_MAIN.C`'s, as `W32IdMain`) |
 
 `W3DREP REPLAY FILE.MPR FAST` in a folder with the game's `*.WL6` prints the
 same report as `WOLF3DM REPLAY`; `W3DSUMS=1` prints each 50th step's sum as

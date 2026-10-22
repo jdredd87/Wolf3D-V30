@@ -60,6 +60,8 @@ unsigned char	W32Peekb (unsigned seg, unsigned ofs);
 /* the whole game's start and end on Windows (w32sp.c) */
 void			W32Signon (void);
 void			W32Quit (char *error);
+void			W32BossPrompt (void);
+void			W32Wait (int ms);		/* a wait, the window kept alive (w32win.c) */	/* the boss key's "C>" (w32sp.c) */
 #define bioskey(c)		((void)(c),0)
 #define farmalloc	malloc
 #define farfree		free

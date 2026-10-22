@@ -195,6 +195,27 @@ void W32Signon (void)
 }
 
 //
+// the boss key (WL_MENU.C's BossKey, F1 with GOODTIMES): DOS goes to a text
+// screen with a prompt on it until Escape -- here the same, drawn: black, and
+// "C>" at the top in grey
+//
+void W32BossPrompt (void)
+{
+	unsigned	was = bufferofs;
+
+	bufferofs = 0;
+	VL_SetPalette (&gamepal);			// (the text mode's own colours on DOS: the
+	VWB_Bar (0,0,320,200,0);			// game had faded its palette out)
+	fontnumber = 0;
+	fontcolor = 7;
+	px = 2;
+	py = 2;
+	VWB_DrawPropString ("C>");
+	VW_UpdateScreen ();
+	bufferofs = was;
+}
+
+//
 // Quit (WL_MAIN.C's, on Windows): the DOS game ends on a text screen -- the
 // order screen, or the error; here the config is kept (as id's Quit does on
 // a plain quit) and an error is said in a box
