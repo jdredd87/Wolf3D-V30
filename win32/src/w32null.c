@@ -65,6 +65,8 @@ void Write (int x,int y,char *string) {}
 void CacheLump (int lumpstart,int lumpend) {}
 void PreloadGraphics (void) {}
 void W32MouseDelta (int *dx, int *dy) { *dx = *dy = 0; }
+unsigned short	w32ax,w32bx,w32cx,w32dx,w32si,w32di;	// (w32comp.h: no mouse
+void W32Int (int n) { w32cx = w32dx = w32bx = 0; }		// here, nothing moved)
 void CA_CacheGrChunk (int chunk) {}
 
 //

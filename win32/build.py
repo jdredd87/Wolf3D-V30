@@ -2,7 +2,10 @@
 
     python win32/build.py            both: W3DREP.EXE and WOLF3DMW.EXE
     python win32/build.py rep        the headless replay, win32/W3DREP.EXE (the gate)
-    python win32/build.py game       the game, win32/WOLF3DMW.EXE (a window)
+    python win32/build.py game       the network game, win32/WOLF3DMW.EXE (a window)
+    python win32/build.py sp         the whole game, win32/WOLF3DW.EXE: id's own
+                                     single-player game -- title, menus, floors,
+                                     tallies, saves -- and NET as well
     python win32/build.py clean
 
 WOLFSRC is shared with the DOS build and stays as it is: its files are copied
@@ -31,11 +34,17 @@ WATCOM = r"C:\WATCOM"
 
 # id's files, built as they are (with W32's #ifdefs)
 GAME = ["WL_ACT1", "WL_ACT2", "WL_AGENT", "WL_STATE", "WL_GAME", "WL_PLAY", "WL_MP"]
+# id's single-player files, for the whole game (sp): built with W32SP, which
+# also leaves VERSION.H's NETGAME off -- the saves, tallies and help come back
+SPGAME = ["WL_MAIN", "WL_MENU", "WL_INTER", "WL_TEXT", "ID_US_1"]
 # ours, in src/: in both, then each program's own
-COMMON = ["w32main", "w32stub", "w32ca", "w32logic", "w32tab", "w32fmt", "w32net", "w32pal"]
+COMMON = ["w32main", "w32stub", "w32ca", "w32logic", "w32tab", "w32fmt", "w32net", "w32pal", "w32dos"]
+GUI = ["w32gfx", "w32draw", "w32win", "w32in", "w32snd", "w32wave"]
+# target: (exe, system, our own files, id's extra files, defines)
 TARGETS = {
-    "rep": ("W3DREP.EXE", "nt", ["w32null"]),
-    "game": ("WOLF3DMW.EXE", "nt_win", ["w32gfx", "w32draw", "w32win", "w32in", "w32snd", "w32wave"]),
+    "rep": ("W3DREP.EXE", "nt", ["w32null"], [], []),
+    "game": ("WOLF3DMW.EXE", "nt_win", GUI, [], []),
+    "sp": ("WOLF3DW.EXE", "nt_win", GUI + ["w32sp"], SPGAME, ["W32SP"]),
 }
 
 
@@ -67,8 +76,15 @@ def copy_sources():
             open(out, "wb").write(data)
 
 
-def compile_one(name, src):
-    obj = os.path.join(OBJ, name + ".obj")
+def objdir(target):
+    """rep and game share obj/ (the same flags); sp is built apart (W32SP)"""
+    return os.path.join(OBJ, "sp") if TARGETS[target][4] else OBJ
+
+
+def compile_one(name, src, target):
+    od = objdir(target)
+    os.makedirs(od, exist_ok=True)
+    obj = os.path.join(od, name + ".obj")
     deps = [src, os.path.join(HERE, "src", "w32comp.h")] + glob.glob(os.path.join(WSRC, "*.H")) \
         + glob.glob(os.path.join(HERE, "src", "*.h"))
     if os.path.exists(obj) and os.path.getmtime(obj) >= max(os.path.getmtime(d) for d in deps):
@@ -76,10 +92,10 @@ def compile_one(name, src):
     cmd = [tool("wcc386"), "-q", "-bt=nt", "-3r", "-zp1", "-w1", "-wcd=120", "-wcd=138", "-od", "-d2",
            "-fi=" + os.path.join(HERE, "src", "w32comp.h"),
            "-i=" + os.path.join(HERE, "inc"), "-i=" + WSRC, "-i=" + os.path.join(HERE, "src"),
-           "-dW32", "-fo=" + obj, src]
+           "-dW32"] + ["-d" + d for d in TARGETS[target][4]] + ["-fo=" + obj, src]
     if name == "w32main":
         cmd.insert(1, "-s")      # its thread was not started by the runtime: no stack checks
-    r = subprocess.run(cmd, capture_output=True, text=True, env=env(), cwd=OBJ)
+    r = subprocess.run(cmd, capture_output=True, text=True, env=env(), cwd=od)
     out = (r.stdout + r.stderr).strip()
     errors = [l for l in out.splitlines() if "Error!" in l]
     if out:
@@ -93,17 +109,18 @@ def compile_one(name, src):
 
 
 def link(target):
-    exe, system, own = TARGETS[target]
+    exe, system, own, idown, _ = TARGETS[target]
+    od = objdir(target)
     exe = os.path.join(HERE, exe)
     base = os.path.splitext(os.path.basename(exe))[0].lower()
-    lnk = os.path.join(OBJ, base + ".lnk")
+    lnk = os.path.join(od, base + ".lnk")
     with open(lnk, "w") as f:
         f.write("system %s\nname %s\noption quiet, map=%s, stack=1m\ndebug all\n"
                 "library wsock32, winmm\n"  # Winsock 1.1, waveOut: Windows 95 and later
-                % (system, exe, os.path.join(OBJ, base + ".map")))
-        for n in GAME + COMMON + own:
-            f.write("file %s\n" % os.path.join(OBJ, n + ".obj"))
-    r = subprocess.run([tool("wlink"), "@" + lnk], capture_output=True, text=True, env=env(), cwd=OBJ)
+                % (system, exe, os.path.join(od, base + ".map")))
+        for n in GAME + idown + COMMON + own:
+            f.write("file %s\n" % os.path.join(od, n + ".obj"))
+    r = subprocess.run([tool("wlink"), "@" + lnk], capture_output=True, text=True, env=env(), cwd=od)
     out = (r.stdout + r.stderr).strip()
     if r.returncode:
         undef = sorted(set(l.split("undefined symbol")[-1].strip() for l in out.splitlines()
@@ -119,14 +136,15 @@ def main():
     if args == ["clean"]:
         shutil.rmtree(OBJ, ignore_errors=True)
         return
-    targets = args or ["rep", "game"]
+    targets = args or ["rep", "game", "sp"]
     os.makedirs(OBJ, exist_ok=True)
     copy_sources()
     ok = True
-    for n in GAME:
-        ok &= compile_one(n, os.path.join(WSRC, n + ".C"))
-    for n in COMMON + sorted(set(m for t in targets for m in TARGETS[t][2])):
-        ok &= compile_one(n, os.path.join(HERE, "src", n + ".c"))
+    for t in targets:
+        for n in GAME + TARGETS[t][3]:
+            ok &= compile_one(n, os.path.join(WSRC, n + ".C"), t)
+        for n in COMMON + TARGETS[t][2]:
+            ok &= compile_one(n, os.path.join(HERE, "src", n + ".c"), t)
     if not ok:
         sys.exit("compile failed")
     for t in targets:

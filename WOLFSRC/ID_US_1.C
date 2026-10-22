@@ -75,6 +75,7 @@ static	boolean		US_Started;
 //			from DOS.
 //
 ///////////////////////////////////////////////////////////////////////////
+#ifndef W32		// Win32: no DOS critical errors to catch
 #pragma	warn	-par
 #pragma	warn	-rch
 int
@@ -158,6 +159,7 @@ oh_kill_me:
 }
 #pragma	warn	+par
 #pragma	warn	+rch
+#endif	// W32
 
 
 ///////////////////////////////////////////////////////////////////////////
@@ -173,7 +175,9 @@ US_Startup(void)
 	if (US_Started)
 		return;
 
+#ifndef W32
 	harderr(USL_HardError);	// Install the fatal error handler
+#endif
 
 	US_InitRndT(true);		// Initialize the random number generator
 
@@ -604,15 +608,19 @@ US_LineInput(int x,int y,char *buf,char *def,boolean escok,
 		if (cursorvis)
 			USL_XORICursor(x,y,s,cursor);
 
+#ifndef W32
 	asm	pushf
 	asm	cli
+#endif
 
 		sc = LastScan;
 		LastScan = sc_None;
 		c = LastASCII;
 		LastASCII = key_None;
 
+#ifndef W32
 	asm	popf
+#endif
 
 		switch (sc)
 		{

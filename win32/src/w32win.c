@@ -184,6 +184,29 @@ void W32Message (char *s)
 	MessageBox (win,s,"Wolfenstein 3-D",MB_OK);
 }
 
+#ifdef W32SP
+//
+// the whole game (WOLF3DW): the window has a thread of its own, which takes
+// its messages as they come -- so Keyboard[] and LastScan change under a
+// waiting loop as id's keyboard interrupt changed them, and id's menus and
+// screens wait in loops of their own (IN_WaitForKey: "while (!LastScan);").
+// Here there is nothing to take; a wait is a sleep
+//
+void W32Events (void) {}
+
+unsigned long	w32waited, w32waits;
+void	W32Show (void);					// w32gfx.c: the screen as it is
+
+void W32Wait (int ms)
+{
+	DWORD	t0 = GetTickCount ();
+
+	W32Show ();						// a wait is when id's code shows what it drew
+	Sleep (ms > 0 ? ms : 0);
+	w32waited += GetTickCount () - t0;
+	w32waits++;
+}
+#else
 void W32Events (void)
 {
 	MSG	msg;
@@ -210,6 +233,8 @@ void W32Wait (int ms)
 	w32waits++;
 }
 
+#endif
+
 void W32Present (unsigned char *screen, unsigned char *palette)
 {
 	HDC		dc;
@@ -231,24 +256,65 @@ void W32Present (unsigned char *screen, unsigned char *palette)
 	W32Events ();
 }
 
-int PASCAL WinMain (HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
+#ifdef W32SP
+#define CLASSNAME	"WOLF3DW"
+#define TITLE		"Wolfenstein 3-D (StevenC & Claude)"
+#define LOGNAME		"WOLF3DW.LOG"
+#else
+#define CLASSNAME	"WOLF3DMW"
+#define TITLE		"Wolfenstein 3-D -- the network game (StevenC & Claude)"
+#define LOGNAME		"WOLF3DMW.LOG"
+#endif
+
+static HINSTANCE	instance;
+static int			showhow;
+
+static void Open (void)
 {
 	WNDCLASS	wc;
 	RECT		r = {0,0,960,720};
 
 	memset (&wc,0,sizeof(wc));
 	wc.lpfnWndProc = Proc;
-	wc.hInstance = inst;
+	wc.hInstance = instance;
 	wc.hCursor = LoadCursor (NULL,IDC_ARROW);
 	wc.hbrBackground = (HBRUSH)GetStockObject (BLACK_BRUSH);
-	wc.lpszClassName = "WOLF3DMW";
+	wc.lpszClassName = CLASSNAME;
 	RegisterClass (&wc);
 	AdjustWindowRect (&r,WS_OVERLAPPEDWINDOW,FALSE);
-	win = CreateWindow ("WOLF3DMW","Wolfenstein 3-D -- the network game (StevenC & Claude)",
+	win = CreateWindow (CLASSNAME,TITLE,
 		WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,CW_USEDEFAULT,r.right-r.left,r.bottom-r.top,
-		NULL,NULL,inst,NULL);
-	ShowWindow (win,show);
+		NULL,NULL,instance,NULL);
+	ShowWindow (win,showhow);
 	UpdateWindow (win);
+}
+
+#ifdef W32SP
+static HANDLE	opened;
+
+//
+// the window's thread: opens it, then takes its messages until the end
+//
+static DWORD WINAPI Window (LPVOID arg)
+{
+	MSG	msg;
+
+	arg = arg;
+	Open ();
+	SetEvent (opened);
+	while (GetMessage (&msg,NULL,0,0) > 0)
+	{
+		TranslateMessage (&msg);
+		DispatchMessage (&msg);
+	}
+	return 0;
+}
+#endif
+
+int PASCAL WinMain (HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
+{
+	instance = inst;
+	showhow = show;
 	memset (&bmi,0,sizeof(bmi.h));
 	bmi.h.biSize = sizeof(BITMAPINFOHEADER);
 	bmi.h.biWidth = 320;
@@ -257,9 +323,20 @@ int PASCAL WinMain (HINSTANCE inst, HINSTANCE prev, LPSTR cmd, int show)
 	bmi.h.biBitCount = 8;
 	bmi.h.biCompression = BI_RGB;
 	bmi.h.biClrUsed = 256;
+#ifdef W32SP
+	{
+		DWORD	id;
+
+		opened = CreateEvent (NULL,TRUE,FALSE,NULL);
+		CreateThread (NULL,0,Window,NULL,0,&id);
+		WaitForSingleObject (opened,INFINITE);
+	}
+#else
+	Open ();
 	W32Events ();
-	freopen ("WOLF3DMW.LOG","w",stdout);	// no console: the report and any
-	setvbuf (stdout,NULL,_IONBF,0);			// trouble go here, beside the game
+#endif
+	freopen (LOGNAME,"w",stdout);		// no console: the report and any
+	setvbuf (stdout,NULL,_IONBF,0);		// trouble go here, beside the game
 	prev = prev; cmd = cmd;
 	return W32Run ();
 }

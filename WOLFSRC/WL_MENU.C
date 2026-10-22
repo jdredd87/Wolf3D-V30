@@ -50,7 +50,11 @@ char far endStrings[9][80]=
 };
 
 CP_iteminfo
+#if defined(W32) && defined(GOODTIMES)		// (GOODTIMES has no "Read This!": nine
+	MainItems={MENU_X,MENU_Y,9,STARTITEM,24},	// items -- ten read the sound menu's
+#else										// "None" after Quit.  Windows only)
 	MainItems={MENU_X,MENU_Y,10,STARTITEM,24},
+#endif
 	SndItems={SM_X,SM_Y1,12,0,52},
 	LSItems={LSM_X,LSM_Y,10,0,24},
 	CtlItems={CTL_X,CTL_Y,6,-1,56},
@@ -78,8 +82,13 @@ MainMenu[]=
 	{1,STR_NG,CP_NewGame},
 	{1,STR_SD,CP_Sound},
 	{1,STR_CL,CP_Control},
+#ifdef W32		// (Watcom: an int routine is not a void one without a cast)
+	{1,STR_LG,(void (*)())CP_LoadGame},
+	{0,STR_SG,(void (*)())CP_SaveGame},
+#else
 	{1,STR_LG,CP_LoadGame},
 	{0,STR_SG,CP_SaveGame},
+#endif
 	{1,STR_CV,CP_ChangeView},
 
 #ifndef GOODTIMES
@@ -288,7 +297,11 @@ int EpisodeSelect[6]={1};
 
 
 int SaveGamesAvail[10],StartGame,SoundStatus=1,pickquick;
+#ifdef W32		// Windows' own saves: a DOS one is another layout entirely
+char SaveGameNames[10][32],SaveName[13]="SAVEGAW?.";
+#else
 char SaveGameNames[10][32],SaveName[13]="SAVEGAM?.";
+#endif
 
 
 ////////////////////////////////////////////////////////////////////

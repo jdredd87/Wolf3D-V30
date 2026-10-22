@@ -70,6 +70,45 @@ void W32MouseDelta (int *dx, int *dy)
 byte IN_MouseButtons (void) { return (byte)mousebtn; }
 
 //
+// geninterrupt (w32comp.h): the mouse driver, INT 33h, as id's code calls it
+// -- reset, buttons and place, set the place, the motion counters (read and
+// cleared, mickeys as the window's pixels).  Every other interrupt (the
+// BIOS's video, the debugger's 60h and 61h) does nothing here
+//
+unsigned short	w32ax,w32bx,w32cx,w32dx,w32si,w32di;
+
+void W32Int (int n)
+{
+	static int	mx = 320, my = 100;
+
+	if (n != 0x33)
+		return;
+	switch (w32ax)
+	{
+	case 0:							// reset: a driver, two buttons
+		w32ax = 0xffff;
+		w32bx = 2;
+		break;
+	case 3:							// buttons and place
+		w32bx = (unsigned short)mousebtn;
+		w32cx = (unsigned short)mx;
+		w32dx = (unsigned short)my;
+		break;
+	case 4:							// set the place
+		mx = (short)w32cx;
+		my = (short)w32dx;
+		break;
+	case 11:						// MDelta: the motion since the last call
+		mx += mousedx;
+		my += mousedy;
+		w32cx = (unsigned short)mousedx;
+		w32dx = (unsigned short)mousedy;
+		mousedx = mousedy = 0;
+		break;
+	}
+}
+
+//
 // the window took the mouse (a click) or gave it back (F12, away): id's
 // mouseenabled, which the game reads every step
 //

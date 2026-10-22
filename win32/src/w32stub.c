@@ -22,7 +22,9 @@ boolean		Keyboard[NumCodes];
 char		LastASCII;
 ScanCode	LastScan;
 boolean		Paused;
+#ifndef W32SP		// (the whole game, WOLF3DW: ID_US_1.C's)
 word		PrintX,PrintY,WindowX,WindowY,WindowW,WindowH;
+#endif
 byte		fontcolor,backcolor;
 int			fontnumber;
 long		frameon;
@@ -32,21 +34,28 @@ byte		*audiosegs[NUMSNDCHUNKS];
 long		lasttimecount;
 unsigned	bufferofs,displayofs,linewidth,screenofs,screenloc[3];
 unsigned	ylookup[MAXSCANLINES];
+#ifndef W32SP		// (WOLF3DW: WL_MAIN.C's)
 int			centerx,shootdelta,viewwidth,viewheight;
+#endif
 fixed		viewx,viewy,viewsin,viewcos,tileglobal = TILEGLOBAL;
 int			pixstep = 1,lowsprites,lowvert;
 int			px,py;
-boolean		screenfaded,startgame,loadedgame,virtualreality,tedlevel,profiling,mmerror;
+boolean		screenfaded,profiling,mmerror;
+#ifndef W32SP
+boolean		startgame,loadedgame,virtualreality,tedlevel;
 int			mouseadjustment;
 char		str[80],str2[20];
+#endif
 char		extension[6] = "WL6";
 char		PageFileName[13] = "VSWAP.";
 unsigned long pmcount[5];
-LRstruct	LevelRatios[8];
 pictabletype *pictable;			// (w32gfx.c fills it)
+#ifndef W32SP		// (WOLF3DW: WL_INTER.C's, WL_MENU.C's)
+LRstruct	LevelRatios[8];
 
 // the menu's items: the game only renames one (WL_GAME.C, after a high score)
 CP_itemtype	MainMenu[16],NewEMenu[16];
+#endif
 
 //
 // TimeCount: the DOS game's 70 Hz timer tick, here kept by a thread
@@ -93,14 +102,17 @@ void PM_SetMainMemPurge (int level) {}
 
 //
 // the rest of the game: menus, screens, the single-player intermission
+// (the whole game, WOLF3DW, has id's own: WL_MENU.C, WL_INTER.C, WL_MAIN.C)
 //
+#ifndef W32SP
 void CP_ViewScores (void) {}
 void CheckHighScore (long score,word other) {}
-int DebugKeys (void) { return 0; }
 void LevelCompleted (void) {}
 void Victory (void) {}
 void US_ControlPanel (byte scancode) {}
 void ShutdownId (void) {}
+#endif
+int DebugKeys (void) { return 0; }
 void ProfInit (void) {}
 void ProfStart (void) {}
 void ProfStop (void) {}
@@ -270,6 +282,7 @@ void DoActors (void)
 		DoActor (obj);
 }
 
+#ifndef W32SP		// (WOLF3DW: WL_MAIN.C's own NewGame, MS_CheckParm and Quit)
 //
 // NewGame (WL_MAIN.C), as id's
 //
@@ -324,6 +337,7 @@ void Quit (char *error)
 	}
 	exit (0);
 }
+#endif	// W32SP
 
 //
 // each 50th step's sum as it is made (WL_MP.C's MPStep), with W3DSUMS set:

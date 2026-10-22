@@ -67,7 +67,11 @@ void            Quit (char *error);
 boolean         startgame,loadedgame,virtualreality;
 int             mouseadjustment;
 
+#ifdef W32
+char	configname[13]="CONFIGW.";	// Windows' own: its ints are 4 bytes, DOS's 2
+#else
 char	configname[13]="CONFIG.";
+#endif
 
 
 /*
@@ -245,6 +249,10 @@ extern int far  CheckIs386(void);
 
 	int     i;
 
+#ifdef W32
+	IsA386 = true;				// Windows: 32 bits already, nothing to patch
+	return;
+#endif
 	for (i = 1;i < _argc;i++)
 		if (US_CheckParm(_argv[i],JHParmStrings) == 0)
 		{
@@ -489,7 +497,11 @@ boolean LoadTheGame(int file,int x,int y)
 			break;
 		GetNewActor ();
 	 // don't copy over the links
+#ifdef W32
+		memcpy (new,&nullobj,sizeof(nullobj)-2*sizeof(objtype *));
+#else
 		memcpy (new,&nullobj,sizeof(nullobj)-4);
+#endif
 	}
 
 
@@ -732,6 +744,12 @@ void SetupWalls (void)
 ==========================
 */
 
+#ifdef W32
+void SignonScreen (void)			// Windows: w32sp.c draws it
+{
+	W32Signon ();
+}
+#else
 void SignonScreen (void)                        // VGA version
 {
 	unsigned        segstart,seglength;
@@ -760,6 +778,7 @@ void SignonScreen (void)                        // VGA version
 	}
 	MML_UseSpace (segstart,seglength);
 }
+#endif	// W32
 
 
 /*
@@ -1193,6 +1212,7 @@ void InitGame (void)
 		virtualreality = false;
 
 	MM_Startup ();                  // so the signon screen can be freed
+#ifndef W32
 	if (MS_CheckParm ("lowwalls") || MS_CheckParm ("lowdetail"))
 		pixstep = 2;					// NEC V30 build (step 79): one ray a column pair
 	{									// step 97: LOWWALLS4, one ray in four
@@ -1276,6 +1296,7 @@ void InitGame (void)
 		MM_GetPtr (&flatbuf,640+128*3+80*8+1);	// and the fill body: so only this mode pays
 		MM_SetLock (&flatbuf,true);
 	}
+#endif	// W32
 
 	SignonScreen ();
 
@@ -1284,6 +1305,7 @@ void InitGame (void)
 	PM_Startup ();
 	PM_UnlockMainMem ();
 	SD_Startup ();
+#ifndef W32
 	{									// FASTOPL (StevenC & Claude): no waits between
 		int i;							// AdLib writes, for an emulated OPL2
 		extern unsigned alDelayAddr,alDelayData;
@@ -1295,11 +1317,14 @@ void InitGame (void)
 				alDelayAddr = alDelayData = 0;
 		}
 	}
+#endif
 	CA_Startup ();
 	US_Startup ();
 
 
-#ifndef SPEAR
+#ifdef W32
+	if (0)							// Windows: memory enough
+#elif !defined(SPEAR)
 	if (mminfo.mainmem < 200000L)	// multiplayer (StevenC & Claude): id's 235000
 									// less 35 KB -- the network code put the 486
 									// (550 KB free) just under 235000, then on
@@ -1315,12 +1340,14 @@ void InitGame (void)
 	{
 		memptr screen;
 
+#ifndef W32
 		CA_CacheGrChunk (ERRORSCREEN);
 		screen = grsegs[ERRORSCREEN];
 		ShutdownId();
 		movedata ((unsigned)screen,7+7*160,0xb800,0,17*160);
 		gotoxy (1,23);
 		exit(1);
+#endif
 	}
 
 
@@ -1362,7 +1389,11 @@ void InitGame (void)
 // draw intro screen stuff
 //
 	if (!virtualreality)
+#ifdef W32
+		;							// (the signon's memory bars: DOS's memory)
+#else
 		IntroScreen ();
+#endif
 
 //
 // load in and lock down some basic chunks
@@ -1371,9 +1402,11 @@ void InitGame (void)
 	CA_CacheGrChunk(STARTFONT);
 	MM_SetLock (&grsegs[STARTFONT],true);
 
+#ifndef W32
 	LoadLatchMem ();
 	BuildTables ();          // trig tables
 	SetupWalls ();
+#endif
 
 #if 0
 {
@@ -1419,6 +1452,7 @@ close(profilehandle);
 ==========================
 */
 
+#ifndef W32		// Windows: w32stub.c's NewViewSize (w32draw.c projects itself)
 boolean SetViewSize (unsigned width, unsigned height)
 {
 	viewwidth = width&~15;                  // must be divisable by 16
@@ -1450,6 +1484,7 @@ boolean SetViewSize (unsigned width, unsigned height)
 }
 
 
+#endif	// W32 (SetViewSize)
 void ShowViewSize (int width)
 {
 	int     oldwidth,oldheight;
@@ -1466,6 +1501,7 @@ void ShowViewSize (int width)
 }
 
 
+#ifndef W32
 void NewViewSize (int width)
 {
 	CA_UpLevel ();
@@ -1474,6 +1510,7 @@ void NewViewSize (int width)
 	SetViewSize (width*16,width*16*HEIGHTRATIO);
 	CA_DownLevel ();
 }
+#endif	// W32
 
 
 
@@ -1487,6 +1524,12 @@ void NewViewSize (int width)
 ==========================
 */
 
+#ifdef W32
+void Quit (char *error)
+{
+	W32Quit (error);				// w32sp.c: the config saved, a box if an error
+}
+#else
 void Quit (char *error)
 {
 	static int far quitting;
@@ -1553,6 +1596,7 @@ void Quit (char *error)
 
 	exit(0);
 }
+#endif	// W32
 
 //===========================================================================
 
@@ -1605,6 +1649,12 @@ char *FpsString (long frames, long ticks)
 	return s;
 }
 
+#ifdef W32
+void TimeDemo (void)
+{
+	Quit ("TIMEDEMO is the DOS game's");
+}
+#else
 extern	int		MainPagesAvail;		// ID_PM.C, not in its header
 extern	unsigned	alDelayAddr,alDelayData;	// ID_SD_A.ASM
 extern	unsigned long	alReadNs;		// ID_SD.C
@@ -1795,6 +1845,7 @@ void TimeDemo (void)
 		printf ("ABORTED by a key, mouse or joystick button during demo %d\n",played-1);
 	exit (aborted ? 2 : 0);
 }
+#endif	// W32
 
 void    DemoLoop (void)
 {
@@ -1976,7 +2027,11 @@ void    DemoLoop (void)
 
 char    *nosprtxt[] = {"nospr",nil};
 
+#ifdef W32
+void W32IdMain (void)			// (w32main.c, from the window's WinMain)
+#else
 void main (void)
+#endif
 {
 	int     i;
 

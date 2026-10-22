@@ -97,7 +97,11 @@ typedef struct {
 typedef struct {
 		int active;
 		char string[36];
+#ifdef W32
+		void (* routine)();		// Win32: the items' routines take (void) and (int)
+#else							// alike, as Borland lets them (Watcom does not)
 		void (* routine)(int temp1);
+#endif
 		} CP_itemtype;
 
 typedef struct {

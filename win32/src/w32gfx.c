@@ -295,6 +295,7 @@ void W32FontInit (void)
 		CA_CacheGrChunk (STARTFONT+i);
 }
 
+#ifndef W32SP		// (the whole game, WOLF3DW, has id's own: ID_US_1.C, WL_MENU.C, WL_INTER.C, WL_GAME.C)
 void CacheLump (int lumpstart,int lumpend)
 {
 	int	i;
@@ -304,6 +305,7 @@ void CacheLump (int lumpstart,int lumpend)
 }
 
 void PreloadGraphics (void) {}
+#endif
 
 /*
 =============================================================================
@@ -342,6 +344,29 @@ void VWB_DrawPic (int x, int y, int chunknum)
 
 	Base (&bx,&by);
 	Pic (bx + (x & ~7),by + y,chunknum);
+}
+
+//
+// CA_CacheScreen (ID_CA.C): a full-screen picture -- the title, the credits
+// -- straight on to the page drawn on
+//
+void CA_CacheScreen (int chunk)
+{
+	int	bx,by;
+
+	Base (&bx,&by);
+	Pic (bx,by,chunk);
+}
+
+//
+// peekb (w32comp.h): the screen's first byte -- FinishSignon reads the
+// signon picture's colour there to blank its "Press a key" with
+//
+unsigned char W32Peekb (unsigned seg, unsigned ofs)
+{
+	if (seg == 0xa000)
+		return w32screen[ofs % 64000u];
+	return 0;
 }
 
 void LatchDrawPic (unsigned x, unsigned y, unsigned picnum)
@@ -439,6 +464,7 @@ void VW_MeasurePropString (char far *string, word *width, word *height)
 	*height = f ? f->height : 0;
 }
 
+#ifndef W32SP		// (the whole game, WOLF3DW, has id's own: ID_US_1.C, WL_MENU.C, WL_INTER.C, WL_GAME.C)
 void US_Print (char far *s)
 {
 	char	line[256];
@@ -485,6 +511,8 @@ void US_CPrint (char far *s)
 	}
 }
 
+#endif
+
 //
 // an 8x8 tile (TILE8, id's window frame): planar as a picture is, 16 bytes
 // a plane, two a row
@@ -505,6 +533,7 @@ void VWB_DrawTile8 (int x, int y, int tile)
 			Put (bx+x+i,by+y+j,src[(i&3)*16 + j*2 + (i>>2)]);
 }
 
+#ifndef W32SP		// (the whole game, WOLF3DW, has id's own: ID_US_1.C, WL_MENU.C, WL_INTER.C, WL_GAME.C)
 void US_ClearWindow (void)
 {
 	VWB_Bar (WindowX,WindowY,WindowW,WindowH,WHITE);
@@ -602,6 +631,7 @@ boolean US_LineInput (int x,int y,char *buf,char *def,boolean escok,int maxchars
 {
 	return false;
 }
+#endif	// W32SP
 
 /*
 =============================================================================
@@ -648,9 +678,28 @@ void VW_UpdateScreen (void)
 	W32Present (w32screen,w32palette);
 }
 
+//
+// W32Show: the screen as it is now, at most once a frame -- for the whole
+// game (WOLF3DW), whose waits for a key (w32in.c, w32sp.c) call it: id's
+// code draws on the screen the VGA shows and waits ("Press a key" below the
+// signon), where here a picture is only seen when presented
+//
+void W32Show (void)
+{
+	static unsigned long	last;
+	unsigned long			now = W32Ms ();
+
+	if (now - last >= 14)
+	{
+		last = now;
+		W32Present (w32screen,w32palette);
+	}
+}
+
 void VL_WaitVBL (int vbls) { W32Wait (vbls*1000/70); }
 void VL_LowVert (int on) {}
 void FixOfs (void) {}
+#ifndef W32SP		// (the whole game, WOLF3DW, has id's own: ID_US_1.C, WL_MENU.C, WL_INTER.C, WL_GAME.C)
 void ClearSplitVWB (void)
 {
 	WindowX = 0;
@@ -658,6 +707,7 @@ void ClearSplitVWB (void)
 	WindowW = 320;
 	WindowH = 160;
 }
+#endif
 
 boolean FizzleFade (unsigned source, unsigned dest, unsigned width,unsigned height,
 	unsigned frames,boolean abortable)

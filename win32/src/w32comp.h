@@ -42,6 +42,11 @@
 #define _dos_write	w32_dos_write
 #define _dos_close	w32_dos_close
 #define _creat		w32_creat
+/* and plain creat, which id's menu saves the game with: Open Watcom's opens in
+   TEXT mode, and every 0Ah written became 0Dh 0Ah -- the save came back out of
+   step ("GetNewActor: No free spots in objlist", 2026-10-21).  Borland's
+   runtime is binary throughout */
+#define creat		w32_creat
 unsigned w32_dos_open (const char *path, unsigned mode, int *handle);
 unsigned w32_dos_creat (const char *path, unsigned attr, int *handle);
 unsigned w32_dos_read (int handle, void *buf, unsigned count, unsigned *bytes);
@@ -49,6 +54,12 @@ unsigned w32_dos_write (int handle, const void *buf, unsigned count, unsigned *b
 unsigned w32_dos_close (int handle);
 int w32_creat (const char *path, int attr);
 #define peek(s,o)		((void)(s),(void)(o),0)
+/* peekb: a byte of the screen (A000h: the picture drawn, w32gfx.c), else 0 */
+unsigned char	W32Peekb (unsigned seg, unsigned ofs);
+#define peekb(s,o)		W32Peekb ((s),(o))
+/* the whole game's start and end on Windows (w32sp.c) */
+void			W32Signon (void);
+void			W32Quit (char *error);
 #define bioskey(c)		((void)(c),0)
 #define farmalloc	malloc
 #define farfree		free
@@ -85,4 +96,16 @@ int w32_vsprintf (char *out, const char *fmt, va_list ap);
 #ifndef M_PI
 #define M_PI		3.14159265358979323846	/* Borland's math.h has it */
 #endif
+/* Borland's pseudo-registers and geninterrupt: id's menus call the mouse
+   driver (INT 33h) through them, and W32Int (w32in.c) answers as one would.
+   Other interrupts (the BIOS's video, the debugger's 60h) do nothing */
+extern unsigned short	w32ax,w32bx,w32cx,w32dx,w32si,w32di;
+#define _AX			w32ax
+#define _BX			w32bx
+#define _CX			w32cx
+#define _DX			w32dx
+#define _SI			w32si
+#define _DI			w32di
+void			W32Int (int n);
+#define geninterrupt(n)	W32Int (n)
 #endif

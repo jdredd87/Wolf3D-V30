@@ -100,6 +100,17 @@ int W32Run (void)
 	W32Startup ();
 	W32Tables ();
 	US_InitRndT (0);
+#ifdef W32SP
+	{
+		// the whole game (WOLF3DW): id's own start -- the signon, the title
+		// and its demos, the menus; NET server still plays the network game
+		// (WL_MAIN.C's DemoLoop asks MPNetArgs first, as the DOS WOLF3DM does)
+		void	W32IdMain (void);
+
+		W32IdMain ();
+		Quit ("Demo loop exited???");
+	}
+#endif
 	{
 		// no NET and no REPLAY on the command line (double-clicked): NET --
 		// the last server (WOLF3DM.CFG), or FIND for one on the network.
