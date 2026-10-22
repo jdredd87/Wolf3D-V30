@@ -107,5 +107,6 @@ for box in sys.argv[1:] or ["dx486", "p3"]:
     ok &= os.path.exists(cfg)
     # one file at a time: DEL *.* asks "Are you sure (Y/N)?" and the box waits for
     # an answer nobody gives (it took the 486 and P3 down, 2026-10-22)
-    dosctl("exec", "--box", box, "--quiet", r"FOR %%F IN (C:\W3TEST\*.*) DO DEL %%F", r"RD C:\W3TEST")
+    dosctl("exec", "--box", box, "--quiet", r"FOR %%F IN (C:\W3TEST\*.*) DO DEL %%F",
+           "CD \\", r"RD C:\W3TEST")       # (the runs' CD stays: a job runs in the agent's shell)
     print("RESULT doskeys %s: %s" % (box, "PASS" if ok else "FAIL"), flush=True)
