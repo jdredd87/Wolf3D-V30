@@ -1467,32 +1467,47 @@ void NewViewSize (int width)
 
 void Quit (char *error)
 {
+	static int far quitting;
 	unsigned        finscreen;
-	memptr	screen;
+	memptr	screen = 0;
 
 	if (virtualreality)
 		geninterrupt(0x61);
 
-	ClearMemory ();
-	if (!*error)
+	//
+	// StevenC & Claude (2026-10-12): id's Quit asked the memory manager for
+	// its screen -- and when the error WAS "Out of memory", that failed too
+	// and Quit'ed again, round and round down the stack through the data
+	// segment: the 486's black screen, garbage and stuck PC speaker tone
+	// (MULTIPLAYER.md).  The screen now only if there is room, and only
+	// once; the message is printed either way
+	//
+	if (!quitting++)
 	{
-	 #ifndef JAPAN
-	 CA_CacheGrChunk (ORDERSCREEN);
-	 screen = grsegs[ORDERSCREEN];
-	 #endif
-	 WriteConfig ();
-	}
-	else
-	{
-	 CA_CacheGrChunk (ERRORSCREEN);
-	 screen = grsegs[ERRORSCREEN];
+		ClearMemory ();
+		MM_BombOnError (false);
+		if (!*error)
+		{
+		 #ifndef JAPAN
+		 CA_CacheGrChunk (ORDERSCREEN);
+		 screen = grsegs[ORDERSCREEN];
+		 #endif
+		 WriteConfig ();
+		}
+		else
+		{
+		 CA_CacheGrChunk (ERRORSCREEN);
+		 screen = grsegs[ERRORSCREEN];
+		}
+		mmerror = false;
 	}
 
 	ShutdownId ();
 
 	if (error && *error)
 	{
-	  movedata ((unsigned)screen,7,0xb800,0,7*160);
+	  if (screen)
+		movedata ((unsigned)screen,7,0xb800,0,7*160);
 	  gotoxy (10,4);
 	  puts(error);
 	  gotoxy (1,8);
@@ -1503,7 +1518,8 @@ void Quit (char *error)
 	{
 		clrscr();
 		#ifndef JAPAN
-		movedata ((unsigned)screen,7,0xb800,0,4000);
+		if (screen)
+			movedata ((unsigned)screen,7,0xb800,0,4000);
 		gotoxy(1,24);
 		#endif
 //asm	mov	bh,0
