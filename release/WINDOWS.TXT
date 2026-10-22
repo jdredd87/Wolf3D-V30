@@ -1,0 +1,61 @@
+WOLFENSTEIN 3-D FOR WINDOWS  --  by StevenC and Claude (Anthropic)
+==================================================================
+Version 1.11, 2026-10-22
+
+id Software's Wolfenstein 3-D, built for Windows (95 and later) from the
+same source as the DOS games in this project: id's own game, menus and all,
+and the network game -- Windows and DOS machines in one game.  None of id's
+game data is included: you need your own.
+
+    WOLF3DW.EXE    the whole game, on the registered data (*.WL6)
+    WOLF3DW1.EXE   the same, on the free shareware episode (*.WL1)
+    SPEARW.EXE     the same, on Spear of Destiny (*.SOD)
+    WOLF3DMW.EXE   the network game alone (*.WL6): it starts straight into it
+    MPSRVW.EXE     a server for the network game, on Windows
+
+Put the program beside the game's data and double-click it.  It plays id's
+game exactly: id's four demos play frame for frame as they do on DOS -- the
+whole game's state compared every 50 frames, every one the same, on the
+registered game, the shareware and Spear.
+
+
+PLAYING
+-------
+The keys are id's.  The mouse: click in the window to give it to the game;
+F12, or leaving the window, gives it back.  Left fires, right opens doors,
+middle strafes (RIGHTSTRAFE on the command line for id's own: right strafes,
+middle opens; NOMOUSEY: the mouse only turns).
+
+F11, or WIDE on the command line: a widescreen view -- the world cast further
+each side, the bevel drawn round it.  F11 again for id's 4:3.  Remembered in
+W32VIEW.CFG.
+
+NOAL, NOSB, NOMUSIC turn off the AdLib, the digitized sounds, the music.
+GOOBERS and Backspace + Left Shift + Alt: id's debug keys, as on DOS.
+
+Its own CONFIGW.WL6 and SAVEGAW?.WL6 (CONFIGW.SOD, SAVEGAW?.SOD ...): an
+int is 4 bytes here and 2 on DOS, so the DOS game's files are not these.
+
+
+THE NETWORK GAME
+----------------
+Up to four players over UDP, Windows and DOS machines together, on any of
+the project's three servers (MPSRVW.EXE here; MPSRV.EXE on DOS; the Python
+one).  Everyone in a game plays the same data: the registered game
+(WOLF3DW, WOLF3DMW and DOS WOLF3DM), the shareware (WOLF3DW1 and WOLF3DM1)
+or Spear (SPEARW and SPEARM) -- the server refuses a mixture.
+
+    WOLF3DW NET 192.168.1.10 NAME STEVE      join that server
+    WOLF3DMW                                 the last server, or find one
+    MPSRVW --players 4 --mode dm --noenemies --itemrespawn 30
+
+Windows Firewall asks the first time a program opens the network: allow it
+for your network's type.  WOLF3DW.LOG (WOLF3DMW.LOG) beside the program
+has the game's own report.  SETUP.TXT in W3DMP.ZIP walks through a network
+game step by step, DOS machines and servers included; MPSRVW /? explains
+every server option.
+
+
+Source, and everything else: https://github.com/jdredd87/Wolf3D-V30
+(the multiplayer branch; win32/README.md is these programs' own story).
+Wolfenstein 3-D is id Software's -- see LICENSE.DOC.

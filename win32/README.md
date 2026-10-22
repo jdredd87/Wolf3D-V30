@@ -11,6 +11,7 @@ game: id's own single-player Wolfenstein, menus and all -- `WOLF3DW.EXE`.
 | | |
 |---|---|
 | `WOLF3DW.EXE` | **the whole game**: id's signon, title, demos, menus, floors, tallies, saves, high scores -- and `NET server` plays the network game too |
+| `WOLF3DW1.EXE`, `SPEARW.EXE` | the same on the shareware (`*.WL1`) and on Spear of Destiny (`*.SOD`) -- `NET` too, each with its own players (2026-10-22) |
 | `WOLF3DMW.EXE` | the network game alone: starts straight into it |
 | `W3DREP.EXE` | the gate: replays a recording, no window |
 

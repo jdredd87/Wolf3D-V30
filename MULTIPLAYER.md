@@ -2264,3 +2264,71 @@ back in (mTCP's `SNTP` timed out while DNS worked; the joining box read
 `sent 52 in 1`).  SETUP.md's troubleshooting has each, and how to tell them
 apart.
 
+## Spear of Destiny on the network -- 2026-10-22
+
+StevenC: "do spear network play first, then release".  Spear of Destiny was
+single player only: `SPEARV` on DOS (since v1.7) and `SPEARW` on Windows
+(this week).  Now it is a network game too -- `SPEARM.EXE` on DOS,
+`SPEARW.EXE NET` on Windows -- on all three servers.
+
+What it took:
+
+* **Its own build** (`WL_MP.C`'s `MPBUILD`): the low byte is the data the
+  game plays -- 6 registered, 1 shareware, now **53h for Spear**.  `SPEARW`
+  had been saying 6, so it could have joined a registered game and gone
+  out of step at once.  The servers refuse a mixture, as before.
+* **`SPEARM`** -- `python w3dbuild.py buildsod` in this tree: id's
+  `SODVER.H` with `GOODTIMES` and `NETGAME`, as `WOLF3DM` is made.  Its
+  start-up memory check is the network game's 200,000 bytes, not single
+  player Spear's 235,000 (`WL_MAIN.C`): the V30 had refused to start.
+* **Spear's floors** (`NextLevel`, `WL_MP.C`), as id's `GameLoop` has
+  them: one run of 21 -- the secret elevators on maps 3 and 11 to 18 and
+  19, back to 4 and 12; the Spear, on map 17 (Death Knight), takes everyone
+  to map 20, the Angel of Death, whose floor gives every player the gold key
+  as id's does; a map past 20 is map 0.  In deathmatch the floors go round
+  0-17.  A console's `map N` is the floor itself (`MPMAP`), not `N % 10`.
+* **The servers** name a floor by the players' data (`mpproto.map_name`,
+  `MapName` in `mpsrv.pas`): Spear's are "floor 1" to "floor 21, the Angel
+  of Death"; `map` takes 0-20 or `map 1 F`, F 1-21.  `NET FIND` prints
+  "floor N" in a Spear game.
+* **The menu**: `PLAY` in a folder of `*.SOD` with `SPEARM.EXE` has the
+  network page and runs `SPEARM`.
+
+### The tests (`tests/netmatrix.py sod*`)
+
+| game | server | steps | | |
+|---|---|---|---|---|
+| co-op, enemies, the V30 from the start | Python | 4,000 | V30, 486, SPEARW; P3 late | PASS |
+| deathmatch, a bot | MPSRV on P3 | 4,000 | 486, SPEARW; V30 late | PASS |
+| Spear's floor order through the console | Python | 10,000 | 486, P3, SPEARW; V30 late | PASS -- every floor as id's |
+| team deathmatch | MPSRVW | 4,000 | 486, P3, SPEARW; V30 late | PASS |
+| deathmatch, a bot | MPSRV on the V30 | 4,000 | 486, SPEARW; P3 late | PASS |
+| deathmatch, a bot | MPSRV on the 486 | 4,000 | P3, SPEARW; V30 late | PASS |
+
+No game had a desync.  `tests/README.md` has every run, the failures too.
+
+### The V30's freezes: its PicoMEM's Sound Blaster
+
+With its Sound Blaster on, the V30 froze in 4 Spear games of 7 -- at steps
+3,454, 4,594, 7,570 and 3,359, every game of 20,000 steps among them; it
+played through a 4,000-step co-op from the start, a 4,000-step deathmatch
+and an 8,000-step co-op -- while the 486, P3 and SPEARW played on in
+agreement.  The hang watchdog's build (`huntbot.py --spear`)
+painted it: CS:IP in `SendFrame` (`WL_NET.C`, the packet driver's send),
+where-code 31, and the BIOS tick stopped -- interrupts off, the bus held.
+The same 20,000 steps as Wolfenstein (`WOLF3DM`): no freeze.  With `NOEMS`:
+a freeze at 3,359.  With **`NOSB`: none**, all 20,000 steps, and none in the
+three games after it (4 of 4).  So the emulated Sound Blaster on the PicoMEM 2 --
+the card that is also the V30's WiFi, on the 06-16 firmware -- is where it
+is, as its AdLib was on the 09-27 firmware (DOS Bridge's
+`projects/alstress/PICOMEM-REPORT.md`).  Why Spear and not Wolfenstein is
+not settled; Spear leaves the V30 15 KB less memory (its code and tables:
+`SPEARM`'s image is 374,271 bytes, `WOLF3DM`'s 359,215), so more of what it
+plays is fetched while it plays.  **The V30 plays networked Spear with
+`NOSB`** (SETUP.md); the music and the AdLib's effects stay.  The 486 also
+stopped once (step 831 of 8,000), as it had twice in eight hours of
+Wolfenstein on 2026-10-19: its own fault, not Spear's.
+
+The registered `WOLF3DM` is byte for byte as it was (335,854 bytes,
+`C39ED932`), and the Windows builds that are not Spear preprocess to the
+same code.

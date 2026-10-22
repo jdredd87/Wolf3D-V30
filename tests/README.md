@@ -15,7 +15,7 @@ drive the machines through DOS Bridge (`C:\dosbridgeDEV`) and the Windows PC
 | `deployall.py BOX...` | every DOS build onto every machine that has it: each program present in `C:\WOLF3D`, `C:\WL1`, `C:\SPEAR`, `C:\MPSRV` replaced by its new build (the old kept as `.PRV`), read back by CRC-32 on the machine |
 | `doslocal.py [BOX...]` | DOS local play: each new build plays id's attract loop with `TIMEDEMO CRC` -- against id's own renderer's checksums, or the build the machine had (QUICK on the V30) |
 | `winlocal.py` | Windows local play on .37, start to quit: signon, title loop, a demo, the menu, a new game, a door, a save (F2), a floor's end and its tally, the next floor, a load (F3), widescreen and back (F11), Quit (F10, Y) -- a screenshot each |
-| `netmatrix.py KIND[@BOX] [STEPS]` | a network game of DOS and Windows machines on one server, one machine joining late: `python`, `mpsrv@p3` / `@dx486` / `@v30`, `mpsrvw`, `wl1` (the shareware), `wl1w` (it with WOLF3DW1), `soak` |
+| `netmatrix.py KIND[@BOX] [STEPS]` | a network game of DOS and Windows machines on one server, one machine joining late: `python`, `mpsrv@p3` / `@dx486` / `@v30`, `mpsrvw`, `wl1` (the shareware), `wl1w` (it with WOLF3DW1), `soak`; Spear: `sod`, `sod30`, `sodsrv@BOX`, `sodw`, `sodfloors`.  `NETEXE` plays a test build instead, `NETEARLY`/`NETLATE` other machines, `V30EXTRA` (and the like) a machine's own switches |
 | `winattract.py [MINUTES]` | WOLF3DW's attract loop left to run on .37: still running at the end, nothing in the crash log |
 | `keys37.py` | keys held in the game's window on .37 (used by `winlocal.py`; `W3DPROC` names another program) |
 | `demosum.py [wl6\|wl1\|sod]` | id's demos, the DOS game against the Windows one, the whole game state every 50 frames (WL_MP.C's `DemoSum`): a DOS test build with `DEMOSUM` on the 486, `TIMEDEMO DEMOSUM` on .37 -- every line the same |
@@ -35,6 +35,7 @@ Windows builds), the `v30-8086` branch (the DOS single-player family) and the
 |---|---|---|---|
 | WOLF3DM (DOS network game, 1.11) | 335,854 | C39ED932 | 486, P3, V30 `C:\WOLF3D` |
 | WOLF3DM1 (its shareware, 1.11) | 334,574 | 5949C066 | 486, P3, V30 `C:\WL1` |
+| SPEARM (its Spear of Destiny, 1.11) | 338,190 | 8932F1DC | 486, P3, V30 `C:\SPEAR` |
 | WOLF3DV (DOS single player) | 284,878 | BC518078 | 486, P3, V30 |
 | WOLF3D8 (8086/8088) | 290,590 | 36FE102F | 486, P3 |
 | WOLF3D1, WOLF3D18 (shareware) | 283,918 / 289,582 | 849E2006 / A07EFE5C | 486, P3, V30 `C:\WL1` |
@@ -160,6 +161,39 @@ Run twice on each machine, all four PASS.  Both saves pulled back and read: name
 6, two shots off a new game's 8, so a fresh game cannot pass for the load.
 God mode because the guards the shots wake are in the save, and they open
 the cell door after the load.
+
+### Spear of Destiny on the network (`netmatrix.py sod*`, 2026-10-22)
+
+`SPEARM` on the 486, P3 and the V30 (`C:\SPEAR`), `SPEARW NET` on .37;
+build `01110053`, Spear's own.
+
+| game | server | steps | machines | |
+|---|---|---|---|---|
+| co-op, enemies | Python | 4,000 | 486, P3, SPEARW; V30 late | the V30 would not start: id's Spear memory check (fixed, below); the other three PASS, 0 desyncs |
+| the same | Python | 4,000 | the same | the V30 froze at step 3,454; the other three to the end, 0 desyncs |
+| the same, the V30 from the start | Python | 4,000 | V30, 486, SPEARW; P3 late | **PASS**, all four |
+| deathmatch, a bot | MPSRV on P3 | 4,000 | 486, SPEARW; V30 late | **PASS**, all three |
+| co-op, enemies | Python | 8,000 | 486, P3, SPEARW; V30 late | the 486 stopped at step 831; the other three to the end, 0 desyncs |
+| the same, the watchdog build (`huntbot.py --spear`) | Python | 20,000 | the same | the V30 froze at step 4,594 -- its screen: in the packet driver's send, the tick stopped |
+| **Wolfenstein** (`WOLF3DM`), the control | Python | 20,000 | the same, Wolfenstein | **PASS**, all four |
+| co-op, enemies | Python | 20,000 | the same | the V30 froze at step 7,570; the other three to the end |
+| the same, the V30 with `NOSB` | Python | 20,000 | the same | **PASS**, all four, 0 desyncs |
+| the same, the V30 with `NOEMS` | Python | 20,000 | P3, SPEARW; V30 late | the V30 froze at step 3,359 |
+| floor order, the console (`sodfloors`) -- map 17, next; map 18, next; map 20, next | Python | 10,000 | 486, P3, SPEARW; V30 late (`NOSB`) | **PASS**, all four: the Angel's floor with the gold key, floor 19, floor 5, the Angel again, floor 1 -- in .37's pictures |
+| team deathmatch (`sodw`) | MPSRVW | 4,000 | 486, P3, SPEARW; V30 late (`NOSB`) | **PASS**, all four |
+| deathmatch, a bot (`sodsrv@v30`) | MPSRV on the V30 | 4,000 | 486, SPEARW; P3 late | **PASS**, all three |
+| deathmatch, a bot (`sodsrv@dx486`) | MPSRV on the 486 | 4,000 | P3, SPEARW; V30 late (`NOSB`) | **PASS**, all three |
+
+Every machine that stayed in played every step in agreement: no game in
+this table had a desync.  **The V30 freezes in Spear while its PicoMEM
+card's emulated Sound Blaster plays** -- 4 Spear games of 7 with it on, all three of
+20,000 steps among them; none of the 4 with `NOSB`; none in the same
+20,000 steps played as Wolfenstein; the card's WiFi
+is on the same Pico, and the freeze was caught in a send with interrupts off
+(the card's other freeze, its AdLib on the 09-27 firmware, is in
+`PICOMEM-REPORT.md` in DOS Bridge).  Until the card is settled the V30 plays
+networked Spear with `NOSB`.  The 486's one stop is its own: it hung twice
+in eight hours of Wolfenstein on 2026-10-19.
 
 ## Not covered
 
