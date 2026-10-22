@@ -41,12 +41,12 @@ Windows builds), the `v30-8086` branch (the DOS single-player family) and the
 | WOLF3D1, WOLF3D18 (shareware) | 283,918 / 289,582 | 849E2006 / A07EFE5C | 486, P3, V30 `C:\WL1` |
 | SPEARV, SPEAR8 (Spear of Destiny) | 283,998 / 289,854 | 0B4C9805 / 0A03A36B | 486, V30 `C:\SPEAR` |
 | WOLF3DB (the bsp branch) | 306,686 | 8BC33670 | 486, P3, V30 |
-| MPSRV (DOS server) | 113,224 | 8C8EC9F1 | 486, P3, V30 `C:\MPSRV` |
-| WOLF3DW (Windows, the whole game) | 588,088 | 58A1327F | .37 `C:\W3DWIN` |
-| WOLF3DW1 (Windows, the shareware) | 586,734 | 6C14AB57 | .37 `C:\W3DWIN1` |
-| SPEARW (Windows, Spear of Destiny) | 580,805 | DD0A1EDB | .37 `C:\W3DSOD` |
-| WOLF3DMW (Windows, the network game) | 413,579 | 6D160CCB | .37 `C:\W3DWIN` |
-| MPSRVW (Windows server) | 92,672 | DA741190 | this PC (`mp/build/win`) |
+| MPSRV (DOS server) | 114,196 | A365D834 | 486, P3, V30 `C:\MPSRV` |
+| WOLF3DW (Windows, the whole game) | 588,092 | C74A75A5 | .37 `C:\W3DWIN` |
+| WOLF3DW1 (Windows, the shareware) | 586,738 | 4F311A00 | .37 `C:\W3DWIN1` |
+| SPEARW (Windows, Spear of Destiny) | 580,834 | AAC8302D | .37 `C:\W3DSOD` |
+| WOLF3DMW (Windows, the network game) | 413,583 | 580628F7 | .37 `C:\W3DWIN` |
+| MPSRVW (Windows server) | 93,184 | 623DF7CC | this PC (`mp/build/win`) |
 
 All 27 DOS files read back on their machines with the right CRC.  Two fixes
 found on the network branch went into the single-player and bsp builds
