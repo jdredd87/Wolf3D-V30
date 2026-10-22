@@ -769,6 +769,38 @@ begin
   IsPerson := Slots[I].Used and not Slots[I].Bot;
 end;
 
+{ The data the players' build plays: its low byte (WL_MP.C's MPBUILD) -- 6
+  registered, 1 shareware, $53 Spear of Destiny (2026-10-22).  The floor
+  order is the game's own; the server names a floor and keeps a map number
+  in range.  6 before anyone is in. }
+const
+  DATA_WL1 = 1;
+  DATA_SOD = $53;
+
+function GameData: Integer;
+var I: Integer;
+begin
+  GameData := 6;
+  for I := 0 to Players - 1 do
+    if IsPerson(I) then
+    begin
+      GameData := Slots[I].Build and $FF;
+      Exit;
+    end;
+end;
+
+{ a map number as its players know it: E1L1, or Spear's floor 1-21 }
+function MapName(N: LongInt): ShortString;
+begin
+  if GameData = DATA_SOD then
+  begin
+    if (N = 18) or (N = 19) then MapName := 'floor ' + I2S(N + 1) + ', secret'
+    else if N = 20 then MapName := 'floor 21, the Angel of Death'
+    else MapName := 'floor ' + I2S(N + 1);
+  end
+  else MapName := 'E' + I2S(N div 10 + 1) + 'L' + I2S(N mod 10 + 1);
+end;
+
 { a person or a watcher: whoever is sent the steps, the names, BYE }
 function IsReceiver(I: Integer): Boolean;
 begin
@@ -1637,7 +1669,7 @@ end;
 function Settings: ShortString;
 var S: ShortString;
 begin
-  S := 'map ' + I2S(MapNum) + ' (E' + I2S(MapNum div 10 + 1) + 'L' + I2S(MapNum mod 10 + 1) + '), ';
+  S := 'map ' + I2S(MapNum) + ' (' + MapName(MapNum) + '), ';
   if Rules2 and RULE2_CTF <> 0 then S := S + 'capture the flag'
   else if Rules2 and RULE2_TEAM <> 0 then S := S + 'team deathmatch'
   else if Rules and RULE_DM <> 0 then S := S + 'deathmatch' else S := S + 'co-op';
@@ -1927,14 +1959,23 @@ begin
 end;
 
 function MapW(K: Integer; var N: LongInt): Boolean;   { E L, or N }
-var E, L: LongInt;
+var E, L, MaxE, MaxL, MaxN: LongInt;
 begin
   MapW := False;
+  MaxE := 6; MaxL := 10; MaxN := 59;         { the players' data: Spear has one }
+  if GameData = DATA_SOD then                 { episode of 21 floors, the }
+  begin                                       { shareware one of 10 }
+    MaxE := 1; MaxL := 21; MaxN := 20;
+  end
+  else if GameData = DATA_WL1 then
+  begin
+    MaxE := 1; MaxN := 9;
+  end;
   if (NW > K + 1) and NumW(W[K], E) and NumW(W[K + 1], L) then
   begin
-    if (E < 1) or (E > 6) or (L < 1) or (L > 10) then
+    if (E < 1) or (E > MaxE) or (L < 1) or (L > MaxL) then
     begin
-      Say('episode 1-6, floor 1-10');
+      Say('episode 1-' + I2S(MaxE) + ', floor 1-' + I2S(MaxL));
       Exit;
     end;
     N := (E - 1) * 10 + (L - 1);
@@ -1942,9 +1983,9 @@ begin
   end
   else if (NW > K) and NumW(W[K], N) then
   begin
-    if (N < 0) or (N > 59) then
+    if (N < 0) or (N > MaxN) then
     begin
-      Say('map 0-59');
+      Say('map 0-' + I2S(MaxN));
       Exit;
     end;
     MapW := True;
@@ -1985,7 +2026,8 @@ begin
   Say('unban ADDRESS | bans     ... and back again; the list');
   Say('end [reason]             end the game for everyone');
   Say('pause | resume           hold the game for everyone, and let it go on');
-  Say('map E L | map N          everyone to that floor now (the tally first)');
+  Say('map E L | map N          everyone to that floor now (the tally first);');
+  Say('                         Spear of Destiny: map 1 L, L 1-21, or N 0-20');
   Say('nextfloor                everyone to the next floor now');
   Say('timelimit MIN | fraglimit N   change the game''s limit now (0: none)');
   Say('next                     the settings the next game starts with');
@@ -2063,7 +2105,7 @@ begin
   begin
     if not MapW(1, V) then Exit;
     At := AddEvent(EV_MAP, V);
-    What := 'everyone to map ' + I2S(V) + ' (E' + I2S(V div 10 + 1) + 'L' + I2S(V mod 10 + 1) + ')';
+    What := 'everyone to map ' + I2S(V) + ' (' + MapName(V) + ')';
   end
   else if Cmd = 'nextfloor' then
   begin
@@ -2497,7 +2539,8 @@ begin
   WriteLn('                   at P1''s and P2''s start; the frag limit counts');
   WriteLn('                   captures');
   WriteLn('  --map N          the first floor: (episode-1)*10 + (floor-1),      (0: E1L1)');
-  WriteLn('                   so 0-59 -- E2L1 is 10, E6L10 is 59');
+  WriteLn('                   so 0-59 -- E2L1 is 10, E6L10 is 59; Spear of Destiny');
+  WriteLn('                   0-20 -- floor 1 to 21 (19, 20 secret; 21 the Angel)');
   WriteLn('  --skill N        0 "can I play, daddy?" to 3 "I am death incarnate" (2)');
   WriteLn('  --noenemies      no enemies at all: an empty map, for deathmatch');
   WriteLn('  --ff on|off      friendly fire in co-op                            (on)');

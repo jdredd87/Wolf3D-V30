@@ -17,7 +17,8 @@ WOLF3DM of 2026-10-13 or later on every machine.
     end [reason]             end the game for everyone; the server waits for
                              the next one (or stops, with --once)
     pause | resume           hold the game for everyone, and let it go on
-    map E L | map N          everyone to that floor now (the tally first)
+    map E L | map N          everyone to that floor now (the tally first);
+                             Spear of Destiny: map 1 L, L 1-21, or N 0-20
     nextfloor                everyone to the next floor now
     timelimit MIN | fraglimit N   change the game's limit now (0: none)
     next                     the settings the next game starts with
@@ -181,8 +182,7 @@ class Console:
     def settings(self):
         s = self.s
         r = s.rules
-        e, l = s.map // 10 + 1, s.map % 10 + 1
-        parts = ["map %d (E%dL%d)" % (s.map, e, l), s.mode_name(),
+        parts = ["map %d (%s)" % (s.map, self.P.map_name(s.map, s.data())), s.mode_name(),
                  "skill %d" % s.skill, "bots %d" % s.bots,
                  "enemies %s" % ("off" if r & self.RULE_NOENEMIES else "on"),
                  "ff %s" % ("off" if r & self.RULE_NOFF else "on"),
@@ -296,16 +296,7 @@ class Console:
             return
         what = w[0].lower()
         if what == "map":
-            if len(w) >= 3:
-                e, l = int(w[1]), int(w[2])
-                if not (1 <= e <= 6 and 1 <= l <= 10):
-                    raise ValueError("episode 1-6, floor 1-10")
-                n = (e - 1) * 10 + (l - 1)
-            else:
-                n = int(w[1])
-                if not 0 <= n <= 59:
-                    raise ValueError("map 0-59")
-            self.pending["map"] = n
+            self.pending["map"] = self.map_number(w[1:])
         elif what == "mode":
             if w[1].lower() not in ("dm", "coop", "tdm", "ctf"):
                 raise ValueError("coop, dm, tdm or ctf")
@@ -327,14 +318,12 @@ class Console:
             self.say("next game: %s %s" % (what, " ".join(w[1:])))
 
     def map_number(self, w):
+        data = self.s.data()            # the players' data: Spear's floors are 0-20
         if len(w) >= 2:
-            e, l = int(w[0]), int(w[1])
-            if not (1 <= e <= 6 and 1 <= l <= 10):
-                raise ValueError("episode 1-6, floor 1-10")
-            return (e - 1) * 10 + (l - 1)
+            return self.P.map_from(int(w[0]), int(w[1]), data)
         n = int(w[0])
-        if not 0 <= n <= 59:
-            raise ValueError("map 0-59")
+        if not 0 <= n <= self.P.map_max(data):
+            raise ValueError("map 0-%d" % self.P.map_max(data))
         return n
 
     def now(self, cmd, w):
@@ -346,7 +335,7 @@ class Console:
         if cmd == "map":
             n = self.map_number(w)
             at = s.event(P.EV_MAP, n)
-            what = "everyone to map %d (E%dL%d)" % (n, n // 10 + 1, n % 10 + 1)
+            what = "everyone to map %d (%s)" % (n, P.map_name(n, s.data()))
         elif cmd == "nextfloor":
             at = s.event(P.EV_NEXTFLOOR)
             what = "everyone to the next floor"

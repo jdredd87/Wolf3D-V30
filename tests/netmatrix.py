@@ -8,6 +8,14 @@ together, on one of the servers:
                 the three DOS machines only (no Windows shareware build)
     soak        MPSRVW.EXE on this PC: deathmatch, the next floor every 10
                 minutes, .37 in widescreen
+    sod         Spear of Destiny (SPEARM in C:\\SPEAR, SPEARW on .37): mp/mpserver.py,
+                co-op WITH enemies
+    sodsrv@BOX  ... MPSRV.EXE on that DOS machine: deathmatch, a bot
+    sodw        ... MPSRVW.EXE on this PC: team deathmatch
+    sodfloors   ... mp/mpserver.py, co-op: the console sends everyone through
+                Spear's floor order (map 17, nextfloor: the Angel's floor; map
+                18, nextfloor: floor 5; map 20, nextfloor: floor 1), a picture
+                of .37 after each
 
 Every DOS machine plays WOLF3DM 1.11 (NETBOT SHOW: a bot drives it, the game
 draws); .37 plays the Windows game.  One machine joins late, at about step
@@ -31,6 +39,8 @@ STEPS = int(sys.argv[2]) if len(sys.argv) > 2 else 4000
 OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "stage", "tests", "net-" + ARG.replace("@", "-"))
 os.makedirs(OUT, exist_ok=True)
 EXTRA = {"dx486": "", "p3": " VIEW 19", "v30": " LOWEST VIEW 10"}
+for _b in EXTRA:                    # a box's own switches added: V30EXTRA=" NOSB" (2026-10-22)
+    EXTRA[_b] += os.environ.get(_b.upper() + "EXTRA", "")
 DM = "--mode dm --noenemies --itemrespawn 30"
 PLAN = {   # the server's host, its rules, from the start, late, the Windows program (and its extra)
     "python": (PC, "--players 4 --mode coop --skill 2", ["dx486", "p3"], "v30", "WOLF3DW", ""),
@@ -41,11 +51,23 @@ PLAN = {   # the server's host, its rules, from the start, late, the Windows pro
     "wl1": (PC, "--players 4 " + DM, ["dx486", "p3"], "v30", None, ""),
     "wl1w": (PC, "--players 4 " + DM, ["dx486", "p3"], "v30", "WOLF3DW1", ""),   # the shareware, with Windows
     "soak": (PC, "--players 4 --timelimit 10 " + DM, ["dx486", "p3"], "v30", "WOLF3DW", " WIDE"),
+    # Spear of Destiny (2026-10-22)
+    "sod": (PC, "--players 4 --mode coop --skill 2", ["dx486", "p3"], "v30", "SPEARW", ""),
+    "sodsrv": (ADDR.get(SRVBOX), "--players 4 --bots 1 " + DM,
+               [b for b in ("dx486", "p3", "v30") if b != SRVBOX][:1],
+               "p3" if SRVBOX == "v30" else "v30", "SPEARW", ""),
+    "sodw": (PC, "--players 4 --mode tdm --noenemies --itemrespawn 30", ["dx486", "p3"], "v30", "SPEARW", ""),
+    "sod30": (PC, "--players 4 --mode coop --skill 2", ["v30", "dx486"], "p3", "SPEARW", ""),   # the V30 from the start
+    "sodfloors": (PC, "--players 4 --mode coop --skill 0", ["dx486", "p3"], "v30", "SPEARW", ""),
 }
+SPEAR = KIND.startswith("sod")
 HOST, RULES, EARLY, LATE, WINEXE, WINEXTRA = PLAN[KIND]
+if os.environ.get("NETEARLY"):      # other machines: NETEARLY="p3", NETLATE="v30" (2026-10-22)
+    EARLY = os.environ["NETEARLY"].split()
+    LATE = os.environ.get("NETLATE", LATE)
 WINDIR = {"WOLF3DW1": r"C:\W3DWIN1", "SPEARW": r"C:\W3DSOD"}.get(WINEXE, r"C:\W3DWIN")
 RULES += " --steps %d --once" % STEPS
-CTLHOST = HOST if KIND == "mpsrv" else "127.0.0.1"     # (the PC's servers: loopback only)
+CTLHOST = HOST if KIND in ("mpsrv", "sodsrv") else "127.0.0.1"     # (the PC's servers: loopback only)
 
 
 def note(s):
@@ -75,7 +97,9 @@ def step_now():
 
 
 def player(box):
-    d, exe = (r"C:\WL1", "WOLF3DM1") if KIND in ("wl1", "wl1w") else (r"C:\WOLF3D", "WOLF3DM")
+    d, exe = (r"C:\WL1", "WOLF3DM1") if KIND in ("wl1", "wl1w") else \
+        (r"C:\SPEAR", "SPEARM") if SPEAR else (r"C:\WOLF3D", "WOLF3DM")
+    exe = os.environ.get("NETEXE", exe)     # a test build in its place (mp/huntbot.py's)
     return job(box, ["CD " + d, "%s NET %s NAME X%s NETBOT SHOW%s" % (exe, HOST, box[-2:].upper(), EXTRA[box])],
                box, STEPS // 15 + 1800)
 
@@ -84,10 +108,10 @@ open(os.path.join(OUT, "events.txt"), "w").close()
 open(os.path.join(OUT, "console.txt"), "w").close()
 note("%s server on %s: %s" % (ARG, HOST, RULES))
 srvout = open(os.path.join(OUT, "server.txt"), "w")
-if KIND in ("python", "wl1", "wl1w"):
+if KIND in ("python", "wl1", "wl1w", "sod", "sod30", "sodfloors"):
     srv = subprocess.Popen([sys.executable, "-u", "mp/mpserver.py"] + RULES.split(), cwd=WOLF,
                            stdin=subprocess.DEVNULL, stdout=srvout, stderr=subprocess.STDOUT, env=ENV)
-elif KIND in ("mpsrvw", "soak"):
+elif KIND in ("mpsrvw", "soak", "sodw"):
     srv = subprocess.Popen([os.path.join(WOLF, "mp", "build", "win", "mpsrvw.exe")] + RULES.split(), cwd=OUT,
                            stdin=subprocess.DEVNULL, stdout=srvout, stderr=subprocess.STDOUT, env=ENV)
 else:
@@ -118,6 +142,12 @@ note("%s in, late (step %d)" % (LATE, step_now()))
 time.sleep(60)
 note("console: " + ctl("status").replace("\n", " | ")[:300])
 note("scores: " + ctl("scores").replace("\n", " | ")[:300])
+if KIND == "sodfloors":             # Spear's floor order, through the console
+    for n, cmd in enumerate(("map 17", "nextfloor", "map 18", "nextfloor", "map 20", "nextfloor")):
+        note("console: %s -> %s" % (cmd, ctl(cmd).replace("\n", " | ")[:150]))
+        time.sleep(45)              # the tally, the floor's load (a V30's is slow)
+        subprocess.run(AGENT + ["shot", os.path.join(OUT, "floor-%d.png" % n)], capture_output=True)
+        note("picture floor-%d.png; %s" % (n, ctl("status").split("\n")[0][:150]))
 k = 0
 t = time.time()
 while srv.poll() is None and time.time() - t < STEPS // 15 + 900:

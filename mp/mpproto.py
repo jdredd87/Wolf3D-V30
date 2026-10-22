@@ -44,6 +44,32 @@ SYNC_EVERY = 50                 # steps between SYNCs
 NOBODY = 0xFFFFFFFF             # `have` before the first step
 
 
+# The data a build plays: its low byte (WL_MP.C's MPBUILD) -- 6 registered,
+# 1 shareware, 53h Spear of Destiny (2026-10-22).  The floor order is the
+# game's own; a server only names a floor and keeps a map number in range
+DATA_WL6, DATA_WL1, DATA_SOD = 6, 1, 0x53
+
+
+def map_max(data):
+    """The highest map number the data has."""
+    return {DATA_SOD: 20, DATA_WL1: 9}.get(data, 59)
+
+
+def map_name(n, data):
+    """A map number as its players know it: E1L1, or Spear's floor 1-21."""
+    if data == DATA_SOD:
+        return "floor %d%s" % (n + 1, {18: ", secret", 19: ", secret", 20: ", the Angel of Death"}.get(n, ""))
+    return "E%dL%d" % (n // 10 + 1, n % 10 + 1)
+
+
+def map_from(e, l, data):
+    """map E L -- Spear has one episode of 21 floors."""
+    floors, episodes = (21, 1) if data == DATA_SOD else (10, 1 if data == DATA_WL1 else 6)
+    if not (1 <= e <= episodes and 1 <= l <= floors):
+        raise ValueError("episode 1-%d, floor 1-%d" % (episodes, floors))
+    return (e - 1) * 10 + (l - 1)
+
+
 def head(kind):
     return b"WM" + bytes([VERSION, kind])
 

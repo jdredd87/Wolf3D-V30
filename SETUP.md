@@ -33,10 +33,13 @@ Everything happens on UDP port **31992** (the server's console uses 31999).
   - the free *shareware* 1.4 files (`*.WL1`, episode 1's ten floors) --
     the game is `WOLF3DM1.EXE` (since v1.6).  The shareware is free to
     copy: `1WOLF14.ZIP` on any DOS game archive, unzipped and its `INSTALL`
-    run.  So anyone can try a network game without buying anything.
+    run.  So anyone can try a network game without buying anything; or
+  - *Spear of Destiny* (`*.SOD`, its 21 floors) -- the game is `SPEARM.EXE`
+    on DOS and `SPEARW.EXE` on Windows (since v1.11).
 
   Everyone in one game uses the same one: all `WOLF3DM` on registered data,
-  or all `WOLF3DM1` on shareware.  The server refuses a mixture.
+  all `WOLF3DM1` on shareware, or all `SPEARM`/`SPEARW` on Spear.  The
+  server refuses a mixture.
 - **On each player's DOS machine**: a NEC V20/V30, an 80186, or a 286 and
   up (the network game uses 186 instructions; a plain 8086 or 8088 can run
   the DOS server, but not play yet), VGA, DOS, at least about **550 KB of
@@ -91,7 +94,8 @@ the file is current.
    directory with your `*.WL6` files -- or `WOLF3DM1.EXE`, `W3MENU.EXE`
    and `PLAY.BAT` into the one with the shareware's `*.WL1`.  (They replace
    the base package's menu with one that has a network page; in a
-   shareware folder it runs `WOLF3DM1` by itself.)
+   shareware folder it runs `WOLF3DM1` by itself, and in a Spear folder --
+   `SPEARM.EXE` beside the `*.SOD` -- `SPEARM`.)
 2. Check the memory: `MEM`'s "largest executable program size" should be
    about 550 KB or more.  Free more by loading drivers high, or leaving out
    what the game doesn't need (a CD-ROM driver is a common one).
@@ -143,6 +147,12 @@ the disk.  Even an 8 MHz V30 can host a full game.
 
 With the shareware, the server's `--map` and `map` pick a floor of
 episode 1: whatever episode you give, the shareware game stays in it.
+With Spear of Destiny they pick one of its 21 floors: `map N` with N 0-20,
+or `map 1 F` with F 1-21 (19 and 20 are the secret floors, 21 the Angel of
+Death's).  The floors go as id's Spear does: the secret elevators on floors
+4 and 12 lead to 19 and 20, which lead back to 5 and 13, and taking the
+Spear on floor 18 takes everyone to the Angel.  In deathmatch the floors go
+round 1 to 18 again.
 
 ### The server's address
 

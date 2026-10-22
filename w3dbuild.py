@@ -13,6 +13,9 @@ DOS programs.
                                      built in C:\\W3D1, back as WOLFSRC\\WOLF3D1.EXE + .MAP
     python w3dbuild.py buildwl18     the shareware for a plain 8086/8088: that copy through
                                      to8086.py, built in C:\\W3D18, back as WOLFSRC\\WOLF3D18.EXE
+    python w3dbuild.py buildsod      Spear of Destiny (*.SOD): SODVER.H with GOODTIMES, built in
+                                     C:\\W3DS, back as WOLFSRC\\SPEARV.EXE -- in the network
+                                     game's tree SPEARM.EXE, with NETGAME (buildsod8: SPEAR8)
     python w3dbuild.py deploy        put WOLFSRC\\WOLF3DV.EXE into the V30's C:\\WOLF3D, with the
                                      switches menu (PLAY.BAT and W3MENU.EXE, built here)
                                      and the demo reel (SHOWCASE.BAT)
@@ -234,9 +237,16 @@ def cmd_buildsod(plain8086=False):
     shutil.copytree(SRC, dst, ignore=shutil.ignore_patterns("*.EXE", "*.MAP", "*.exe", "*.map"))
     t = open(os.path.join(dst, "SODVER.H"), "rb").read()
     nl = b"\r\n" if b"\r\n" in t else b"\n"
-    open(os.path.join(dst, "VERSION.H"), "wb").write(t.rstrip(b"\r\n") + nl + b"#define GOODTIMES" + nl)
     home = SRC
-    name, REMOTE = "SPEARV", REMOTE + "S"
+    # the network game's tree (the multiplayer branch) makes SPEARM, Spear's
+    # WOLF3DM: NETGAME as VERSION.H has it -- the network game's memory
+    # (2026-10-22)
+    net = os.path.exists(os.path.join(home, "WL_MP.C"))
+    t = t.rstrip(b"\r\n") + nl + b"#define GOODTIMES" + nl
+    if net:
+        t += b"#define NETGAME" + nl
+    open(os.path.join(dst, "VERSION.H"), "wb").write(t)
+    name, REMOTE = "SPEARM" if net else "SPEARV", REMOTE + "S"
     if plain8086:
         dst8 = os.path.join(STAGE, "srcsod8")
         r = subprocess.run([sys.executable, os.path.join(HERE, "to8086.py"), dst, dst8])

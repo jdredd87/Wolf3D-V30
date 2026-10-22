@@ -38,12 +38,16 @@ typedef unsigned		word16;
 // The build, in HELLO and DISCOVER: the server keeps two builds out of one
 // game.  It was a constant 12345678h until v1.8 (2026-10-17), so it kept
 // nobody out -- a shareware WOLF3DM1 could join a registered game.  Now the
-// release whose network play it is, and the data: 6 registered, 1 shareware.
+// release whose network play it is, and the data: 6 registered, 1 shareware,
+// 53h ('S') Spear of Destiny (2026-10-22: SPEARW had said 6, and could have
+// joined a registered game).
 // A release that changes what the game does in a network game raises MPVER.
 // 1.11 (2026-10-21): the sum reads a state by what it is, not where it is
 // (StateSum, below) -- so 1.10 and 1.11 are kept apart.
 #define MPVER		0x0111
-#ifdef UPLOAD
+#if defined(SPEAR)
+#define MPBUILD		(((unsigned long)MPVER << 16) | 0x53)
+#elif defined(UPLOAD)
 #define MPBUILD		(((unsigned long)MPVER << 16) | 1)
 #else
 #define MPBUILD		(((unsigned long)MPVER << 16) | 6)
@@ -51,10 +55,19 @@ typedef unsigned		word16;
 
 // The shareware (UPLOAD) has one episode: whatever floor the server names,
 // the game stays in it -- floors 1 to 10 of episode 1 (2026-10-16).
-#ifdef UPLOAD
+// Spear of Destiny has one run of 21: floors 1-18 (maps 0-17), the secret
+// floors 19 and 20 (maps 18, 19: from map 3 and map 11, back to 4 and 12),
+// and the Angel of Death's (map 20), reached by taking the Spear on map 17
+// -- id's GameLoop (WL_GAME.C).  A map past 20 is map 0.
+#if defined(SPEAR)
 #define MPEPISODE(m)	0
+#define MPMAP(m)		((m) <= 20 ? (m) : 0)
+#elif defined(UPLOAD)
+#define MPEPISODE(m)	0
+#define MPMAP(m)		((m)%10)
 #else
 #define MPEPISODE(m)	((m)/10)
+#define MPMAP(m)		((m)%10)
 #endif
 
 extern	int	far	mpspect;			// a watcher (NET WATCH): below
@@ -1399,6 +1412,14 @@ void MPSpawn (byte far *b)
 		gamestate.keys = 3;
 		gamestate.ammo = 50;
 	}
+#ifdef SPEAR
+	if (gamestate.mapon == 20)		// id's: the Angel's floor gives the gold key,
+	{								// always (WL_GAME.C)
+		for (i=0;i<mpplayers;i++)
+			mpctx[i].gs.keys |= 1;
+		gamestate.keys |= 1;
+	}
+#endif
 	if (mprules & RULE_NOENEMIES)
 	{
 		objtype	*ob,*next;
@@ -2421,7 +2442,11 @@ static void Find (void)
 	static char far looking[] = "Looking for servers on UDP port %u ...\n";
 	static char far nobody[] = "No server answered on UDP port %u.  Is one running on this network?\n"
 		"(On Windows its firewall must let it in.)  Or name one: WOLF3DM NET a.b.c.d\n";
+#ifdef SPEAR						// Spear: one run of floors, 1-21
+	static char far line1[] = "%d  %d.%d.%d.%d  %Fs  %Fs%Fs  floor %d  %Fs  %d of %d%Fs\n";
+#else
 	static char far line1[] = "%d  %d.%d.%d.%d  %Fs  %Fs%Fs  E%dL%d  %Fs  %d of %d%Fs\n";
+#endif
 	static char far line2[] = "      %Fs\n";
 	static char far dm[] = "deathmatch", far coop[] = "co-op", far noen[] = ", no enemies",
 		far nothing[] = "", far wait[] = "waiting", far play[] = "playing",
@@ -2490,7 +2515,12 @@ static void Find (void)
 			}
 		mprintf (line1,i+1,foundip(i)[0],foundip(i)[1],foundip(i)[2],foundip(i)[3],
 			(char far *)name,f[7] & 1 ? dm : coop,f[7] & 4 ? noen : nothing,
-			f[5]/10+1,f[5]%10+1,f[0] ? play : wait,f[2]+f[3],f[1],
+#ifdef SPEAR
+			f[5]+1,
+#else
+			f[5]/10+1,f[5]%10+1,
+#endif
+			f[0] ? play : wait,f[2]+f[3],f[1],
 			build && build != MPBUILD ? other : nothing);
 		if (who[0])
 			mprintf (line2,(char far *)who);
@@ -4396,11 +4426,26 @@ static void NextLevel (void)
 	if (mpgoto >= 0)				// the server's choice (its console, 2026-10-13)
 	{
 		gamestate.episode = MPEPISODE(mpgoto);
-		gamestate.mapon = mpgoto%10;
+		gamestate.mapon = MPMAP(mpgoto);
 		mpgoto = -1;
 	}
 	else
 	{
+#ifdef SPEAR						// id's GameLoop, Spear's way (above)
+		if (gamestate.mapon == 17)		// the Spear's floor (taken, or the console's
+			gamestate.mapon = (mprules & RULE_DM) ? 0 : 20;	// next floor): the
+									// Angel of Death; deathmatch: round again
+		else if (gamestate.mapon == 20)
+			gamestate.mapon = 0;
+		else if (playstate == ex_secretlevel && gamestate.mapon == 3)
+			gamestate.mapon = 18;
+		else if (playstate == ex_secretlevel && gamestate.mapon == 11)
+			gamestate.mapon = 19;
+		else if (gamestate.mapon == 18 || gamestate.mapon == 19)
+			gamestate.mapon = gamestate.mapon == 18 ? 4 : 12;
+		else
+			gamestate.mapon++;
+#else
 		if (gamestate.mapon == 9)
 			gamestate.mapon = ElevatorBackTo[gamestate.episode];	// back from the secret floor
 		else if (playstate == ex_secretlevel)
@@ -4409,7 +4454,11 @@ static void NextLevel (void)
 			gamestate.mapon++;
 		if ((mprules & RULE_DM) && gamestate.mapon > 8)
 			gamestate.mapon = 0;		// deathmatch: round the episode again
+#endif
 	}
+#ifdef SPEAR
+	spearflag = false;				// (id puts the one player where he took it;
+#endif								// here everyone at the floor's starts)
 
 	StopMusic ();					// as id's floor end (WL_GAME.C): the song unlocked
 									// and purgeable.  Without it every new song stayed
@@ -4562,7 +4611,7 @@ void MPNetGame (void)
 	mppaused = mpwaitfor = 0;
 	mpnewest = -1;
 	NewGame (mpstart[2],MPEPISODE(mpstart[1]));
-	gamestate.mapon = mpstart[1] % 10;
+	gamestate.mapon = MPMAP(mpstart[1]);
 	godmode = false;
 	demoplayback = false;
 	Init (mpstart[0]);

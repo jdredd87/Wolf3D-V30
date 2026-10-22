@@ -179,10 +179,12 @@ begin
   IpOk := parts = 4;
 end;
 
-{ the network game: WOLF3DM, or WOLF3DM1 with the shareware's *.WL1 }
+{ the network game: WOLF3DM, or WOLF3DM1 with the shareware's *.WL1, or
+  SPEARM with Spear of Destiny's *.SOD (2026-10-22) }
 function NetExe: string;
 begin
-  if Shareware then NetExe := 'WOLF3DM1' else NetExe := 'WOLF3DM';
+  if Spear then NetExe := 'SPEARM'
+  else if Shareware then NetExe := 'WOLF3DM1' else NetExe := 'WOLF3DM';
 end;
 
 { WOLF3DM.CFG: SERVER a.b.c.d, PORT n, NAME x -- a line each, any order }

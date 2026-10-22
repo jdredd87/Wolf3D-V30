@@ -243,6 +243,11 @@ class Server:
         """The players and the watchers: whoever is sent the steps."""
         return self.people() + [4 + k for k, w in enumerate(self.watchers) if w]
 
+    def data(self):
+        """The data the players' build plays (mpproto.DATA_*), None before anyone is in."""
+        people = self.people()
+        return self.slots[people[0]].build & 0xFF if people else None
+
     def people(self):
         return [i for i, s in enumerate(self.slots) if s and not s.bot]
 

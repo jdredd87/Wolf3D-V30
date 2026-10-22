@@ -24,3 +24,5 @@ release/*.ZIP
 mp/build/
 # Spear of Destiny's data and installer (id's; never committed) -- 2026-10-16
 SOD/
+WOLFSRC/SPEARM.EXE
+WOLFSRC/SPEARM.MAP

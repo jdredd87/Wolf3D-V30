@@ -1324,7 +1324,8 @@ void InitGame (void)
 
 #ifdef W32
 	if (0)							// Windows: memory enough
-#elif !defined(SPEAR)
+#elif !defined(SPEAR) || defined(NETGAME)	// (SPEARM, Spear's network game:
+									// the same, 2026-10-22)
 	if (mminfo.mainmem < 200000L)	// multiplayer (StevenC & Claude): id's 235000
 									// less 35 KB -- the network code put the 486
 									// (550 KB free) just under 235000, then on

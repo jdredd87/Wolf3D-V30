@@ -10,6 +10,9 @@ some players with 8 bullets and some with 50.
     python mp/huntbot.py --quit N   Y at the Nth ESC (a minute each), not the 5th
                                     -- alone on a server, a repeatable benchmark
                                     of the picture (the wander is mpbotrnd's)
+    python mp/huntbot.py --spear    the same for Spear of Destiny: w3dbuild.py's
+                                    buildsod, back as stage/SPEART.EXE and .MAP
+                                    (2026-10-22)
     python mp/huntbot.py --memonly  only the "mainmem N" line, the bot as it is:
                                     what the real build leaves the 486 (run it
                                     with TIMEDEMO MGEN 0 LOCAL 1), 60-odd bytes
@@ -1264,23 +1267,28 @@ def main():
         for f in FILES:
             if os.path.exists(keep(f)):
                 shutil.copyfile(os.path.join(SRC, f), os.path.join(keepsrc, f))
-        for f in ("WOLF3DV.EXE", "WOLF3DV.MAP"):
+        spear = "--spear" in sys.argv   # Spear: buildsod's SPEARM, in stage/srcsod
+        real = ("SPEARM.EXE", "SPEARM.MAP") if spear else ("WOLF3DV.EXE", "WOLF3DV.MAP")
+        for f in real:
             if os.path.exists(os.path.join(SRC, f)):
                 shutil.copyfile(os.path.join(SRC, f), os.path.join(STAGE, "real-" + f))
-        rc = subprocess.call([sys.executable, os.path.join(ROOT, "w3dbuild.py"), "build"], cwd=ROOT)
+        rc = subprocess.call([sys.executable, os.path.join(ROOT, "w3dbuild.py"),
+                              "buildsod" if spear else "build"], cwd=ROOT)
     finally:
         restore()
+    out = os.path.join(STAGE, "srcsod") if spear else SRC
+    name = "SPEART" if spear else "WOLF3DT"
     if not rc:
-        shutil.copyfile(os.path.join(SRC, "WOLF3DV.EXE"), os.path.join(STAGE, "WOLF3DT.EXE"))
-        shutil.copyfile(os.path.join(SRC, "WOLF3DV.MAP"), os.path.join(STAGE, "WOLF3DT.MAP"))
+        shutil.copyfile(os.path.join(out, "WOLF3DV.EXE"), os.path.join(STAGE, name + ".EXE"))
+        shutil.copyfile(os.path.join(out, "WOLF3DV.MAP"), os.path.join(STAGE, name + ".MAP"))
     # the real EXE back where it was, whatever happened
-    for f in ("WOLF3DV.EXE", "WOLF3DV.MAP"):
+    for f in real:
         if os.path.exists(os.path.join(STAGE, "real-" + f)):
             shutil.copyfile(os.path.join(STAGE, "real-" + f), os.path.join(SRC, f))
             os.remove(os.path.join(STAGE, "real-" + f))
     if rc:
         return rc
-    print("stage/WOLF3DT.EXE, stage/WOLF3DT.MAP")
+    print("stage/%s.EXE, stage/%s.MAP" % (name, name))
     return 0
 
 
