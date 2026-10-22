@@ -158,7 +158,8 @@ game: id's own single-player Wolfenstein, menus and all -- `WOLF3DW.EXE`.
 ## How it is built
 
 Open Watcom 2.0 (the 2026-10-01 build, unpacked into `C:\WATCOM`): the one
-whose Win32 programs still run on Windows 9x.  `python win32/build.py` (all three; `rep`, `game` or `sp` for one).
+whose Win32 programs still run on Windows 9x.  `python win32/build.py` (all of them; `rep`, `game`, `sp`, `sp1` or `spsod` for one --
+the last two the shareware, `UPLOAD`, and Spear, `SODVER.H` with `GOODTIMES`, each in its own `obj/`).
 `WOLFSRC` is shared with the DOS build and compiled as it is, through:
 
 | | |
@@ -178,7 +179,7 @@ whose Win32 programs still run on Windows 9x.  `python win32/build.py` (all thre
 | `src/w32null.c` | the replay: no picture, no input |
 | `src/w32sp.c` | the whole game: the managers' starts and ends, DOS's memory figures, ID_IN.C's `IN_ReadControl`, the signon, `Quit`, the boss key's prompt |
 | `src/w32dos.c` | `findfirst` and `findnext` (DIR.H) from `FindFirstFile` |
-| `obj/sp/w32sign.c` | made by `build.py` from WOLFSRC/OBJ/SIGNON.OBJ: id's signon picture (not kept in git) |
+| `obj/*/w32sign.c` | made by `build.py` from WOLFSRC/OBJ/SIGNON.OBJ: id's signon picture (not kept in git) |
 | `src/w32vis.c` | the whole game: what id's renderer decides -- the tiles in view (AsmRefresh's ray walk), the actors seen and woken, their screen column for the aim, the items taken |
 | `src/w32main.c` | a 70 Hz `TimeCount` thread, the tables `InitGame` builds, then the game's own `MPNetArgs` and `MPNetGame` -- or, in the whole game, id's own start (`WL_MAIN.C`'s, as `W32IdMain`) |
 

@@ -16,6 +16,7 @@ The builds:
 | `WOLF3DM.EXE` | DOS, the network game (this branch's `WOLFSRC`, `NETGAME` in `VERSION.H`) | the same |
 | `win32/WOLF3DMW.EXE` | Windows, the network game | `python win32/build.py game` |
 | `win32/WOLF3DW.EXE` | Windows, the whole game (id's single player, and `NET`) | `python win32/build.py sp` |
+| `win32/WOLF3DW1.EXE`, `win32/SPEARW.EXE` | the same, the shareware (`UPLOAD`) and Spear of Destiny (`SODVER.H`, `GOODTIMES`) | `python win32/build.py sp1`, `spsod` |
 | `win32/W3DREP.EXE` | Windows, the gate: replays recordings, sums against DOS | `python win32/build.py rep`, `bash win32/gate.sh` |
 | `mp/mpserver.py`, `mp/mpsrv.pas` (MPSRV, MPSRVW) | the servers: Python, DOS, Windows | |
 
