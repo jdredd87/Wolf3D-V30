@@ -39,9 +39,11 @@ PLAN = {   # the server's host, its rules, from the start, late, the Windows pro
               "p3" if SRVBOX == "v30" else "v30", "WOLF3DMW", ""),
     "mpsrvw": (PC, "--players 4 --mode tdm --noenemies --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW", ""),
     "wl1": (PC, "--players 4 " + DM, ["dx486", "p3"], "v30", None, ""),
+    "wl1w": (PC, "--players 4 " + DM, ["dx486", "p3"], "v30", "WOLF3DW1", ""),   # the shareware, with Windows
     "soak": (PC, "--players 4 --timelimit 10 " + DM, ["dx486", "p3"], "v30", "WOLF3DW", " WIDE"),
 }
 HOST, RULES, EARLY, LATE, WINEXE, WINEXTRA = PLAN[KIND]
+WINDIR = {"WOLF3DW1": r"C:\W3DWIN1", "SPEARW": r"C:\W3DSOD"}.get(WINEXE, r"C:\W3DWIN")
 RULES += " --steps %d --once" % STEPS
 CTLHOST = HOST if KIND == "mpsrv" else "127.0.0.1"     # (the PC's servers: loopback only)
 
@@ -73,7 +75,7 @@ def step_now():
 
 
 def player(box):
-    d, exe = (r"C:\WL1", "WOLF3DM1") if KIND == "wl1" else (r"C:\WOLF3D", "WOLF3DM")
+    d, exe = (r"C:\WL1", "WOLF3DM1") if KIND in ("wl1", "wl1w") else (r"C:\WOLF3D", "WOLF3DM")
     return job(box, ["CD " + d, "%s NET %s NAME X%s NETBOT SHOW%s" % (exe, HOST, box[-2:].upper(), EXTRA[box])],
                box, STEPS // 15 + 1800)
 
@@ -82,7 +84,7 @@ open(os.path.join(OUT, "events.txt"), "w").close()
 open(os.path.join(OUT, "console.txt"), "w").close()
 note("%s server on %s: %s" % (ARG, HOST, RULES))
 srvout = open(os.path.join(OUT, "server.txt"), "w")
-if KIND in ("python", "wl1"):
+if KIND in ("python", "wl1", "wl1w"):
     srv = subprocess.Popen([sys.executable, "-u", "mp/mpserver.py"] + RULES.split(), cwd=WOLF,
                            stdin=subprocess.DEVNULL, stdout=srvout, stderr=subprocess.STDOUT, env=ENV)
 elif KIND in ("mpsrvw", "soak"):
@@ -104,8 +106,8 @@ for box in EARLY:
     note("%s in" % box)
     time.sleep(10)
 if WINEXE:
-    r = subprocess.run(AGENT + ["start", r"C:\W3DWIN\%s.EXE NET %s NAME XWIN NETBOT SHOW%s" % (WINEXE, HOST, WINEXTRA),
-                                r"C:\W3DWIN"], capture_output=True, text=True).stdout.strip()
+    r = subprocess.run(AGENT + ["start", r"%s\%s.EXE NET %s NAME XWIN NETBOT SHOW%s" % (WINDIR, WINEXE, HOST, WINEXTRA),
+                                WINDIR], capture_output=True, text=True).stdout.strip()
     note("%s%s on .37: %s" % (WINEXE, WINEXTRA, r))
 t = time.time()
 while step_now() < 1500 and time.time() - t < 400:
@@ -135,8 +137,8 @@ for j in jobs.values():
         j.kill()
 time.sleep(5)
 if WINEXE:
-    log = "WOLF3DW.LOG" if WINEXE == "WOLF3DW" else "WOLF3DMW.LOG"
-    subprocess.run(AGENT + ["get", "C:\\W3DWIN\\" + log, os.path.join(OUT, "win37.txt")], capture_output=True)
+    log = "WOLF3DMW.LOG" if WINEXE == "WOLF3DMW" else "WOLF3DW.LOG"
+    subprocess.run(AGENT + ["get", WINDIR + "\\" + log, os.path.join(OUT, "win37.txt")], capture_output=True)
 PAT = r"net: \d+ steps played.*|net: ended.*|DESYNC.*|desync.*"
 ok = True
 for name in list(jobs) + (["win37"] if WINEXE else []):

@@ -46,7 +46,13 @@ boolean		startgame,loadedgame,virtualreality,tedlevel;
 int			mouseadjustment;
 char		str[80],str2[20];
 #endif
+#if defined(SPEAR)			// the data's extension, by the build: the page file
+char		extension[6] = "SOD";	// and the graphics are opened before id's start
+#elif defined(UPLOAD)		// looks for them (CheckForEpisodes, which agrees)
+char		extension[6] = "WL1";
+#else
 char		extension[6] = "WL6";
+#endif
 char		PageFileName[13] = "VSWAP.";
 unsigned long pmcount[5];
 pictabletype *pictable;			// (w32gfx.c fills it)

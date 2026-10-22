@@ -1,6 +1,7 @@
 """keys37.py SEQ [SHOT] -- keys held in the game's window on .37, in turn:
 SEQ is NAME:ms,NAME:ms,... (up down left right space ctrl alt esc enter y n
 tab 1-4, or wait:ms), then a screenshot to SHOT."""
+import os
 import subprocess
 import sys
 
@@ -12,11 +13,12 @@ KEYS = {"up": (0x26, 0x48), "down": (0x28, 0x50), "left": (0x25, 0x4B), "right":
         "c": (0x43, 0x2E), "bs": (0x08, 0x0E), "lshift": (0x10, 0x2A), "e": (0x45, 0x12), "g": (0x47, 0x22), "h": (0x48, 0x23), "w": (0x57, 0x11), "f1": (0x70, 0x3B), "f10": (0x79, 0x44), "f11": (0x7A, 0x57), "m": (0x4D, 0x32), "l": (0x4C, 0x26), "i": (0x49, 0x17)}
 AGENT = [r"powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
          r"C:\delphi projects\UVSCAN Projects\UVScanner-CLAUDE\tools\agent.ps1"]
+PROC = os.environ.get("W3DPROC", "WOLF3DW")     # (W3DPROC: WOLF3DW1, SPEARW ...)
 lines = [r"""Add-Type -Name K -Namespace W -MemberDefinition '[DllImport("user32.dll")] public static extern bool PostMessage(System.IntPtr h, uint m, System.IntPtr w, System.IntPtr l);'
-$h = (Get-Process WOLF3DW | Select-Object -First 1).MainWindowHandle
+$h = (Get-Process %s | Select-Object -First 1).MainWindowHandle
 function D($vk,$sc) { [W.K]::PostMessage($h, 0x100, [System.IntPtr]$vk, [System.IntPtr](($sc -shl 16) -bor 1)) | Out-Null }
 function U($vk,$sc) { [W.K]::PostMessage($h, 0x101, [System.IntPtr]$vk, [System.IntPtr](($sc -shl 16) -bor 0xC0000001)) | Out-Null }
-function C($ch) { [W.K]::PostMessage($h, 0x102, [System.IntPtr]$ch, [System.IntPtr]1) | Out-Null }"""]
+function C($ch) { [W.K]::PostMessage($h, 0x102, [System.IntPtr]$ch, [System.IntPtr]1) | Out-Null }""" % PROC]
 total = 0
 for item in sys.argv[1].split(","):
     name, ms = item.split(":")

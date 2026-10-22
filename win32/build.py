@@ -6,6 +6,8 @@
     python win32/build.py sp         the whole game, win32/WOLF3DW.EXE: id's own
                                      single-player game -- title, menus, floors,
                                      tallies, saves -- and NET as well
+    python win32/build.py sp1        the same for the shareware: WOLF3DW1.EXE (*.WL1)
+    python win32/build.py spsod      Spear of Destiny: SPEARW.EXE (*.SOD)
     python win32/build.py clean
 
 WOLFSRC is shared with the DOS build and stays as it is: its files are copied
@@ -45,6 +47,11 @@ TARGETS = {
     "rep": ("W3DREP.EXE", "nt", ["w32null"], [], []),
     "game": ("WOLF3DMW.EXE", "nt_win", GUI, [], []),
     "sp": ("WOLF3DW.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP"]),
+    # the shareware (*.WL1) and Spear of Destiny (*.SOD), as w3dbuild.py's
+    # buildwl1 and buildsod make the DOS ones: UPLOAD; SPEAR (VERSION.H has
+    # GOODTIMES already -- id's release without the manual's quiz)
+    "sp1": ("WOLF3DW1.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP", "UPLOAD"]),
+    "spsod": ("SPEARW.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP", "SPEAR"]),
 }
 
 
@@ -77,15 +84,15 @@ def copy_sources():
 
 
 def objdir(target):
-    """rep and game share obj/ (the same flags); sp is built apart (W32SP)"""
-    return os.path.join(OBJ, "sp") if TARGETS[target][4] else OBJ
+    """rep and game share obj/ (the same flags); each other is built apart"""
+    return os.path.join(OBJ, target) if TARGETS[target][4] else OBJ
 
 
 def gen_signon():
-    """obj/sp/w32sign.c: the signon picture, 320x200, a byte a pixel, from id's
-    SIGNON.OBJ (WOLFSRC/OBJ) -- linked into the DOS game as introscn.  Made at
+    """obj/w32sign.c: the signon picture, 320x200, a byte a pixel, from id's
+    SIGNON.OBJ (WOLFSRC/OBJ) -- linked into the DOS games as introscn.  Made at
     build time: id's picture, not ours to keep in git"""
-    out = os.path.join(OBJ, "sp", "w32sign.c")
+    out = os.path.join(OBJ, "w32sign.c")
     src = os.path.join(WOLFSRC, "OBJ", "SIGNON.OBJ")
     if os.path.exists(out) and os.path.getmtime(out) >= os.path.getmtime(src):
         return out
@@ -166,7 +173,7 @@ def main():
     if args == ["clean"]:
         shutil.rmtree(OBJ, ignore_errors=True)
         return
-    targets = args or ["rep", "game", "sp"]
+    targets = args or ["rep", "game", "sp", "sp1", "spsod"]
     os.makedirs(OBJ, exist_ok=True)
     copy_sources()
     ok = True

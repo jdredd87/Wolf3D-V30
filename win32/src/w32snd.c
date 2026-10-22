@@ -37,6 +37,7 @@ static	byte	**digis;
 static	long	*digilens;
 static	int		numdigi;
 
+#ifndef W32SP		// (the whole game has WL_MAIN.C's own, and InitDigiMap fills DigiMap)
 static int	wolfdigimap[] =		// WL_MAIN.C's: a sound, its digitized one
 {
 #ifndef SPEAR
@@ -69,6 +70,7 @@ static int	wolfdigimap[] =		// WL_MAIN.C's: a sound, its digitized one
 #endif
 	LASTSOUND
 };
+#endif
 
 static long Get32 (byte *p) { return p[0] | (p[1] << 8) | ((long)p[2] << 16) | ((long)p[3] << 24); }
 static int Get16 (byte *p) { return p[0] | (p[1] << 8); }
@@ -97,8 +99,10 @@ void W32SndStartup (void)
 
 	for (i=0;i<LASTSOUND;i++)
 		DigiMap[i] = -1;
+#ifndef W32SP
 	for (i=0;wolfdigimap[i] != LASTSOUND;i += 2)
 		DigiMap[wolfdigimap[i]] = wolfdigimap[i+1];
+#endif
 	strcpy (name,"AUDIOHED.");
 	strcat (name,extension);
 	if ((f = open (name,O_RDONLY|O_BINARY)) < 0)
