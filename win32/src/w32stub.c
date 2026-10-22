@@ -380,4 +380,7 @@ void NewViewSize (int width)
 	centerx = viewwidth/2-1;
 	shootdelta = viewwidth/10;
 	screenofs = ((200-STATUSLINES-viewheight)/2*SCREENWIDTH+(320-viewwidth)/8);
+#ifdef W32SP
+	CalcProjection (0x5700l);	// (the whole game: id's projection, for w32vis.c --
+#endif							// the actors' place on the screen, the guns' aim)
 }

@@ -439,6 +439,13 @@ void ThreeDRefresh (void)
 			gap += t0 - last;
 		last = t0;
 
+#ifdef W32SP
+		{
+			void	W32Visibility (void);	// w32vis.c: what id's renderer decides
+										// -- tiles in view, actors seen, items taken
+			W32Visibility ();
+		}
+#endif
 		for (x=0;x<viewwidth;x++)
 			Ray (x);
 		t1 = W32Ms ();

@@ -44,7 +44,7 @@ GUI = ["w32gfx", "w32draw", "w32win", "w32in", "w32snd", "w32wave"]
 TARGETS = {
     "rep": ("W3DREP.EXE", "nt", ["w32null"], [], []),
     "game": ("WOLF3DMW.EXE", "nt_win", GUI, [], []),
-    "sp": ("WOLF3DW.EXE", "nt_win", GUI + ["w32sp", "w32sign"], SPGAME, ["W32SP"]),
+    "sp": ("WOLF3DW.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP"]),
 }
 
 
