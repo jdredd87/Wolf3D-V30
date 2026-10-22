@@ -54,6 +54,7 @@ static int	wdirangle[9] = {0,ANGLES/8,2*ANGLES/8,3*ANGLES/8,4*ANGLES/8,
 extern int		w32widemode;			// w32win.c: the window is 16:9
 extern int		w32wideview, w32viewtop, w32viewrows;	// the sides hold a view
 extern int		w32viewx0, w32viewext;	// (in the wide frame: its left edge, its growth)
+extern int		w32viewwidth;
 extern byte		w32wide[WIDEW*200];
 
 static double	zbufs[WIDEW];			// each column's wall distance
@@ -458,6 +459,7 @@ void ThreeDRefresh (void)
 	w32viewrows = wext ? viewheight : 0;
 	w32viewx0 = WSIDE + vx0 - wext;
 	w32viewext = wext;
+	w32viewwidth = viewwidth;
 	for (y=0;y<viewheight;y++)			// VGAClearScreen: the ceiling, the floor
 	{
 		memset (&w32screen[(vy0+y)*320 + vx0],y < viewheight/2 ? ceiling : 0x19,viewwidth);

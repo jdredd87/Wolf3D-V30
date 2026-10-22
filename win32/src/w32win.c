@@ -91,6 +91,7 @@ static void Capture (int on)
 int				w32widemode;			// the picture is 16:9
 int				w32wideview, w32viewtop, w32viewrows;	// (w32draw.c: the view's sides)
 int				w32viewx0, w32viewext;	// (its left edge in the wide frame, its growth)
+int				w32viewwidth;			// (and the width it grew from)
 unsigned char	w32wide[WIDEW*200];
 static int		shownw = 320;			// the width of the frame shown
 
@@ -369,6 +370,30 @@ void W32Present (unsigned char *screen, unsigned char *palette)
 				memcpy (o + w32viewx0,w32wide + y*WIDEW + w32viewx0,w32viewext);
 				memcpy (o + x1,w32wide + y*WIDEW + x1,w32viewext);
 			}
+		}
+		if (w32wideview && w32viewext && w32viewx0 > 0)
+		{
+			// id's bevel round the view (WL_GAME.C's DrawPlayBorder: black
+			// above and left, 125 below and right, 124 in the corner), drawn
+			// round the view as it has grown -- at the 320's place it showed
+			// the 4:3 box's top and bottom edges (StevenC, 2026-10-21)
+			int	l = w32viewx0 - 1, r = w32viewx0 + w32viewwidth + 2*w32viewext;
+			int	t = w32viewtop - 1, b = w32viewtop + w32viewrows, x;
+
+			if (t >= 0)
+				for (x=l;x<=r;x++)
+					frame[t*WIDEW + x] = 0;
+			if (b < 200)
+				for (x=l;x<=r;x++)
+					frame[b*WIDEW + x] = 125;
+			for (y=t < 0 ? 0 : t;y <= b && y < 200;y++)
+			{
+				frame[y*WIDEW + l] = 0;
+				if (r < WIDEW)
+					frame[y*WIDEW + r] = 125;
+			}
+			if (b < 200)
+				frame[b*WIDEW + l] = 124;
 		}
 		shownw = WIDEW;
 	}
