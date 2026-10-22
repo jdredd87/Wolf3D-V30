@@ -1768,6 +1768,7 @@ void DemoSum (void)
 	}
 	if (!demosum || !demoplayback || mpplayers)
 		return;
+#if !defined(W32) || defined(W32SP)	// (the network-only Win32 builds have no projection)
 	{								// once: the projection the rays and the aim use
 		static int far shown;
 		static char far fv[] = "demo view: width %d scale %lX heightnum %lX focal %lX mindist %lX\n";
@@ -1781,6 +1782,7 @@ void DemoSum (void)
 					pixelangle[i+4],pixelangle[i+5],pixelangle[i+6],pixelangle[i+7]);
 		}
 	}
+#endif
 	for (ob = &objlist[0];ob;ob = ob->next)
 	{
 		SUMV (ob->x);
