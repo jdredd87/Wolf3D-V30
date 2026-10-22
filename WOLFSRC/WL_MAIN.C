@@ -1646,9 +1646,29 @@ char *FpsString (long frames, long ticks)
 }
 
 #ifdef W32
+//
+// TIMEDEMO on Windows (StevenC & Claude, 2026-10-22): id's four demos, one
+// after the other, as the DOS game's TIMEDEMO CRC plays them -- sound effects
+// off (they move the game: UpdateFace skips its random numbers while one
+// plays) and the view at 15 (the rays decide what is seen, and so who wakes)
+// -- for DEMOSUM (WL_MP.C) to print the game every 50 frames, to compare
+// with the DOS game's.  No timing: the picture is not DOS's to time
+//
 void TimeDemo (void)
 {
-	Quit ("TIMEDEMO is the DOS game's");
+	int		i;
+
+	SD_SetSoundMode (sdm_Off);
+	SD_SetDigiDevice (sds_Off);
+	if (!MS_CheckParm ("myview") && !ViewParm () && viewsize != 15)
+		NewViewSize (15);
+	for (i=0;i<4;i++)
+	{
+		PlayDemo (i);
+		if (playstate == ex_abort)
+			break;
+	}
+	Quit (NULL);
 }
 #else
 extern	int		MainPagesAvail;		// ID_PM.C, not in its header

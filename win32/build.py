@@ -117,7 +117,9 @@ def compile_one(name, src, target):
         + glob.glob(os.path.join(HERE, "src", "*.h"))
     if os.path.exists(obj) and os.path.getmtime(obj) >= max(os.path.getmtime(d) for d in deps):
         return True
-    cmd = [tool("wcc386"), "-q", "-bt=nt", "-3r", "-zp1", "-w1", "-wcd=120", "-wcd=138", "-od", "-d2",
+    # -j: char is signed, as Borland's -- Open Watcom's is unsigned, and id's
+    # demos turn by signed chars (a -100 read as 156: the demos went astray)
+    cmd = [tool("wcc386"), "-q", "-bt=nt", "-3r", "-zp1", "-w1", "-wcd=120", "-wcd=138", "-od", "-d2", "-j",
            "-fi=" + os.path.join(HERE, "src", "w32comp.h"),
            "-i=" + os.path.join(HERE, "inc"), "-i=" + WSRC, "-i=" + os.path.join(HERE, "src"),
            "-dW32"] + ["-d" + d for d in TARGETS[target][4]] + ["-fo=" + obj, src]

@@ -1118,7 +1118,12 @@ void PlayDemo (int demonumber)
 	gamestate.difficulty = gd_hard;
 	if (tdmgen && ((byte far *)demobuffer)[5])	// MGEN: a recorded network match
 		gamestate.difficulty = ((byte far *)demobuffer)[5] - 1;	// keeps its skill
+#ifdef W32						// (Windows: an unsigned is 4 bytes -- the demo's
+	length = ((byte *)demoptr)[0] | (((byte *)demoptr)[1] << 8);	// length is 2,
+	demoptr += 2;				// and read as 4 every move after it was out of step)
+#else
 	length = *((unsigned far *)demoptr)++;
+#endif
 	demoptr++;
 	lastdemoptr = demoptr-4+length;
 

@@ -1596,6 +1596,11 @@ void PlayLoop (void)
 			tdlater = BiosTicks ();	// TIMEDEMO: frame 1 carries the fizzle-in
 		if (tdcrc && !((unsigned)frameon % 50))
 			ViewChecksum ();		// TIMEDEMO CRC: frames 50, 100, 150, 200
+#if defined(DEMOSUM) || defined(W32)
+		if (!((unsigned)frameon % 50))
+			DemoSum ();				// TIMEDEMO DEMOSUM: the game, every 50 frames (WL_MP.C)
+		DemoFrame ();				// ... and DEMOFRAMES' every frame
+#endif
 
 		//
 		// MAKE FUNNY FACE IF BJ DOESN'T MOVE FOR AWHILE

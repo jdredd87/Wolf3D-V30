@@ -237,12 +237,13 @@ static boolean TransformTile (int tx, int ty, int *dispx, int *dispheight)
 	gyt = FixedByFrac (gy,viewcos);
 	ny = gyt+gxt;
 	if (nx < mindist)
-		*dispheight = 0;
-	else
 	{
-		*dispx = (s16)(centerx + ny*scale/nx);
-		*dispheight = (u16)(heightnumerator / (s16)(nx >> 8));
-	}
+		*dispheight = 0;
+		return false;			// too close: not taken this frame (id's, and the
+	}							// V30's -- read first as going on to the reach,
+								// it took a clip three frames before DOS did)
+	*dispx = (s16)(centerx + ny*scale/nx);
+	*dispheight = (u16)(heightnumerator / (s16)(nx >> 8));
 	return nx < TILEGLOBAL && ny > -TILEGLOBAL/2 && ny < TILEGLOBAL/2;
 }
 

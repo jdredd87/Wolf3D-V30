@@ -1697,6 +1697,121 @@ void MPStep (void)
 #endif
 }
 
+#if defined(DEMOSUM) || defined(W32)
+//
+// DEMOSUM (StevenC & Claude, 2026-10-22): id's demos played by two builds
+// -- the DOS game and the Windows one -- must be the same game, frame for
+// frame.  The picture cannot say so (two renderers), so this does: every
+// 50th frame of TIMEDEMO DEMOSUM, the whole state MPStep sums -- every actor
+// as it is, the items, the doors -- and the player's own, summed afresh (a
+// line stands alone, for a diff).  The DOS game needs -DDEMOSUM (a test
+// build, never the release); Win32 always has it.  It only reads
+//
+static int far demosum = -1;			// (-1: the line not read yet)
+static int Is (char far *a, char far *w);
+static unsigned Num (char far *p);
+static int far dfmap = -1, far dffrom, far dfto;	// DEMOFRAMES map from to
+
+//
+// DEMOFRAMES map from to: every frame in that stretch, the ammo and the
+// tiles the view reaches (their count, and where) -- to find the frame two
+// builds part at, and whether the rays or the reach did it
+//
+void DemoFrame (void)
+{
+	static char far f[] = "demo frame: map %d frame %ld: am%d hp%d seen %d sum %04X  px%lX py%lX a%d\n";
+	int		x,y,n = 0;
+	unsigned	s = 0;
+
+	if (dfmap < 0 || gamestate.mapon != dfmap || frameon < dffrom || frameon > dfto || !demoplayback)
+		return;
+	for (x=0;x<MAPSIZE;x++)
+		for (y=0;y<MAPSIZE;y++)
+#ifdef W32
+			if (spotvis[x][y])
+#else
+			if (spotvis[x][y] == vismark)
+#endif
+			{
+				n++;
+				s = (s << 3 | s >> 13) ^ (x*64+y);
+			}
+	mprintf (f,gamestate.mapon,(long)frameon,gamestate.ammo,gamestate.health,n,s,
+		player->x,player->y,player->angle);
+}
+
+void DemoSum (void)
+{
+	static char far w[] = "demosum";
+	static char far f[] = "demo sum: map %d frame %ld: %08lX  hp%d am%d sc%ld k%d/%d t%d s%d w%d\n";
+	objtype		*ob;
+	statobj_t	*st;
+	int			i;
+	sumword		lo = 0,hi = 0;
+
+	if (demosum == -1)
+	{
+		demosum = false;
+		for (i=1;i<_argc;i++)
+		{
+			static char far wf[] = "demoframes";
+
+			if (Is (_argv[i],w))
+				demosum = true;
+			if (Is (_argv[i],wf) && i+3 < _argc)
+			{
+				dfmap = Num (_argv[i+1]);
+				dffrom = Num (_argv[i+2]);
+				dfto = Num (_argv[i+3]);
+			}
+		}
+	}
+	if (!demosum || !demoplayback || mpplayers)
+		return;
+	{								// once: the projection the rays and the aim use
+		static int far shown;
+		static char far fv[] = "demo view: width %d scale %lX heightnum %lX focal %lX mindist %lX\n";
+		static char far fp[] = "demo pixelangle %d: %d %d %d %d %d %d %d %d\n";
+
+		if (!shown++)
+		{
+			mprintf (fv,viewwidth,(long)scale,(long)heightnumerator,(long)focallength,(long)mindist);
+			for (i=0;i<viewwidth;i+=8)
+				mprintf (fp,i,pixelangle[i],pixelangle[i+1],pixelangle[i+2],pixelangle[i+3],
+					pixelangle[i+4],pixelangle[i+5],pixelangle[i+6],pixelangle[i+7]);
+		}
+	}
+	for (ob = &objlist[0];ob;ob = ob->next)
+	{
+		SUMV (ob->x);
+		SUMV (ob->y);
+		SUMV (ob->angle);
+		SUMV (ob->hitpoints);
+		SUMV (StateSum (ob->state));
+		SUMV (ob->ticcount);
+		SUMV (ob->flags & ~FL_VISABLE);
+		SUMV (ob->active);
+		SUMV (ob->dir);
+	}
+	for (st = &statobjlist[0];st != laststatobj;st++)
+		SUMV (st->shapenum);
+	for (i=0;i<doornum;i++)
+		SUMV (doorposition[i]);
+	SUMV (gamestate.health);
+	SUMV (gamestate.ammo);
+	SUMV (gamestate.keys);
+	SUMV (gamestate.weapon);
+	SUMV (gamestate.score);
+	SUMV (gamestate.lives);
+	SUMV (gamestate.killcount);
+	SUMV (gamestate.treasurecount);
+	SUMV (gamestate.secretcount);
+	mprintf (f,gamestate.mapon,(long)frameon,((unsigned long)hi << 16) | lo,
+		gamestate.health,gamestate.ammo,gamestate.score,gamestate.killcount,gamestate.killtotal,
+		gamestate.treasurecount,gamestate.secretcount,(int)gamestate.weapon);
+}
+#endif
+
 //
 // The face in the status bar: only the local player's, with random numbers of
 // its own -- id's skipped US_RndT while a sound played, and sound timing is

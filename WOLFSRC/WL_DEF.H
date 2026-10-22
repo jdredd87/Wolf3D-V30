@@ -1061,6 +1061,10 @@ extern	unsigned	pwallpos;
 
 fixed	FixedByFrac (fixed a, fixed b);
 void	TransformActor (objtype *ob);
+#if defined(DEMOSUM) || defined(W32)
+void	DemoSum (void);			// TIMEDEMO DEMOSUM (WL_MP.C): the game every 50 frames
+void	DemoFrame (void);		// DEMOFRAMES map from to: every frame of a stretch
+#endif
 void	BuildTables (void);
 void	ClearScreen (void);
 int		CalcRotate (objtype *ob);
