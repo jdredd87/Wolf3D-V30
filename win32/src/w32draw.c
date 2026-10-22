@@ -42,16 +42,18 @@ static int	wdirangle[9] = {0,ANGLES/8,2*ANGLES/8,3*ANGLES/8,4*ANGLES/8,
 				5*ANGLES/8,6*ANGLES/8,7*ANGLES/8,ANGLES};
 
 //
-// widescreen (w32win.c: WIDE, F11): a full-width view is cast WSIDE columns
-// further each side -- id's projection, a wider sight -- into w32wide, the
-// picture's sides, w32win.c putting them beside the 320 columns.  What the
-// game decides is still over id's 320 (w32vis.c): the aim, the actors seen,
-// the items taken, as on DOS
+// widescreen (w32win.c: WIDE, F11): the view is cast further each side, by
+// as much as the screen is wider -- id's projection, a wider sight, a view of
+// any size growing 428/320 and its border with it (id's views stop at 19,
+// short of the width) -- into w32wide, which w32win.c lays round the 320
+// columns.  What the game decides is still over id's view (w32vis.c): the
+// aim, the actors seen, the items taken, as on DOS
 //
-#define WIDEW		426					// 16:9 of a 4:3 320x200's 200 lines
+#define WIDEW		428					// 16:9 of a 4:3 320x200 is 426.7: 428, as a DIB's rows are whole DWORDs (426 sheared it)
 #define WSIDE		((WIDEW-320)/2)
 extern int		w32widemode;			// w32win.c: the window is 16:9
 extern int		w32wideview, w32viewtop, w32viewrows;	// the sides hold a view
+extern int		w32viewx0, w32viewext;	// (in the wide frame: its left edge, its growth)
 extern byte		w32wide[WIDEW*200];
 
 static double	zbufs[WIDEW];			// each column's wall distance
@@ -447,11 +449,15 @@ void ThreeDRefresh (void)
 	eyex = player->x/65536.0 - fl*dirx;	// the eye: FOCALLENGTH behind the player
 	eyey = player->y/65536.0 - fl*diry;
 	wscale = (viewwidth/2.0) / (32768.0/44800.0);
-	// widescreen: a full-width view goes on past the 320 columns
-	wext = w32widemode && viewwidth == 320 ? WSIDE : 0;
+	// widescreen: the view goes on past its sides, 428/320 of its width
+	wext = w32widemode ? (WSIDE*viewwidth + 160)/320 : 0;
+	if (wext > WSIDE + vx0)
+		wext = WSIDE + vx0;
 	w32wideview = 1;
 	w32viewtop = vy0;
 	w32viewrows = wext ? viewheight : 0;
+	w32viewx0 = WSIDE + vx0 - wext;
+	w32viewext = wext;
 	for (y=0;y<viewheight;y++)			// VGAClearScreen: the ceiling, the floor
 	{
 		memset (&w32screen[(vy0+y)*320 + vx0],y < viewheight/2 ? ceiling : 0x19,viewwidth);

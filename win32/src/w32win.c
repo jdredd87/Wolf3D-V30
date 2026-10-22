@@ -86,10 +86,11 @@ static void Capture (int on)
 // of the 320 columns between bars.  Either way the window keeps its shape:
 // a picture never stretched, black bars round it when the window is not
 //
-#define WIDEW	426						// (w32draw.c's)
+#define WIDEW	428						// (w32draw.c's: a DIB row is whole DWORDs -- 426 sheared it)
 #define WSIDE	((WIDEW-320)/2)
 int				w32widemode;			// the picture is 16:9
 int				w32wideview, w32viewtop, w32viewrows;	// (w32draw.c: the view's sides)
+int				w32viewx0, w32viewext;	// (its left edge in the wide frame, its growth)
 unsigned char	w32wide[WIDEW*200];
 static int		shownw = 320;			// the width of the frame shown
 
@@ -354,20 +355,19 @@ void W32Present (unsigned char *screen, unsigned char *palette)
 	{
 		int	y;
 
-		for (y=0;y<200;y++)			// the 320 in the middle, and beside them
-		{							// the view's sides, or the row's own edge
+		for (y=0;y<200;y++)			// the 320 in the middle, the row's own edge
+		{							// beside them -- and the view's sides over both
 			unsigned char	*o = frame + y*WIDEW, *sr = screen + y*320;
 
+			memset (o,w32wideview ? sr[0] : 0,WSIDE);
 			memcpy (o + WSIDE,sr,320);
-			if (w32wideview && y >= w32viewtop && y < w32viewtop + w32viewrows)
+			memset (o + WSIDE + 320,w32wideview ? sr[319] : 0,WIDEW - WSIDE - 320);
+			if (w32wideview && w32viewext && y >= w32viewtop && y < w32viewtop + w32viewrows)
 			{
-				memcpy (o,w32wide + y*WIDEW,WSIDE);
-				memcpy (o + WSIDE + 320,w32wide + y*WIDEW + WSIDE + 320,WIDEW - WSIDE - 320);
-			}
-			else
-			{
-				memset (o,w32wideview ? sr[0] : 0,WSIDE);
-				memset (o + WSIDE + 320,w32wideview ? sr[319] : 0,WIDEW - WSIDE - 320);
+				int	x1 = WIDEW - w32viewx0 - w32viewext;	// (the right side's start)
+
+				memcpy (o + w32viewx0,w32wide + y*WIDEW + w32viewx0,w32viewext);
+				memcpy (o + x1,w32wide + y*WIDEW + x1,w32viewext);
 			}
 		}
 		shownw = WIDEW;
