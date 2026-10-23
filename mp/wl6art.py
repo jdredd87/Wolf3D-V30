@@ -29,8 +29,9 @@ def gamepal(path=os.path.join(HERE, "..", "stage", "GAMEPAL.PAL")):
     return list(p)
 
 
-def sprite_names():
-    """The sprite enum of WL_DEF.H, in order, for Wolf3D (not Spear)."""
+def sprite_names(spear=False):
+    """The sprite enum of WL_DEF.H, in order: Wolf3D's, or Spear of Destiny's
+    (its #ifdef SPEAR side, 2026-10-23)."""
     t = open(os.path.join(SRC, "WL_DEF.H"), errors="replace").read()
     t = t[t.index("SPR_DEMO"):]
     t = t[:t.index("};")]
@@ -38,9 +39,9 @@ def sprite_names():
     for line in t.splitlines():
         s = line.strip()
         if s.startswith("#ifdef SPEAR"):
-            skip.append(True)
+            skip.append(not spear)
         elif s.startswith("#ifndef SPEAR"):
-            skip.append(False)
+            skip.append(spear)
         elif s.startswith("#else"):
             skip[-1] = not skip[-1]
         elif s.startswith("#endif"):
@@ -50,12 +51,21 @@ def sprite_names():
     return names
 
 
+def data_ext(folder):
+    """The data in a folder: WL6, WL1 or SOD (Spear), by its VSWAP."""
+    for ext in ("WL6", "WL1", "SOD"):
+        if os.path.exists(os.path.join(folder, "VSWAP." + ext)):
+            return ext
+    raise SystemExit("no VSWAP.WL6, .WL1 or .SOD in " + folder)
+
+
 class Art:
-    def __init__(self, folder):
+    def __init__(self, folder, ext=None):
         self.folder = folder
-        self.pal = gamepal()
-        self.names = sprite_names()
-        d = open(os.path.join(folder, "VSWAP.WL6"), "rb").read()
+        self.ext = ext or data_ext(folder)
+        self.pal = gamepal()        # (Spear's palette is Wolf3D's: one GAMEPAL)
+        self.names = sprite_names(self.ext == "SOD")
+        d = open(os.path.join(folder, "VSWAP." + self.ext), "rb").read()
         n, self.sprstart, _ = struct.unpack_from("<3H", d, 0)
         self.offs = struct.unpack_from("<%dI" % n, d, 6)
         self.lens = struct.unpack_from("<%dH" % n, d, 6 + 4 * n)

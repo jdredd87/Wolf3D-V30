@@ -2334,3 +2334,17 @@ Wolfenstein on 2026-10-19: its own fault, not Spear's.
 The registered `WOLF3DM` is byte for byte as it was (335,854 bytes,
 `C39ED932`), and the Windows builds that are not Spear preprocess to the
 same code.
+
+### The players as BJ in Spear -- 2026-10-23
+
+`python mp/mkbj.py SODFOLDER --vswap VSWAPM.SOD` -- the same BJ as
+Wolfenstein's `VSWAPM.WL6`, built from the SS in the player's own
+`VSWAP.SOD`: `mp/wl6art.py` reads Spear's sprite list (WL_DEF.H's `SPEAR`
+side; the SS's 49 frames are 142-190 there, 138-186 in Wolfenstein, in the
+same order) and finds the folder's data by its VSWAP.  The palette is one
+for both games.  The 196 frames go after Spear's 421 sprites, so no sprite
+of id's moves -- a machine with the file and one without play together.
+`SPEARM` and `SPEARW` open it as they open `VSWAPM.WL6` (`MPPageFile`,
+`VSWAPM.` and the data's extension).  Seen on Windows: a player in red, BJ's
+hair and gun, walking past SPEARW at the start; a co-op game with the file on
+all four machines, 4,000 steps, no desync.

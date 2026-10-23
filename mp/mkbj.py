@@ -7,6 +7,11 @@ Claude, 2026.  A DRAFT: this first version writes preview sheets only.
                                        ...and OUT: VSWAP.WL6 with the four
                                        players' BJ added (VSWAPM.WL6, which
                                        WOLF3DM uses when it is there)
+    python mp/mkbj.py SODFOLDER --vswap OUT
+                                       the same from Spear of Destiny's
+                                       VSWAP.SOD (VSWAPM.SOD, for SPEARM and
+                                       SPEARW; 2026-10-23) -- the folder's
+                                       data is found by its VSWAP
 
 The SS has the full set a DOOM-style player needs -- 8 standing views,
 4 walking frames in 8 views, 3 firing, 2 pain, 3 dying and a body -- with
@@ -112,11 +117,11 @@ def encode(img):
     return bytes(out)
 
 
-def write_vswap(folder, sprites, path):
-    """The player's VSWAP.WL6 with the sprites added at the end of the
-    sprite range (before the sounds, whose list is relative to PMSoundStart),
-    every chunk laid out in order."""
-    d = open(os.path.join(folder, "VSWAP.WL6"), "rb").read()
+def write_vswap(folder, sprites, path, ext="WL6"):
+    """The player's VSWAP (.WL6 or .SOD) with the sprites added at the end of
+    the sprite range (before the sounds, whose list is relative to
+    PMSoundStart), every chunk laid out in order."""
+    d = open(os.path.join(folder, "VSWAP." + ext), "rb").read()
     n, spr, snd = struct.unpack_from("<3H", d, 0)
     offs = struct.unpack_from("<%dI" % n, d, 6)
     lens = struct.unpack_from("<%dH" % n, d, 6 + 4 * n)
@@ -192,19 +197,20 @@ def main():
     pal = art.pal
     os.makedirs(STAGE, exist_ok=True)
     built = [convert(art, art.sprite(n), HAIR) for n in frames(art)]
+    tag = "" if art.ext == "WL6" else "_" + art.ext.lower()     # bj_grey_sod.png
     for name, targets in RAMPS.items():
         tab = table_to(pal, targets)
-        sheet([translate(b, tab) for b in built], 8).save(os.path.join(STAGE, "bj_%s.png" % name))
+        sheet([translate(b, tab) for b in built], 8).save(os.path.join(STAGE, "bj_%s%s.png" % (name, tag)))
     # each colour: standing, two walking views, the back, a firing frame
     pick = [built[0], built[8 + 1], built[16 + 2], built[4], built[47]]
     sheet([translate(b, table_to(pal, t)) for t in RAMPS.values() for b in pick],
-          len(pick)).save(os.path.join(STAGE, "bj_colours.png"))
+          len(pick)).save(os.path.join(STAGE, "bj_colours%s.png" % tag))
     print("previews in", os.path.abspath(STAGE))
     if "--vswap" in sys.argv:
         # every colour, in RAMPS' order (P1 grey, P2 green, P3 red, P4 brown)
         sprites = [encode(translate(b, table_to(pal, t))) for t in RAMPS.values() for b in built]
         out = sys.argv[sys.argv.index("--vswap") + 1]
-        n, m, base = write_vswap(folder, sprites, out)
+        n, m, base = write_vswap(folder, sprites, out, art.ext)
         print("%s: %d chunks (was %d); the BJ sprites are sprites %d-%d, %d bytes"
               % (out, m, n, base, base + len(sprites) - 1, os.path.getsize(out)))
 
