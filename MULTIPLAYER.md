@@ -2317,7 +2317,9 @@ agreement.  The hang watchdog's build (`huntbot.py --spear`)
 painted it: CS:IP in `SendFrame` (`WL_NET.C`, the packet driver's send),
 where-code 31, and the BIOS tick stopped -- interrupts off, the bus held.
 The same 20,000 steps as Wolfenstein (`WOLF3DM`): no freeze.  With `NOEMS`:
-a freeze at 3,359.  With **`NOSB`: none**, all 20,000 steps, and none in the
+a freeze at 3,359; with `NOEMS NOXMS` too, the page cache and every sound in
+conventional memory only, nothing in the card's (2026-10-23): frozen in both
+games, at 2,973 and 6,388.  With **`NOSB`: none**, all 20,000 steps, and none in the
 three games after it (4 of 4).  So the emulated Sound Blaster on the PicoMEM 2 --
 the card that is also the V30's WiFi, on the 06-16 firmware -- is where it
 is, as its AdLib was on the 09-27 firmware (DOS Bridge's

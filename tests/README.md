@@ -181,6 +181,7 @@ build `01110053`, Spear's own.
 | co-op, enemies | Python | 20,000 | the same | the V30 froze at step 7,570; the other three to the end |
 | the same, the V30 with `NOSB` | Python | 20,000 | the same | **PASS**, all four, 0 desyncs |
 | the same, the V30 with `NOEMS` | Python | 20,000 | P3, SPEARW; V30 late | the V30 froze at step 3,359 |
+| the same, the V30 with `NOEMS NOXMS` (2026-10-23), twice | Python | 20,000 | the same | the V30 froze both times, at 2,973 and 6,388 |
 | the same, the V30 with 14,848 bytes more memory (its `CONFIG.SYS`, 2026-10-23; put back after) | Python | 20,000 | 486, P3, SPEARW; V30 late | the V30 froze at step 5,921: not memory |
 | floor order, the console (`sodfloors`) -- map 17, next; map 18, next; map 20, next | Python | 10,000 | 486, P3, SPEARW; V30 late (`NOSB`) | **PASS**, all four: the Angel's floor with the gold key, floor 19, floor 5, the Angel again, floor 1 -- in .37's pictures |
 | team deathmatch (`sodw`) | MPSRVW | 4,000 | 486, P3, SPEARW; V30 late (`NOSB`) | **PASS**, all four |
