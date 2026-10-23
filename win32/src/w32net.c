@@ -24,6 +24,7 @@ int		netany, netearly;			// WL_NET.C's: FIND takes anyone's datagram
 byte	netfrom[4];					// who sent the last one
 byte	nettx[1514];				// WL_MP.C builds some packets in place here
 long	netsentn, netrecvn;
+long	netbadsum;				// (WL_NET.C's: Winsock drops a wrong UDP checksum itself)
 
 void	W32Events (void);			// the window's messages (w32win.c; none headless)
 

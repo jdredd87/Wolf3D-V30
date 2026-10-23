@@ -116,6 +116,54 @@ PUBLIC	_NetRecv
 ENDP
 
 ;
+; unsigned NetSum (void far *p, unsigned len, unsigned sum): the Internet
+; checksum's one's-complement sum (RFC 1071) of len bytes, added on to sum --
+; both read as big-endian (network order) words, so a pseudo-header's sum
+; chains into its datagram's.  The words are added little-endian with the
+; carry each time, and the bytes swapped at the end, which comes to the same
+; sum.  StevenC & Claude (Anthropic), 2026-10-23: the game's datagrams carry
+; a UDP checksum now, and the ones it is sent are checked -- a PicoMEM 2
+; garbles a frame sent straight after another, and with no checksum the
+; garbage was taken as a player's packet (P3's chat line, 2026-10-22)
+;
+PROC	_NetSum FAR
+PUBLIC	_NetSum
+	push	bp
+	mov		bp,sp
+	push	ds
+	push	si
+	lds		si,[bp+6]				; p
+	mov		cx,[bp+10]				; len
+	mov		dx,[bp+12]				; sum
+	xchg	dl,dh					; ... little-endian, as the words are added
+	shr		cx,1					; words; CF = an odd byte at the end
+	pushf
+	clc
+	jcxz	@@odd
+@@word:
+	lodsw
+	adc		dx,ax
+	loop	@@word					; (LOOP keeps the carry)
+	adc		dx,0
+	adc		dx,0					; (the end-around carry can carry once more)
+@@odd:
+	popf
+	jnc		@@done
+	lodsb							; the last byte: the high half of a big-
+	xor		ah,ah					; endian word, the low half of ours
+	add		dx,ax
+	adc		dx,0
+	adc		dx,0
+@@done:
+	xchg	dl,dh					; back to big-endian
+	mov		ax,dx
+	pop		si
+	pop		ds
+	pop		bp
+	retf
+ENDP
+
+;
 ; NEC V30 build, StevenC & Claude (2026-10-07): a player's context, in and
 ; out -- WL_MP.C's Save and Load, which every enemy's think pays for (its
 ; target's context goes in first).  The fields in mpctx_t's order: ob,

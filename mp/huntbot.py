@@ -1281,6 +1281,15 @@ def main():
     if not rc:
         shutil.copyfile(os.path.join(out, "WOLF3DV.EXE"), os.path.join(STAGE, name + ".EXE"))
         shutil.copyfile(os.path.join(out, "WOLF3DV.MAP"), os.path.join(STAGE, name + ".MAP"))
+        # and a dated copy of both, never overwritten: a hang report is traced
+        # against the build that made it (2026-10-23 -- the 486's of 10-19
+        # could not be, its map gone to the next day's build)
+        import time
+        stamp = time.strftime("%Y%m%d-%H%M")
+        keepdir = os.path.join(STAGE, "huntbot-builds")
+        os.makedirs(keepdir, exist_ok=True)
+        for ext in ("EXE", "MAP"):
+            shutil.copyfile(os.path.join(STAGE, name + "." + ext), os.path.join(keepdir, "%s-%s.%s" % (name, stamp, ext)))
     # the real EXE back where it was, whatever happened
     for f in real:
         if os.path.exists(os.path.join(STAGE, "real-" + f)):

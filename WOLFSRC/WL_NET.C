@@ -352,6 +352,10 @@ static void PutW (byte far *p, unsigned v)
 	p[1] = v;
 }
 
+unsigned	NetSum (void far *p, unsigned len, unsigned sum);	// WL_NETA.ASM
+long	far	netbadsum = 0;			// datagrams dropped for a wrong UDP
+									// checksum (WL_MP.C's report)
+
 static unsigned GetW (byte far *p)
 {
 	return (p[0] << 8) | p[1];
@@ -501,8 +505,18 @@ void NetSend (byte far *data, unsigned len)
 	PutW (p,netport);
 	PutW (p+2,netport);
 	PutW (p+4,8+len);
-	PutW (p+6,0);				// no UDP checksum: optional in IPv4
+	PutW (p+6,0);
 	_fmemcpy (p+8,data,len);
+	{								// the UDP checksum (2026-10-23): it was 0, none,
+		byte		ph[12];			// which IPv4 allows -- and a PicoMEM 2 garbles
+		unsigned	u;				// a frame sent straight after another, which a
+									// server then took as a player's packet.  With
+		_fmemcpy (ph,p-8,8);		// it, every server drops a garbled one.  Over
+		ph[8] = 0;	ph[9] = 17;		// the pseudo-header: the IP header's source and
+		PutW (ph+10,8+len);			// destination (p-8), UDP, its length
+		u = ~NetSum (p,8+len,NetSum ((byte far *)ph,12,0));
+		PutW (p+6,u ? u : 0xffff);	// (0 is "none": all ones is the same sum)
+	}
 	SendFrame (14+20+8+len);
 }
 
@@ -996,9 +1010,20 @@ void NetPump (void (*take) (byte far *data, unsigned len))
 
 				if (ulen >= 8 && ihl+ulen <= len-14)
 				{
-					_fmemcpy (netfrom,f+12,4);	// who sent it (discovery's list)
-					netrecvn++;
-					take (f+ihl+8,ulen-8);
+					byte	ph[12];
+
+					_fmemcpy (ph,f+12,8);		// a checksum, when there is one,
+					ph[8] = 0;	ph[9] = 17;		// summed with it all to FFFFh
+					PutW (ph+10,ulen);			// (2026-10-23): otherwise a
+					if (GetW (f+ihl+6)			// garbled frame is dropped
+					&& NetSum (f+ihl,ulen,NetSum ((byte far *)ph,12,0)) != 0xffff)
+						netbadsum++;
+					else
+					{
+						_fmemcpy (netfrom,f+12,4);	// who sent it (discovery's list)
+						netrecvn++;
+						take (f+ihl+8,ulen-8);
+					}
 				}
 			}
 		}

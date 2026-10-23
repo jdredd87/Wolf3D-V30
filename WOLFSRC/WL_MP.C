@@ -1885,7 +1885,7 @@ void	PollJoystickButtons (void);
 void	PollKeyboardMove (void);
 void	PollMouseMove (void);
 void	PollJoystickMove (void);
-extern	long	far netsentn, far netrecvn;
+extern	long	far netsentn, far netrecvn, far netbadsum;
 
 #define RING	128					// steps held, played or not
 
@@ -4686,14 +4686,15 @@ void MPNetGame (void)
 	ShutdownId ();
 	MPReport ();
 	{
-		static char far r[] = "net: %ld steps played, %ld held; packets sent %ld, received %ld; %Fs\n";
+		static char far r[] = "net: %ld steps played, %ld held; packets sent %ld, received %ld, %ld bad; %Fs\n";
 		static char far ok[] = "no desync", far bad[] = "DESYNC reported";
 		static char far f[] = "net: %ld pictures in %ld s, %ld.%ld a second (view %d, walls 1 ray in %d)\n";
 		char	s[90];
 		long	t = mpticks ? mpticks : 1, r10 = mpframes*700/t;
 
 		_fstrcpy ((char far *)s,r);
-		printf (s,mpplayed+1,mphave+1,netsentn,netrecvn,mpdesync < 0 ? (char far *)ok : (char far *)bad);
+		printf (s,mpplayed+1,mphave+1,netsentn,netrecvn,netbadsum,		// (bad: a wrong UDP
+			mpdesync < 0 ? (char far *)ok : (char far *)bad);			// checksum, dropped)
 		_fstrcpy ((char far *)s,f);
 		printf (s,mpframes,mpticks/70,r10/10,r10%10,viewsize,pixstep);
 		{

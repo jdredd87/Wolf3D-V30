@@ -2348,3 +2348,45 @@ of id's moves -- a machine with the file and one without play together.
 `VSWAPM.` and the data's extension).  Seen on Windows: a player in red, BJ's
 hair and gun, walking past SPEARW at the start; a co-op game with the file on
 all four machines, 4,000 steps, no desync.
+
+## A UDP checksum on every datagram -- 2026-10-23
+
+Twice a server logged a chat line from P3 that P3 never typed -- "XP3"
+and then 0FFh bytes and another packet's leftovers -- just before its real
+"XP3 here".  DOS Bridge's `docs/network.md` has the reason: a **PicoMEM 2
+garbles a frame sent within about a millisecond of the last** (found on P3
+by MPSRV, 2026-10-15, and the 1 ms `--txgap` every server now waits is that
+cure).  A PC's stack drops a garbled frame for its UDP checksum -- but the
+game sent **none** (`WL_NET.C`: 0, "optional in IPv4"), so the server took
+the garbage for a player's packet.  A chat line is harmless; an INPUT taken
+that way is a player's wrong move, a SYNC a false DESYNC.
+
+Now every datagram the DOS game sends carries its checksum (over the
+pseudo-header, as RFC 768 has it), and one it is sent with a checksum is
+checked and dropped when wrong -- counted, and the game's report says so
+(`packets sent N, received N, N bad`).  The sum is `NetSum` in
+`WL_NETA.ASM`: the words added with the carry, the bytes swapped once at the
+end (RFC 1071), 8086 instructions only.  MPSRV already sent and checked
+checksums; Windows and Python leave both to the operating system, which
+drops a wrong one once there is one to check.  Windows' games use Winsock,
+so they always had them.
+
+Proved by the servers that check: MPSRV on P3 serving the 486, the V30 and
+WOLF3DMW -- 4,000 steps, **0 frames for a wrong checksum** (a wrong sum would
+have dropped every frame of theirs); the Python server with all four
+machines -- PASS, every DOS machine "0 bad".  The V30 draws as many pictures
+a second as before (10.0 in deathmatch on MPSRV).  It is no change to the
+protocol: 1.11 machines with and without it play together.
+
+### The 486's hang of 2026-10-19
+
+The hang watchdog's report from the 486 (`stage/hang-192.168.50.67.log`,
+five hours into the eight-hour game) had the tick interrupting the same
+place three times, 20, 25 and 30 s into the stall: **E000:39C0, the
+486's Cirrus Logic VGA BIOS drawing a character in a graphics mode** (its
+code reads the font through INT 43h and writes the glyph to A000h).  So the
+game was printing text through the BIOS, without end, which nothing in it
+does in play.  The build's map was gone -- the next day's build had
+replaced `stage/WOLF3DT.MAP` -- so who called it is not known.  `huntbot.py`
+now keeps every build's EXE and map in `stage/huntbot-builds/`, dated: the
+next report is traced against its own build.
