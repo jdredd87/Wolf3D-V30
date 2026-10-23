@@ -2390,3 +2390,46 @@ does in play.  The build's map was gone -- the next day's build had
 replaced `stage/WOLF3DT.MAP` -- so who called it is not known.  `huntbot.py`
 now keeps every build's EXE and map in `stage/huntbot-builds/`, dated: the
 next report is traced against its own build.
+
+## Where the V30's time goes in the network game -- 2026-10-23
+
+The single-player game's V30 tuning was closed on 2026-10-02 with every
+profile item over 2% worked; the network game had never been profiled in
+play.  WOLF3DM has no profiler (`WL_PROF.C` is stubbed under `NETGAME`, for
+the V30's memory), so `tests/mpprof.py` makes a TEST build that keeps it --
+`MPPROF`, never shipped: `PROFILE` samples all of play, the start-up check
+asks 150,000 bytes, and the map has line numbers (`profmap.py --lines`) --
+and the V30 replays a recorded four-player co-op game
+(`stage/tests/mprec/REC.MPR`: `netmatrix.py` with `NETRECORD`), the same
+4,000 steps every run, `LOWEST VIEW 10` as it plays.
+
+**The text over the view** -- notices, chat lines, "Killed by" -- was the
+thing.  The profile put 17% of the time in `Text1` (`WL_MP.C`), but the
+profile turned out not to be the way to measure it: its hottest buckets
+stayed at the same addresses when the code there changed, all just after
+the calls in `Text` and `Center` -- not where the time was spent.  What
+measured it was the test build's switches, a part of the overlay off each,
+and the pictures a second (the same replay, the profiler on):
+
+| | pictures a second |
+|---|---|
+| everything | 13.0 |
+| `NOOVERLAY`: none of it | 16.5 |
+| `OVNOTEXT`: the text measured, not drawn | 15.9 |
+| `OVNOUNB`: the border not put back under old text | 13.2 |
+| `OVNOBOX`: no black box (none shown in this replay) | 13.0 |
+
+So it is drawing the letters.  `Text1` drew a letter's column at a time in
+assembly but did the rest -- the clip test, the glyph's address, the
+registers saved, the map mask, the next column -- in C, per column.  Now one
+call a line does it all (`MPTextDraw`, `WL_NETA.ASM`), and the measuring
+pass too (`MPTextSum`): **13.0 to 13.9 pictures a second** in the replay
+without the profiler, the picture the same (the capture card's stills of
+both builds, `tests/textcmp.py`: every letter and its shadow).  Windows
+keeps the C.
+
+Tried and taken out: the letters and their shadow in one pass, plane by
+plane, each pixel written once and four map masks a line instead of one a
+column -- on the idea that the V30's 8-bit bus made the VGA writes the cost.
+It ran **slower**, 13.0 against 13.8: the V30's time there is its own work,
+not the card's, and that pass had more of it a column.

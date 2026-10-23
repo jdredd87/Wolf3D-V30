@@ -2871,6 +2871,9 @@ static void DeadTint (void)
 // drawn again (clip): text is a port write a column and a test a pixel, and
 // drawing all of it every frame took the V30 from 11 pictures a second to 6.6
 //
+#ifdef MPPROF
+static int far ovoff;				// the profiling TEST build: parts of the overlay off
+#endif
 static int far rows;				// a font row in rows of the page
 static int far measure;				// 1: Text and Box only add up what they would draw
 static int far clip;				// 1: they draw only in the view (cx0,cy0 - cx1,cy1)
@@ -2928,6 +2931,12 @@ static char far *Fit (char *t, char far *s, int w)	// s, cut to w pixels
 	return (char far *)t;
 }
 
+#ifndef W32
+unsigned long	MPTextSum (char far *s, unsigned fontseg, unsigned r);	// WL_NETA.ASM
+void	MPTextDraw (byte far *dest, char far *s, unsigned fontseg, int x, int cx0, int cx1,
+	unsigned n, unsigned r0, unsigned step, unsigned color);
+#endif
+
 static void Text1 (int x, int y, char far *s, int color)
 {
 	fontstruct	far *font = (fontstruct far *)grsegs[STARTFONT];
@@ -2940,11 +2949,20 @@ static void Text1 (int x, int y, char far *s, int color)
 
 	if (measure)
 	{
+#ifdef W32
 		for (w=0,r=color;*s;s++)
 		{
 			w += font->width[(byte)*s];
 			r = r*33 + (byte)*s;
 		}
+#else
+		{							// NEC V30 build (2026-10-23): in asm, WL_NETA.ASM
+			unsigned long v = MPTextSum (s,FP_SEG(font) + (FP_OFF(font) >> 4),color);
+
+			w = (unsigned)v;
+			r = (unsigned)(v >> 16);
+		}
+#endif
 		Mark (x,y,w,h*rows,r);
 		return;
 	}
@@ -2959,6 +2977,18 @@ static void Text1 (int x, int y, char far *s, int color)
 		dest += r0*step;
 	}
 	n = r1 - r0;
+#ifdef MPPROF
+	if (ovoff & 1)
+		return;						// OVNOTEXT: measured, not drawn
+#endif
+#ifndef W32
+	// NEC V30 build (2026-10-23, StevenC & Claude): the whole line in asm,
+	// WL_NETA.ASM -- every letter's every column, the clip and the plane's mask
+	// as below did them in C, which cost the V30 more than the rows did
+	MPTextDraw (dest,s,FP_SEG(font) + (FP_OFF(font) >> 4),x,clip ? cx0 : -32767-1,
+		clip ? cx1 : 32767,n,r0,step,color);
+	return;
+#else
 	while ((ch = *s++) != 0)
 	{
 		cw = w = font->width[ch];
@@ -3018,6 +3048,7 @@ asm				pop		si
 		}
 	}
 	outport (SC_INDEX,SC_MAPMASK | (15 << 8));
+#endif
 }
 
 static void Text (int x, int y, char far *s, int color)
@@ -3055,6 +3086,10 @@ static void Box (int x, int y, int w, int h)	// black, under the scores
 			if (y+h > cy1)
 				h = cy1 - y;
 		}
+#ifdef MPPROF
+		if (ovoff & 4)
+			return;					// OVNOBOX
+#endif
 		if (w > 0 && h > 0)
 			VL_Bar (x,y,w,h,0);
 		return;
@@ -3089,6 +3124,10 @@ static void Unborder (int x0, int y0, int x1, int y1)
 	int	xl = 160-viewwidth/2, yl = (PLAYH-viewheight)/2;
 	int	vx0 = xl-1, vy0 = yl-1, vx1 = xl+viewwidth+1, vy1 = yl+viewheight+1;
 
+#ifdef MPPROF
+	if (ovoff & 2)
+		return;						// OVNOUNB
+#endif
 	Fill (x0,y0,x1,y1 < vy0 ? y1 : vy0);			// above the view
 	Fill (x0,y0 > vy1 ? y0 : vy1,x1,y1);			// below
 	if (y0 > vy0)
@@ -3245,6 +3284,29 @@ void MPOverlay (void)
 	int			pg, far *d;
 	long		dead;
 
+#ifdef MPPROF
+	{								// the profiling TEST build: NOOVERLAY, none of
+		static int far noov = -1;	// it at all; OVNOTEXT, OVNOUNB, OVNOBOX, one
+		static char far w[] = "nooverlay", far w1[] = "ovnotext",	// part of it
+			far w2[] = "ovnounb", far w3[] = "ovnobox";	// off -- what each costs,
+		int	i;						// by the pictures a second (2026-10-23)
+
+		if (noov < 0)
+			for (noov = 0,i = 1;i < _argc;i++)
+			{
+				if (Is (_argv[i],w))
+					noov = 1;
+				if (Is (_argv[i],w1))
+					ovoff |= 1;
+				if (Is (_argv[i],w2))
+					ovoff |= 2;
+				if (Is (_argv[i],w3))
+					ovoff |= 4;
+			}
+		if (noov)
+			return;
+	}
+#endif
 	if (!grsegs[STARTFONT])
 		return;
 	rows = lowvert == 2 ? 2 : 1;
@@ -3976,11 +4038,15 @@ static void NetLoop (void)
 		if (Due () - mpplayed > 35)		// two seconds behind: catch up
 		{
 			mpcatching = 1;
+#ifndef MPPROF
 			ProfStart ();				// PROFILE: the catching up, only
+#endif
 		}
 		else if (mpcatching && Due () - mpplayed < 8)
 		{
+#ifndef MPPROF
 			ProfStop ();
+#endif
 			mpcatching = 0;
 			DrawAllPlayBorder ();
 			Redrawn ();
@@ -4520,6 +4586,10 @@ static void NextLevel (void)
 	PM_CheckMainMem ();
 	fizzlein = true;
 	DrawLevel ();
+#ifdef MPPROF
+	if (profiling)
+		ProfStart ();				// the profiling TEST build: on, past the floor
+#endif
 }
 
 void MPNetGame (void)
@@ -4651,6 +4721,9 @@ void MPNetGame (void)
 			ClearMemory ();
 			ProfInit ();
 			PM_CheckMainMem ();
+#ifdef MPPROF
+			ProfStart ();			// the profiling TEST build: all of play
+#endif
 			break;
 		}
 

@@ -1324,6 +1324,8 @@ void InitGame (void)
 
 #ifdef W32
 	if (0)							// Windows: memory enough
+#elif defined(MPPROF)				// the network game's profiling TEST build
+	if (mminfo.mainmem < 150000L)	// (tests/mpprof.py): the profiler's 36 KB
 #elif !defined(SPEAR) || defined(NETGAME)	// (SPEARM, Spear's network game:
 									// the same, 2026-10-22)
 	if (mminfo.mainmem < 200000L)	// multiplayer (StevenC & Claude): id's 235000

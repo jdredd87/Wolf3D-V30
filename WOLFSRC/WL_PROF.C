@@ -19,9 +19,10 @@
 #include "WL_DEF.H"
 #pragma hdrstop
 
-#ifdef NETGAME
+#if defined(NETGAME) && !defined(MPPROF)
 // The network game (WOLF3DM) has no profiler: an 8 MHz V30 needs the memory
-// for what id's start-up check asks (StevenC & Claude, 2026-10-17)
+// for what id's start-up check asks (StevenC & Claude, 2026-10-17).  MPPROF,
+// a TEST build only (tests/mpprof.py, 2026-10-23), keeps it
 boolean		profiling;
 void ProfInit (void) {}
 void ProfStart (void) {}

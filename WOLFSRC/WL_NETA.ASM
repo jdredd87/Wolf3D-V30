@@ -164,6 +164,156 @@ PUBLIC	_NetSum
 ENDP
 
 ;
+; The text over the view, in assembly -- NEC V30 build, StevenC & Claude
+; (Anthropic), 2026-10-23.  WL_MP.C's Text1 drew a letter's column at a time
+; here and did the rest in C: the clip test, the glyph's address, the
+; registers saved, the map mask, the next column -- per column, nearly twice
+; what the rows themselves cost (a replay's profile on the V30: text 17% of
+; its time, 9.6% of it that C).  Now one call a line of text does it all.
+; fontstruct: height (word), location[256] (words), width[256] (bytes); the
+; font is the start of its own segment (the memory manager's blocks are).
+;
+FONT_LOC	=	2
+FONT_WIDTH	=	514
+
+;
+; unsigned long MPTextSum (char far *s, unsigned fontseg, unsigned r): the
+; string's width in pixels (the low word) and r*33 + each letter, a letter
+; at a time (the high) -- Text1's measuring pass
+;
+PROC	_MPTextSum FAR
+PUBLIC	_MPTextSum
+	push	bp
+	mov		bp,sp
+	push	si
+	push	ds
+	les		si,[bp+6]				; ES:SI = the string
+	mov		ds,[bp+10]				; DS = the font
+	mov		dx,[bp+12]				; r
+	xor		cx,cx					; the width
+	xor		bh,bh
+@@letter:
+	mov		bl,[es:si]
+	inc		si
+	or		bl,bl
+	jz		@@end
+	mov		al,[bx+FONT_WIDTH]
+	xor		ah,ah
+	add		cx,ax
+	mov		ax,dx					; r = r*33 + the letter
+	add		dx,dx
+	add		dx,dx
+	add		dx,dx
+	add		dx,dx
+	add		dx,dx
+	add		dx,ax
+	add		dx,bx
+	jmp		@@letter
+@@end:
+	mov		ax,cx
+	pop		ds
+	pop		si
+	pop		bp
+	retf
+ENDP
+
+;
+; void MPTextDraw (byte far *dest, char far *s, unsigned fontseg, int x,
+;	int cx0, int cx1, unsigned n, unsigned r0, unsigned step, unsigned color)
+; the string, column by column from dest (the column of x on its page): each
+; glyph's n rows from its row r0, step bytes apart on the page, in color
+; wherever the font has a pixel; a column only when cx0 <= x < cx1.  Then
+; every plane's mask back on.
+;
+PROC	_MPTextDraw FAR
+PUBLIC	_MPTextDraw
+	push	bp
+	mov		bp,sp
+	sub		sp,8					; [bp-2] the plane's mask, [bp-4] the glyph's
+	push	si						; width, [bp-6] its columns to go, [bp-8]
+	push	di						; the column's first byte in the font
+	push	ds
+	mov		ax,[bp+16]				; x
+	mov		cl,al
+	and		cl,3
+	mov		al,1
+	shl		al,cl
+	mov		[BYTE bp-2],al
+	mov		dx,03C4h				; the sequencer's map mask: its index once
+	mov		al,2
+	out		dx,al
+	les		di,[bp+6]				; ES:DI = the column's first byte on the page
+	mov		ds,[bp+14]				; DS = the font
+@@letter:
+	push	ds
+	lds		bx,[bp+10]				; the next letter
+	mov		bl,[bx]
+	pop		ds
+	inc		[WORD bp+10]
+	xor		bh,bh
+	or		bl,bl
+	jz		@@end
+	mov		al,[bx+FONT_WIDTH]		; its width
+	xor		ah,ah
+	mov		[bp-4],ax
+	mov		[bp-6],ax
+	add		bx,bx
+	mov		si,[bx+FONT_LOC]		; its first column ...
+	mov		ax,[bp+24]
+	mul		[WORD bp-4]				; ... from row r0: r0 * the width on
+	add		si,ax
+	mov		[bp-8],si
+@@column:
+	cmp		[WORD bp-6],0
+	je		@@letter
+	dec		[WORD bp-6]
+	mov		ax,[bp+16]				; in the clip?
+	cmp		ax,[bp+18]
+	jl		@@next
+	cmp		ax,[bp+20]
+	jge		@@next
+	mov		dx,03C5h
+	mov		al,[bp-2]
+	out		dx,al					; this column's plane
+	mov		si,[bp-8]
+	push	di
+	mov		cx,[bp+22]				; n rows
+	mov		bx,[bp-4]				; a font row is the glyph's width on
+	mov		dx,[bp+26]				; a page row is step on
+	mov		al,[bp+28]				; the colour
+	jcxz	@@drawn
+@@row:
+	cmp		[BYTE si],0
+	je		@@skip
+	mov		[es:di],al
+@@skip:
+	add		si,bx
+	add		di,dx
+	loop	@@row
+@@drawn:
+	pop		di
+@@next:
+	inc		[WORD bp+16]			; x
+	inc		[WORD bp-8]				; the glyph's next column
+	shl		[BYTE bp-2],1
+	cmp		[BYTE bp-2],16
+	jne		@@column
+	mov		[BYTE bp-2],1			; plane 0 again, a byte on
+	inc		di
+	jmp		@@column
+@@end:
+	mov		dx,03C4h
+	mov		ax,0F02h				; every plane
+	out		dx,ax
+	pop		ds
+	pop		di
+	pop		si
+	mov		sp,bp
+	pop		bp
+	retf
+ENDP
+
+;
 ; NEC V30 build, StevenC & Claude (2026-10-07): a player's context, in and
 ; out -- WL_MP.C's Save and Load, which every enemy's think pays for (its
 ; target's context goes in first).  The fields in mpctx_t's order: ob,

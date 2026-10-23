@@ -1,7 +1,11 @@
 """Turn PROF.BIN from `WOLF3DV TIMEDEMO PROFILE` into per-function and
 per-module time, using the link map.  StevenC & Claude, 2026.
 
-    python profmap.py PROF.BIN WOLFSRC\\WOLF3DV.MAP [--top N] [--buckets N]
+    python profmap.py PROF.BIN WOLFSRC\\WOLF3DV.MAP [--top N] [--buckets N] [--lines N]
+
+--lines N: the N busiest source lines, from a map linked with line numbers
+(BCC -y, TLINK /l -- mp/huntbot.py's and tests/mpprof.py's builds): each
+sample charged to the line at or below it in its own segment (2026-10-23).
 
 The sampler records ((CS - loadseg) * 16 + IP) >> shift, which is the address
 space the map is written in, so a bucket's samples belong to the public
@@ -56,15 +60,31 @@ def load_map(path):
     return segs, kept
 
 
+def load_lines(path):
+    """The map's line numbers: [(address, file, line)], sorted."""
+    out, cur = [], None
+    for line in open(path, errors="replace"):
+        m = re.match(r"Line numbers for \S+\((\S+)\) segment (\S+)", line)
+        if m:
+            cur = m[1]
+            continue
+        if cur:
+            for n, seg, off in re.findall(r"(\d+) ([0-9A-F]{4}):([0-9A-F]{4})", line):
+                out.append((int(seg, 16) * 16 + int(off, 16), cur, int(n)))
+            if line.strip() and not re.search(r"\d+ [0-9A-F]{4}:[0-9A-F]{4}", line):
+                cur = None
+    return sorted(out)
+
+
 def main():
     argv = sys.argv[1:]
-    opts = {"--top": 30, "--buckets": 0}
+    opts = {"--top": 30, "--buckets": 0, "--lines": 0}
     for o in opts:
         if o in argv:
             i = argv.index(o)
             opts[o] = int(argv[i + 1])
             del argv[i:i + 2]
-    top, nbuckets = opts["--top"], opts["--buckets"]
+    top, nbuckets, nlines = opts["--top"], opts["--buckets"], opts["--lines"]
     args = argv
     if len(args) != 2:
         sys.exit(__doc__)
@@ -116,6 +136,26 @@ def main():
             addr = i << shift
             _, fn, base = locate(addr)
             print("  %6.2f%%  %6d  %05X  %s+%X" % (100.0 * n / total, n, addr, fn, addr - base))
+
+    if nlines:
+        lines = load_lines(args[1])
+        if not lines:
+            print("\nno line numbers in the map (link with /l, compile with -y)")
+        else:
+            la = [a for a, _, _ in lines]
+            per_line = {}
+            for i, n in enumerate(buckets):
+                if not n:
+                    continue
+                addr = i << shift
+                seg = next((sg for sg in code if sg[0] <= addr < sg[1]), None)
+                j = bisect.bisect_right(la, addr) - 1
+                if seg and j >= 0 and lines[j][0] >= seg[0]:
+                    key = "%s:%d" % (lines[j][1], lines[j][2])
+                    per_line[key] = per_line.get(key, 0) + n
+            print("\nby source line (the line at or below each sample, %d-byte buckets)" % (1 << shift))
+            for k, v in sorted(per_line.items(), key=lambda kv: -kv[1])[:nlines]:
+                print("  %6.2f%%  %7d  %s" % (100.0 * v / total, v, k))
 
 
 if __name__ == "__main__":
