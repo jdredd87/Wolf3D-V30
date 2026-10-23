@@ -20,6 +20,7 @@ drive the machines through DOS Bridge (`C:\dosbridgeDEV`) and the Windows PC
 | `keys37.py` | keys held in the game's window on .37 (used by `winlocal.py`; `W3DPROC` names another program) |
 | `demosum.py [wl6\|wl1\|sod]` | id's demos, the DOS game against the Windows one, the whole game state every 50 frames (WL_MP.C's `DemoSum`): a DOS test build with `DEMOSUM` on the 486, `TIMEDEMO DEMOSUM` on .37 -- every line the same |
 | `putvariants.py`, `varsmoke.py` | the Windows shareware (WOLF3DW1) and Spear (SPEARW) onto .37 with their data, and a first look at each |
+| `winend.py [e1..e6\|wl1\|sod]` | each episode's end on Windows: a TEST build (`build.py spend`, `sp1end`, `spsodend`: `WL_PLAY.C`'s `ENDTEST` wins the floor after 70 frames) started on the last floor by `TEDLEVEL`, then id's victory, end text and high scores (Spear: its end screens) -- a picture of each, to the exit |
 | `doskeys.py [BOX...]` | the DOS game played by keys: `K9INJ.COM` (`k9inj.asm`) puts them through the keyboard controller (D2h) on the 486 and P3; a new game, a save, a load, a second save, Quit -- proved by the files.  `k9.py` makes its scripts |
 
 The builds come from three trees: this one (the network game and the
@@ -195,6 +196,21 @@ is on the same Pico, and the freeze was caught in a send with interrupts off
 `PICOMEM-REPORT.md` in DOS Bridge).  Until the card is settled the V30 plays
 networked Spear with `NOSB`.  The 486's one stop is its own: it hung twice
 in eight hours of Wolfenstein on 2026-10-19.
+
+### Windows: every episode's end (`winend.py`, 2026-10-23)
+
+No test playing the game reaches an episode's end; the logic that leads
+there is the demos' and the gate's, frame for frame the same as DOS.  So a
+TEST build (never shipped: `ENDTEST` is defined by `build.py spend`,
+`sp1end` and `spsodend` alone) wins the floor `TEDLEVEL` starts on after 70
+frames, and id's own end runs from there -- each seen on .37, each program
+leaving by itself with nothing in its crash log:
+
+| | |
+|---|---|
+| E1-E6, WOLF3DW (floors 8, 18 ... 58) | "YOU WIN!" with the time and ratios over the status bar; the episode's own end text, every page (E3's Hitler, E6's "YOU DID IT!"); the high scores |
+| the shareware, WOLF3DW1 (floor 8) | the same, and its "MORE WOLFENSTEIN" page -- call Apogee; the scores by level, as id's shareware has them |
+| Spear, SPEARW (the Angel's floor, 20) | "YOU WIN!", the Allied forces' text, the president's picture, BJ through the wall, the Spear of Destiny, id and FormGen, the beta testers, the flames, THE END; the high scores |
 
 ## Not covered
 

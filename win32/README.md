@@ -152,9 +152,12 @@ game: id's own single-player Wolfenstein, menus and all -- `WOLF3DW.EXE`.
 11. **Every build, every machine, 2026-10-22**: `../tests/README.md` -- all
    the builds deployed and read back, DOS and Windows local play, network
    games on all three servers (MPSRV on each DOS machine in turn).
-12. Next: a DOS 1.11 release with the Win32 game beside it; listening to the
-   OPL2 against a real AdLib; the Victory and end text, which a test cannot
-   reach without playing to the end of an episode.
+12. **Released, 2026-10-22**: v1.11, with `W3DWIN.ZIP`.
+13. **Every episode's end, 2026-10-23**: the victory, the end text and the
+   high scores of E1-E6 and the shareware's episode, and Spear's ending,
+   all as id's -- through TEST builds that win the floor at once
+   (`build.py spend`, `sp1end`, `spsodend`; `../tests/winend.py`).  Next:
+   listening to the OPL2 against an AdLib.
 
 ## How it is built
 

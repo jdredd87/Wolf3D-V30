@@ -5,3 +5,6 @@ test/*.EXE
 test/*.obj
 test/*.lnk
 *.err
+W3DWEND.EXE
+W3D1END.EXE
+SPEAREND.EXE

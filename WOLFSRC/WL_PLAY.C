@@ -1616,6 +1616,10 @@ void PlayLoop (void)
 		#endif
 
 		gamestate.TimeCount+=tics;
+#ifdef ENDTEST
+		if (frameon > 70)			// TEST builds only (win32/build.py's spend,
+			playstate = ex_victorious;	// sp1end, spsodend): the floor won, to see
+#endif								// the episode's end -- StevenC & Claude
 
 		SD_Poll ();
 		UpdateSoundLoc();	// JAB

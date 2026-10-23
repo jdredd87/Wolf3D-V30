@@ -52,6 +52,12 @@ TARGETS = {
     # GOODTIMES already -- id's release without the manual's quiz)
     "sp1": ("WOLF3DW1.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP", "UPLOAD"]),
     "spsod": ("SPEARW.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP", "SPEAR"]),
+    # TEST builds, never shipped and not built by default (2026-10-23): the
+    # floor started (TEDLEVEL n) is won after 70 frames (WL_PLAY.C's ENDTEST),
+    # to see each episode's end -- the victory, the end text, Spear's ending
+    "spend": ("W3DWEND.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP", "ENDTEST"]),
+    "sp1end": ("W3D1END.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP", "UPLOAD", "ENDTEST"]),
+    "spsodend": ("SPEAREND.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP", "SPEAR", "ENDTEST"]),
 }
 
 
