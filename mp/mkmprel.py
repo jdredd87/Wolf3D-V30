@@ -35,7 +35,10 @@ OUT = os.path.join(ROOT, "release", "W3DMP.ZIP")
 PYSERVER = ["mp/mpserver.py", "mp/mpproto.py", "mp/mpconsole.py", "mp/mpctl.py", "gendemo.py"]
 # the Free Pascal servers: (built file, its name in the zip, the sources it is built from)
 FPSERVERS = [("mp/build/mpsrv.exe", "SERVER/MPSRV.EXE", ["mp/mpsrv.pas", "mp/srvnet.pas"]),
-             ("mp/build/win/mpsrvw.exe", "SERVER/MPSRVW.EXE", ["mp/mpsrv.pas", "mp/winnet.pas"])]
+             ("mp/build/win/mpsrvw.exe", "SERVER/MPSRVW.EXE", ["mp/mpsrv.pas", "mp/winnet.pas"]),
+             # MKBJ, the players as BJ from the player's own data (2026-10-23):
+             # python mp/mkmkbj.py
+             ("mp/build/mkbj/mkbj.exe", "MKBJ.EXE", ["mp/mkbj.pas"])]
 
 
 def crlf(path):
@@ -89,11 +92,12 @@ def main():
     servers = []
     for built, name, sources in FPSERVERS:
         p = os.path.join(ROOT, built)
+        how = "python mp/mkmkbj.py" if "mkbj" in built else \
+            "python mp/mkmpsrv.py" + (" --windows" if "win" in built else "")
         if not os.path.exists(p):
-            sys.exit("no %s: python mp/mkmpsrv.py%s" % (built, " --windows" if "win" in built else ""))
+            sys.exit("no %s: %s" % (built, how))
         if os.path.getmtime(p) < max(os.path.getmtime(os.path.join(ROOT, s)) for s in sources):
-            sys.exit("%s is older than its source: python mp/mkmpsrv.py%s"
-                     % (built, " --windows" if "win" in built else ""))
+            sys.exit("%s is older than its source: %s" % (built, how))
         servers.append((name, open(p, "rb").read()))
     menu = w3dbuild.build_launcher()
     exe = open(EXE, "rb").read()

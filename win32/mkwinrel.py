@@ -7,8 +7,8 @@
 
 The zip holds what a player puts beside their own game data -- WOLF3DW.EXE
 (the registered *.WL6), WOLF3DW1.EXE (the shareware's *.WL1), SPEARW.EXE
-(Spear of Destiny's *.SOD), WOLF3DMW.EXE (the network game alone), and
-MPSRVW.EXE, the Windows server -- with release/WINDOWS.TXT and id's
+(Spear of Destiny's *.SOD), WOLF3DMW.EXE (the network game alone),
+MPSRVW.EXE, the Windows server, and MKBJW.EXE, the players as BJ -- with release/WINDOWS.TXT and id's
 LICENSE.DOC.  None of id's game data.  It refuses a program older than the
 source it is built from, and prints every one's size and CRC-32 so a
 release can be matched to what the machines run.
@@ -24,6 +24,7 @@ ROOT = os.path.dirname(WIN)
 OUT = os.path.join(ROOT, "release", "W3DWIN.ZIP")
 GAMES = ["WOLF3DW.EXE", "WOLF3DW1.EXE", "SPEARW.EXE", "WOLF3DMW.EXE"]
 SERVER = os.path.join(ROOT, "mp", "build", "win", "mpsrvw.exe")
+MKBJ = os.path.join(ROOT, "mp", "build", "mkbjw", "mkbjw.exe")       # python mp/mkmkbj.py (2026-10-23)
 
 
 def crlf(path):
@@ -53,6 +54,9 @@ def main():
     if not os.path.exists(SERVER) or os.path.getmtime(SERVER) < os.path.getmtime(os.path.join(ROOT, "mp", "mpsrv.pas")):
         sys.exit("mp/build/win/mpsrvw.exe is missing or older than mp/mpsrv.pas: python mp/mkmpsrv.py --windows")
     files.append(("MPSRVW.EXE", open(SERVER, "rb").read()))
+    if not os.path.exists(MKBJ) or os.path.getmtime(MKBJ) < os.path.getmtime(os.path.join(ROOT, "mp", "mkbj.pas")):
+        sys.exit("mp/build/mkbjw/mkbjw.exe is missing or older than mp/mkbj.pas: python mp/mkmkbj.py")
+    files.append(("MKBJW.EXE", open(MKBJ, "rb").read()))
     with zipfile.ZipFile(OUT, "w", zipfile.ZIP_DEFLATED) as z:
         for name, data in files:
             z.writestr(name, data)

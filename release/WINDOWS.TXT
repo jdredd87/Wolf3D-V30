@@ -12,6 +12,7 @@ game data is included: you need your own.
     SPEARW.EXE     the same, on Spear of Destiny (*.SOD)
     WOLF3DMW.EXE   the network game alone (*.WL6): it starts straight into it
     MPSRVW.EXE     a server for the network game, on Windows
+    MKBJW.EXE      the players as BJ in the network game (below)
 
 Put the program beside the game's data and double-click it.  It plays id's
 game exactly: id's four demos play frame for frame as they do on DOS -- the
@@ -48,6 +49,12 @@ or Spear (SPEARW and SPEARM) -- the server refuses a mixture.
     WOLF3DW NET 192.168.1.10 NAME STEVE      join that server
     WOLF3DMW                                 the last server, or find one
     MPSRVW --players 4 --mode dm --noenemies --itemrespawn 30
+
+THE PLAYERS AS BJ: run MKBJW.EXE once in the folder with your data (or
+MKBJW folder).  It writes VSWAPM.WL6 (.WL1, .SOD) beside your VSWAP from
+your own copy: BJ, in four colours, in place of the SS each player is
+otherwise drawn as.  The game uses it when it is there; a machine with it
+plays with one without.  W3DMP.ZIP's MKBJ.EXE does the same on DOS.
 
 Windows Firewall asks the first time a program opens the network: allow it
 for your network's type.  WOLF3DW.LOG (WOLF3DMW.LOG) beside the program

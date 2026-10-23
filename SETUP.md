@@ -101,6 +101,12 @@ the file is current.
    what the game doesn't need (a CD-ROM driver is a common one).
 3. Everyone must run **the same `WOLF3DM.EXE`** (or the same
    `WOLF3DM1.EXE`): the server refuses a machine with a different build.
+4. **The players as BJ** (optional): run `MKBJ` once in the game's
+   folder (`MKBJW` on Windows).  It writes `VSWAPM.WL6` -- or `.WL1`,
+   `.SOD` -- from your own `VSWAP`: the other players drawn as BJ in four
+   colours instead of as the SS.  It is a second VSWAP (0.9 MB for the
+   shareware, 1.7 MB for the registered game or Spear) on the disk; a
+   machine with it plays with one without.
 
 ## Step 3: the server -- pick one
 
