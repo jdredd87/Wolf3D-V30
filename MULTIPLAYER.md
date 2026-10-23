@@ -2322,9 +2322,11 @@ three games after it (4 of 4).  So the emulated Sound Blaster on the PicoMEM 2 -
 the card that is also the V30's WiFi, on the 06-16 firmware -- is where it
 is, as its AdLib was on the 09-27 firmware (DOS Bridge's
 `projects/alstress/PICOMEM-REPORT.md`).  Why Spear and not Wolfenstein is
-not settled; Spear leaves the V30 15 KB less memory (its code and tables:
-`SPEARM`'s image is 374,271 bytes, `WOLF3DM`'s 359,215), so more of what it
-plays is fetched while it plays.  **The V30 plays networked Spear with
+not settled -- and **it is not memory**: Spear leaves the V30 15 KB less
+(`SPEARM`'s image is 374,271 bytes, `WOLF3DM`'s 359,215), so on 2026-10-23
+the V30's `CONFIG.SYS` gave it 14,848 bytes more (`BUFFERS=10`, XMSSC high,
+a smaller environment: 584,128 bytes for a program), and the first long
+game froze it all the same, at step 5,921.  The file was put back.  **The V30 plays networked Spear with
 `NOSB`** (SETUP.md); the music and the AdLib's effects stay.  The 486 also
 stopped once (step 831 of 8,000), as it had twice in eight hours of
 Wolfenstein on 2026-10-19: its own fault, not Spear's.
