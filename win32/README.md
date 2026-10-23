@@ -156,8 +156,10 @@ game: id's own single-player Wolfenstein, menus and all -- `WOLF3DW.EXE`.
 13. **Every episode's end, 2026-10-23**: the victory, the end text and the
    high scores of E1-E6 and the shareware's episode, and Spear's ending,
    all as id's -- through TEST builds that win the floor at once
-   (`build.py spend`, `sp1end`, `spsodend`; `../tests/winend.py`).  Next:
-   listening to the OPL2 against an AdLib.
+   (`build.py spend`, `sp1end`, `spsodend`; `../tests/winend.py`).
+14. **The OPL2 against the V30's AdLib, 2026-10-23**: the title music
+   recorded on both -- the same tempo (0.1%), the same notes (-0.6 cents),
+   each octave within 2 dB up to 4 kHz (`../tests/README.md`).
 
 ## How it is built
 

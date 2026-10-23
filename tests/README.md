@@ -21,6 +21,7 @@ drive the machines through DOS Bridge (`C:\dosbridgeDEV`) and the Windows PC
 | `demosum.py [wl6\|wl1\|sod]` | id's demos, the DOS game against the Windows one, the whole game state every 50 frames (WL_MP.C's `DemoSum`): a DOS test build with `DEMOSUM` on the 486, `TIMEDEMO DEMOSUM` on .37 -- every line the same |
 | `putvariants.py`, `varsmoke.py` | the Windows shareware (WOLF3DW1) and Spear (SPEARW) onto .37 with their data, and a first look at each |
 | `winend.py [e1..e6\|wl1\|sod]` | each episode's end on Windows: a TEST build (`build.py spend`, `sp1end`, `spsodend`: `WL_PLAY.C`'s `ENDTEST` wins the floor after 70 frames) started on the last floor by `TEDLEVEL`, then id's victory, end text and high scores (Spear: its end screens) -- a picture of each, to the exit |
+| `oplrec.py`, `opltempo.py`, `oplpitch.py` | the title music recorded off the V30 (its PicoMEM's AdLib, through the capture card) and out of WOLF3DW (`W3DRAW`), then its tempo in each, and the pitch, the notes over time and the sound octave by octave against each other (`oplpitch.py` needs NumPy) |
 | `doskeys.py [BOX...]` | the DOS game played by keys: `K9INJ.COM` (`k9inj.asm`) puts them through the keyboard controller (D2h) on the 486 and P3; a new game, a save, a load, a second save, Quit -- proved by the files.  `k9.py` makes its scripts |
 
 The builds come from three trees: this one (the network game and the
@@ -211,6 +212,22 @@ leaving by itself with nothing in its crash log:
 | E1-E6, WOLF3DW (floors 8, 18 ... 58) | "YOU WIN!" with the time and ratios over the status bar; the episode's own end text, every page (E3's Hitler, E6's "YOU DID IT!"); the high scores |
 | the shareware, WOLF3DW1 (floor 8) | the same, and its "MORE WOLFENSTEIN" page -- call Apogee; the scores by level, as id's shareware has them |
 | Spear, SPEARW (the Angel's floor, 20) | "YOU WIN!", the Allied forces' text, the president's picture, BJ through the wall, the Spear of Destiny, id and FormGen, the beta testers, the flames, THE END; the high scores |
+
+### Windows' OPL2 against the V30's AdLib (`oplrec.py` ...; 2026-10-23)
+
+NAZI_NOR, the title music, off the V30 (`WOLF3DV NOWAIT`; its PicoMEM 2's
+emulated AdLib, through the capture card) and out of WOLF3DW (`W3DRAW`, the
+mix as a file):
+
+| | |
+|---|---|
+| tempo | its phrase 3.475 s on the V30, 3.478 s on Windows: the same, within 0.1% |
+| pitch | 11 of the 12 strongest notes within 3.5 cents, -0.6 cents on average |
+| the notes over time | each 100 ms's pitch classes 0.968 alike (0.609 with the two 1.7 s apart) |
+| the sound, octave by octave | within about 2 dB up to 4 kHz; above it Windows 3-5 dB brighter -- the V30's is through the card's audio out and the capture card's in |
+
+The V30's AdLib is the PicoMEM's emulation, not a Yamaha chip -- the 486's
+and P3's real OPL3s have no capture card -- and this is one song.
 
 ## Not covered
 
