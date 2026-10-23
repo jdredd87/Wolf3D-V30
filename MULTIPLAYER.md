@@ -2310,7 +2310,9 @@ No game had a desync.  `tests/README.md` has every run, the failures too.
 ### The V30's freezes: its PicoMEM's Sound Blaster
 
 With its Sound Blaster on, the V30 froze in 4 Spear games of 7 -- at steps
-3,454, 4,594, 7,570 and 3,359, every game of 20,000 steps among them; it
+3,454, 4,594, 7,570 and 3,359, every game of 20,000 steps among them (7 of
+10 counting the three after, below: 15 KB more memory, and `NOEMS NOXMS`
+twice); it
 played through a 4,000-step co-op from the start, a 4,000-step deathmatch
 and an 8,000-step co-op -- while the 486, P3 and SPEARW played on in
 agreement.  The hang watchdog's build (`huntbot.py --spear`)

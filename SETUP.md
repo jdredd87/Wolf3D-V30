@@ -161,9 +161,10 @@ Spear on floor 18 takes everyone to the Angel.  In deathmatch the floors go
 round 1 to 18 again.
 
 **Spear on a PicoMEM's Sound Blaster: add `NOSB`.**  An 8 MHz V30 whose
-PicoMEM card plays the Sound Blaster froze in Spear network games -- in 4 of
-7 with it on, every one of 20,000 steps among them -- and in none of 4 with
-`NOSB` (no digitized sounds; the music and AdLib effects stay).  The card's WiFi is on the same chip; a
+PicoMEM card plays the Sound Blaster froze in Spear network games -- in 7 of
+10 with it on, every one of 20,000 steps among them, whatever memory the game
+had -- and in none of 4 with `NOSB` (no digitized sounds; the music and AdLib
+effects stay).  The card's WiFi is on the same chip; a
 machine with a real sound card needs nothing.  `MULTIPLAYER.md` has the
 tests.
 
