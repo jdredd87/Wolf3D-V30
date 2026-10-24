@@ -102,6 +102,7 @@ def player(box):
     d, exe = (r"C:\WL1", "WOLF3DM1") if KIND in ("wl1", "wl1w") else \
         (r"C:\SPEAR", "SPEARM") if SPEAR else (r"C:\WOLF3D", "WOLF3DM")
     exe = os.environ.get("NETEXE", exe)     # a test build in its place (mp/huntbot.py's)
+    exe = os.environ.get(box.upper() + "EXE", exe)   # one machine's own: DX486EXE=WOLF3DT
     return job(box, ["CD " + d, "%s NET %s NAME X%s NETBOT SHOW%s" % (exe, HOST, box[-2:].upper(), EXTRA[box])],
                box, STEPS // 15 + 1800)
 

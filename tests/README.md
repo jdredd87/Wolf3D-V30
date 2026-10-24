@@ -230,6 +230,24 @@ mix as a file):
 The V30's AdLib is the PicoMEM's emulation, not a Yamaha chip -- the 486's
 and P3's real OPL3s have no capture card -- and this is one song.
 
+### The four-hour soak before 1.11.1 (`soak.py`, 2026-10-23/24)
+
+The release candidates on the 486, P3 and the V30 and the Windows games on
+.37, one game after another, a machine joining late in each and the next
+floor every 10 minutes:
+
+| | game | steps | |
+|---|---|---|---|
+| 1 | Python, registered, co-op with enemies | 63,000 | the 486 hung 48 min in (its old fault: as on 2026-10-19); P3, the V30 and WOLF3DW to the end |
+| 2 | MPSRVW, deathmatch, WOLF3DW in widescreen | 63,000 | **PASS**, all four |
+| 3 | MPSRV on P3, deathmatch and a bot | 31,500 | **PASS** |
+| 4 | Python, the shareware, with WOLF3DW1 | 31,500 | **PASS**, all four |
+| 5 | Python, Spear, co-op (the V30 with `NOSB`) | 63,000 | **PASS**, all four |
+
+No desync in any game; every machine's report "0 bad" (no damaged
+datagram); MPSRV and MPSRVW 0 frames for a wrong checksum.  Published as
+v1.11.1.
+
 ## Not covered
 
 - The V30 played by keys: an XT keyboard has no controller to take D2h.
