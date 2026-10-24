@@ -152,8 +152,12 @@ if KIND == "sodfloors":             # Spear's floor order, through the console
         note("picture floor-%d.png; %s" % (n, ctl("status").split("\n")[0][:150]))
 k = 0
 t = time.time()
-while srv.poll() is None and time.time() - t < STEPS // 15 + 900:
-    time.sleep(30)
+nextat = time.time() + int(os.environ.get("NETNEXT", "0") or 0)   # NETNEXT=SECS: the console's
+while srv.poll() is None and time.time() - t < STEPS // 15 + 900:  # nextfloor every SECS (co-op
+    time.sleep(30)                                                 # has no time limit; 2026-10-23)
+    if os.environ.get("NETNEXT") and time.time() >= nextat:
+        nextat = time.time() + int(os.environ["NETNEXT"])
+        note("console: nextfloor -> " + ctl("nextfloor").split("\n")[0][:100])
     if WINEXE and KIND == "soak" and int(time.time() - t) // 300 > k:
         k = int(time.time() - t) // 300            # a picture of .37 every 5 minutes
         subprocess.run(AGENT + ["shot", os.path.join(OUT, "w37-%02d.png" % k)], capture_output=True)
