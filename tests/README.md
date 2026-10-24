@@ -248,6 +248,26 @@ No desync in any game; every machine's report "0 bad" (no damaged
 datagram); MPSRV and MPSRVW 0 frames for a wrong checksum.  Published as
 v1.11.1.
 
+### Late joins, and a snapshot from another EXE (`latejoin.py`, 2026-10-24)
+
+`latejoin.py RUNS [STEPS] [KIND]` runs netmatrix's game again and again
+with the V30 joining late, photographs its screen when it is BAD and
+cycles its plug (`LJTAG=` labels the runs, `V30EXTRA` and `<BOX>EXE` as in
+netmatrix).  After the V30 froze joining both of the 486's three-hour
+watchdog hunts:
+
+| the 486 on | the V30 | joins | the V30 froze |
+|---|---|---|---|
+| 1.11.1 | 1.11.1, the Sound Blaster on | 12 | 0 |
+| 1.11.1 | 1.11.1, `NOSB` | 12 | 0 |
+| `WOLF3DT` (huntbot) | 1.11.1 | 5 | **4** |
+| `WOLF3DT`, built with the fix | the fix | 6 | 0 (the snapshot refused 5 times) |
+| the fix | the fix | 3 | 0 (the snapshot taken) |
+
+The snapshot is the game's memory, and another EXE with the same build
+number laid it over a game whose arrays were elsewhere.  MULTIPLAYER.md,
+"A snapshot from another EXE".
+
 ## Not covered
 
 - The V30 played by keys: an XT keyboard has no controller to take D2h.

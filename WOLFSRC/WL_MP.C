@@ -3674,9 +3674,49 @@ typedef struct
 	long		step;					// the step it is the end of
 	int			episode,mapon,difficulty;	// the floor to set up first
 	int			regs;					// SNAPREGS: the same build
+	unsigned	layout;					// SnapLayout (): the same EXE (2026-10-24)
 } snaphead_t;
 
-static char far snapmagic[] = "WMS2";	// 2 (2026-10-19): the map's planes too
+static char far snapmagic[] = "WMS3";	// 2 (2026-10-19): the map's planes too;
+										// 3 (2026-10-24): the layout
+// The snapshot is this EXE's memory, pointers and all -- and "every machine
+// runs the same EXE" is not so: the build number is the release's network
+// play, and two EXEs share one (1.11 and 1.11.1; a test build beside the
+// real one).  Another EXE has its arrays and its states elsewhere, and a
+// joiner that laid its snapshot over the game followed the pointers into
+// nothing: the V30 froze on the first step after it, 3 joins of 4 with the
+// 486 on mp/huntbot.py's build and none of 24 without (2026-10-24, StevenC
+// & Claude).  So the header says where everything is -- each region's place
+// from where the EXE was loaded, and its length; the states an actor's
+// pointer names, the first and the last of WL_ACT2's (any build), the
+// player's and the network's; spotvis, a static's -- and a joiner with
+// another layout plays from the first step, as before snapshots
+extern	statetype	s_rocket,s_ssdie4;
+
+static unsigned SnapMix (unsigned h, void far *p, unsigned n)
+{
+#ifndef W32
+	h = h*33 + (FP_SEG(p) - _psp);
+	h = h*33 + FP_OFF(p);
+#endif								// (Win32 never gives one nor takes one: its
+	return h*33 + n;				// own SNAPTEST, the lengths)
+}
+
+static unsigned SnapLayout (void)
+{
+	unsigned	h = SNAPREGS;
+	int			i;
+
+	for (i=0;i<SNAPREGS;i++)
+		h = SnapMix (h,snapregs[i].p,snapregs[i].n);
+	h = SnapMix (h,&s_rocket,sizeof(statetype));
+	h = SnapMix (h,&s_ssdie4,sizeof(statetype));
+	h = SnapMix (h,&s_player,sizeof(statetype));
+	h = SnapMix (h,&s_attack,sizeof(statetype));
+	h = SnapMix (h,&s_mpplayer,sizeof(statetype));
+	h = SnapMix (h,&s_mpgone,sizeof(statetype));
+	return SnapMix (h,spotvis,sizeof(spotvis));
+}
 
 // The map's two planes, after the table: a pushwall that moves writes both
 // (WL_ACT1.C: the area under it, its "pushable" mark gone), and the game
@@ -3699,6 +3739,7 @@ static int SnapWrite (int h, long step)
 	hd.mapon = gamestate.mapon;
 	hd.difficulty = gamestate.difficulty;
 	hd.regs = SNAPREGS;
+	hd.layout = SnapLayout ();
 	if (!CA_FarWrite (h,(byte far *)&hd,sizeof(hd)))
 		return 0;
 	for (i=0;i<SNAPREGS;i++)
@@ -3710,11 +3751,12 @@ static int SnapWrite (int h, long step)
 	return 1;
 }
 
-// its header: true if it is a snapshot of this build's
+// its header: true if it is a snapshot of this EXE's
 static int SnapHead (int h, snaphead_t *hd)
 {
 	return CA_FarRead (h,(byte far *)hd,sizeof(*hd))
-		&& !_fmemcmp ((char far *)hd->magic,snapmagic,4) && hd->regs == SNAPREGS;
+		&& !_fmemcmp ((char far *)hd->magic,snapmagic,4) && hd->regs == SNAPREGS
+		&& hd->layout == SnapLayout ();
 }
 
 // ... and the rest, laid over a floor set up as the header says

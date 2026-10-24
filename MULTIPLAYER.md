@@ -2437,3 +2437,58 @@ plane, each pixel written once and four map masks a line instead of one a
 column -- on the idea that the V30's 8-bit bus made the VGA writes the cost.
 It ran **slower**, 13.0 against 13.8: the V30's time there is its own work,
 not the card's, and that pass had more of it a column.
+
+## A snapshot from another EXE -- 2026-10-24
+
+The hours of testing after 1.11.1 found one more fault, and it was not the
+V30's card.  In the 486's three-hour watchdog hunt (`DX486EXE=WOLF3DT
+NETNEXT=600 netmatrix.py python 189000`) the 486 never hung -- 189,000
+steps, 0 bad, no desync, and again in a second three hours -- but **the V30
+froze as it joined, both times**: the status bar drawn and the view black,
+or 545 steps behind and "not gaining", then silent.  The second time it ran
+the test build too, and its tick painter (`mp/huntbot.py`) had stopped at
+`611F:192D`, wait code 00, the tick not moving: interrupts off, and a CS
+past the end of the code, out in the far heap.
+
+24 late joins without the test build (`tests/latejoin.py`: 12 with the
+V30's Sound Blaster on, 12 with `NOSB`) were all clean.  With the 486 on
+the test build: **the V30 froze in 4 joins of 5** -- loaded, "catching up
+from step 1975", then nothing at the first step after the snapshot.  The
+one that lived played 2 hours 50 minutes to the end of the hunt.
+
+The snapshot (above, 2026-10-17) is the game's memory copied whole --
+objects, `actorat`, the states an actor points at -- and its design said
+"every machine runs the same EXE, so every array below is at the same
+address on each of them".  That is not so: the build number is the
+release's network play, `MPVER`, and two EXEs share it -- the test build
+beside the real one, **and 1.11 beside 1.11.1** (both 01110006).  The
+test build is 13 KB bigger and has its data elsewhere; the V30's 1.11.1
+laid the 486's snapshot over its game and followed the pointers into
+nothing.  The server asks "the player least behind" for it, which can be
+any DOS machine in the game, so one machine on another EXE is enough.
+Windows was never at risk: it gives no snapshot and takes none.
+
+So the header says where everything is (`SnapLayout`, `WL_MP.C`): every
+region's place from where the EXE was loaded (`_psp`) and its length, and
+the states an actor's pointer names -- the first and last of `WL_ACT2.C`'s
+in every build (`s_rocket`, `s_ssdie4`), the player's, the network's --
+and `spotvis`, a static's.  A snapshot from another layout is refused and
+the joiner plays from step 0, as before snapshots.  The magic is "WMS3", so
+1.11 and 1.11.1 refuse its snapshots and it refuses theirs.  47,529 bytes,
+2 more, still under MPSRV's 48 KB.
+
+| the V30 joining late, the 486 on | the V30 froze | the snapshot |
+|---|---|---|
+| 1.11.1, everyone (24 joins) | 0 | taken |
+| the test build, the V30 on 1.11.1 (5) | **4** | taken: another EXE's |
+| the test build, everyone else on the fix (6) | 0 | refused 5 times ("catching up from step 0 of 2296"); P3's taken once -- the same EXE |
+| the fix, everyone (3) | 0 | taken ("catching up from step 1978") |
+
+And `REPLAY PUSH0.MPR FAST SNAPTEST 300` on P3: saved and loaded, the
+planes changed by the pushwall, every sum to step 600 DOS 1.11's.  The
+Windows builds' gate: 8 of 8.
+
+The second hunt's first freeze had the V30 on the same test build as the
+486; its server log was written over before anyone looked.  P3 was on
+1.11.1 in it, and could have been the one asked -- the likely answer, not
+a shown one.
