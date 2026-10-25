@@ -2,6 +2,7 @@
 
     python mp/mpfake.py [--server 127.0.0.1] [--port 31992] [--fps 5,30,70,17]
                         [--load 4,1,1,2] [--loss 0.05] [--corrupt K] [--out FILE]
+                        [--times FILE]
 
 One fake player per --fps entry, all in this process, each on its own
 socket, speaking MULTIPLAYER.md's protocol: HELLO, wait for WELCOME and
@@ -30,6 +31,7 @@ import mpproto as P                 # noqa: E402
 import gendemo                      # noqa: E402
 
 BUILD = 0x12345678
+TIMES = None                        # --times FILE: each STEPS packet's arrival, slot, first step
 
 
 def arg(name, default):
@@ -83,6 +85,8 @@ class Fake:
             first, players, rows = P.un_steps(b)
             evs = {s: (e, a) for s, e, a in P.un_steps_events(b)}
             self.stats["steps_pkts"] += 1
+            if TIMES is not None:       # --times: when each came (2026-10-24)
+                TIMES.append((time.perf_counter(), self.slot, first))
             for i, r in enumerate(rows):
                 n = first + i
                 if n in self.rows:
@@ -133,6 +137,8 @@ def main():
     load = [float(x) for x in arg("--load", ",".join("1" for _ in fps)).split(",")]
     loss = float(arg("--loss", "0"))
     corrupt = int(arg("--corrupt", "-1"))
+    global TIMES
+    TIMES = [] if "--times" in sys.argv else None
     fakes = [Fake(k, fps[k], load[k], loss, server, corrupt) for k in range(len(fps))]
     deadline = time.perf_counter() + float(arg("--timeout", "300"))
     while not all(f.done for f in fakes) and time.perf_counter() < deadline:
@@ -167,6 +173,8 @@ def main():
             ok = False
         print("FAKE%d events: %s%s" % (f.k + 1, mine_ev or "none",
                                        "" if mine_ev == ref_ev else "  -- NOT FAKE1's"))
+    if TIMES is not None:
+        open(arg("--times", ""), "w").write("".join("%.6f %s %d\n" % t for t in TIMES))
     if "--out" in sys.argv:
         open(arg("--out", ""), "w").write("\n".join(r.hex() for r in ref) + "\n")
     print("%d common steps; %s" % (common, "all agree" if ok else "DISAGREE"))

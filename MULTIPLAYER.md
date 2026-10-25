@@ -1741,8 +1741,28 @@ mangled STEPS for real rows and desynced (the V30 against the 486, 14
 times from 250 steps after a floor change).  MPSRV now pauses 1 ms after
 each frame (`--txgap`, microseconds, calibrated against its clock at
 start) and drops any datagram whose UDP checksum is wrong, as a PC would.
-Whether the driver or the card's firmware is to blame is still open: the
-original driver, `C:\DRIVERS\PM2000.ORG`, would answer it.
+Whether the driver or the card's firmware is to blame was open then; the
+original driver answered it on 2026-10-18: **the card** -- it loses the
+same frames (the DOS Bridge's `docs/network.md`, "Frames sent back to back
+through a PicoMEM's WiFi").
+
+**On the V30's card, 2026-10-24** (StevenC & Claude): the same three fake
+players against MPSRV on the V30, its PicoMEM 2 on the older firmware --
+
+| MPSRV on, `--txgap 0` | card, firmware | to the player served 2nd | its frame after the 1st's, as it came in here |
+|---|---|---|---|
+| the V30 (8 MHz), 3 runs | PicoMEM 2, BIOS 2026-06-16 | 1,497, 1,497, 1,500 of 1,500 | 3.7 ms (median; 10% under 0.85) |
+| P3 (Pentium II) | PicoMEM 2, BIOS 2026-09-27 | **40** of 1,500 | -- (the 3rd's: 1.0 ms after the 1st's) |
+
+-- the V30 lost nothing, but it never sends that fast: its 8 MHz takes
+milliseconds to build a frame, so its frames are outside the window the
+fault needs, and the firmware's part stays open.  P3's card on BIOS
+2026-06-16 would settle it (a flash, at the card).  P3's run said more of
+what it is: the 3rd player was sent **2,047** STEPS packets for 1,500
+steps, the 2nd's frames turning up at the 3rd's port -- the frame lost is
+replaced by the one after it, sent twice, as if the card sent from a
+buffer the next frame had already filled.  `mp/mpfake.py --times FILE`
+writes each STEPS packet's arrival.
 
 **Proven on P3** after that: three fake players with 3% loss -- every
 row and every event the same for all three; and a real game, the 486 and
