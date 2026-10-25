@@ -1780,8 +1780,9 @@ hunting test build, watched through MPSRV's console over the network every
 second), 0 desyncs, neither machine out once, no power cycle**; 1,043,389
 frames sent and none refused, 0 datagrams with a wrong checksum, 7 frames
 dropped coming in (the receive ring full for a moment; the protocol sends
-them again).  The same eight hours the Python server gives.  Still to do:
-every machine taking a turn as the server.
+them again).  The same eight hours the Python server gives.  Every
+machine took its turn as the server the next day, for two hours each on
+2026-10-24 (below).
 
 **And on Windows: `MPSRVW.EXE` -- 2026-10-15/16** (StevenC: "can we make a
 windows wolf3d server now too? with freepascal?").  The same `mp/mpsrv.pas`
@@ -1820,6 +1821,15 @@ and a kick of the late machine.
 | V30 | 486, P3 late, 2 bots | 7,603 | 0 | 518 |
 | V30, flushing its log once a second, 16-slot ring | 486, P3 late, 2 bots | 7,597 | 0 | 205 |
 | this PC (`MPSRVW`) | 486, P3, V30 late, 1 bot | 9,185 | 0 | 0 |
+| **486, two hours** (1.11.2, 2026-10-24) | P3, WOLF3DMW, V30 late, 1 bot | 126,000 | 0 | 1,505 of 584,467 |
+| **V30, two hours** (1.11.2, 2026-10-24) | 486, WOLF3DMW, P3 late, 1 bot | 126,000 | 0 | 14,360 of 536,063 |
+
+The two hours each (`netmatrix.py mpsrv@dx486` and `mpsrv@v30`, 126,000
+steps, `NETNEXT=600`: a new floor every 10 minutes, the late machine
+taking its snapshot through the server): every player to the end, 0 bad
+datagrams, no desync.  The V30 still drops 2.7% of what comes in for want
+of room, and the protocol sends it again; the 486 had one frame with a
+wrong checksum in two hours, dropped.
 
 The 8 MHz V30 serves a full game at the step rate -- 17.5 a second -- and
 catches a fast machine up out of XMS that is itself served from its
