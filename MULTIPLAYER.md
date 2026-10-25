@@ -2425,6 +2425,18 @@ replaced `stage/WOLF3DT.MAP` -- so who called it is not known.  `huntbot.py`
 now keeps every build's EXE and map in `stage/huntbot-builds/`, dated: the
 next report is traced against its own build.
 
+**Hunted for twelve hours since, and not seen** (StevenC & Claude): the
+486 on the watchdog build in the Python server's co-op game, P3, the V30
+(its Sound Blaster on) and WOLF3DW playing, a new floor every 10 minutes --
+three hours twice on 2026-10-24 and six hours overnight into 10-25 on
+1.11.2's (`stage/tests/hunt-20261025`): 189,000, 189,000 and 378,000
+steps, every machine to the end, 0 bad, no desync, no HANG report.  It
+hung once in the four-hour soak before 1.11.1, on the release build; so it
+is rare -- once in about twenty hours of the 486 playing -- and still
+waiting for the watchdog to see it.  The six hours also showed the
+snapshot fix at work: the V30 refused the watchdog build's snapshot,
+replayed from step 0 and was in 53 s later.
+
 ## Where the V30's time goes in the network game -- 2026-10-23
 
 The single-player game's V30 tuning was closed on 2026-10-02 with every
