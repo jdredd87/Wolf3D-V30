@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D FOR 8086-CLASS PCs  --  optimized by StevenC and Claude
 =======================================================================
-Version 1.11, 2026-10-22
+Version 1.11.3, 2026-10-26
 
 id Software's Wolfenstein 3-D, rebuilt from id's released source to run
 as fast as an 8086, 8088, V20 or V30 PC allows -- and faster on anything
@@ -16,8 +16,9 @@ better -- for the registered game, the free shareware episode (since
                   WOLF3DV refuses: every 80186 instruction written the
                   8086 way, id's picture exactly, the same switches.  On
                   anything newer, use WOLF3DV.
-    WOLF3DB.EXE   the faster version: far walls drawn in less detail,
-                  near walls and every edge exact.  The BSP switch draws
+    WOLF3DB.EXE   the faster version: far walls and far sprites drawn
+                  in less detail, near ones and every edge exact.  The
+                  BSP switch draws
                   the walls with a BSP tree, the way the SNES port did.
     WOLF3DO.EXE   id Software's own code -- id's renderer and game code,
                   rebuilt for the V20/V30 and 186 (id's WOLF3D.EXE needs
@@ -84,6 +85,12 @@ blocks!" hours into a game.  Neither changes a picture or a demo.  And WINDOWS:
 W3DWIN.ZIP, on the same releases page, has the whole game for Windows 95
 and later -- registered, shareware and Spear -- built from this source.
 
+New in 1.11.3: WOLF3DB draws far sprites in less detail too -- an enemy or
+an object under 64 pixels high in column pairs, as LOWSPRITES does, every
+nearer one with every column: 1.7% faster over the attract loop on an 8 MHz
+V30, 2.5% on demo 0.  NOLOD turns it off with the far walls; LOWSPRITES
+still pairs every sprite.  Every other program is 1.11's, byte for byte.
+
 The network game -- up to four players, deathmatch, team deathmatch,
 capture the flag or co-op, a server for DOS, Windows or Python -- is its
 own download, W3DMP.ZIP, on the
@@ -148,7 +155,7 @@ PLAYING
                  240 x 120).  Full detail, just smaller
 
   WOLF3DB only:
-    NOLOD        far walls at full detail: id's picture
+    NOLOD        far walls and sprites at full detail: id's picture
     BSP          the walls found by a BSP tree instead of id's rays
                  (slower on an 8086: the rays are cheaper on Wolf's
                  grid maps; the wall switches above use the rays)
