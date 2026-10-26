@@ -6,9 +6,11 @@
   + and - pick the game's window size, id's own Change View sizes 4-19
   (VIEW n; "the game's own" passes nothing, so CONFIG.WL6 decides).
   T picks the version when WOLF3DB.EXE is here too: WOLF3DV (id's picture
-  exactly) or WOLF3DB, the faster one -- far walls in less detail -- whose
-  own switches are BSP (K: the BSP tree finds the walls, not id's rays) and
-  NOLOD (L: far walls at full detail).  Every other switch works with either.
+  exactly) or WOLF3DB, the faster one -- far walls and sprites in less
+  detail -- whose own switches are BSP (K: the BSP tree finds the walls,
+  not id's rays) and
+  NOLOD (L: far walls and sprites at full detail).  Every other switch
+  works with either.
   On a plain Intel 8086 or 8088 (no 80186 instructions) the version is
   WOLF3D8, when WOLF3D8.EXE is here: WOLF3DV and WOLF3DB refuse such a CPU.
   With the shareware's *.WL1 files and no *.WL6 it is WOLF3D1 (WOLF3D18 on
@@ -73,7 +75,7 @@ var
   Force8086: Boolean;         { /8086 }
   UseBsp: Boolean;            { T: run it rather than WOLF3DV }
   BspTree: Boolean;           { K: BSP, the tree rather than id's rays }
-  BspNoLod: Boolean;          { L: NOLOD, far walls at full detail }
+  BspNoLod: Boolean;          { L: NOLOD, far walls and sprites at full detail }
   Timeout: Integer;           { seconds; 0 = never }
   TimeoutPlays: Boolean;
   HaveNet: Boolean;           { WOLF3DM.EXE is here }
@@ -438,13 +440,13 @@ begin
     Write('    T  version:   ');
     if UseBsp then
     begin
-      WriteLn('WOLF3DB, far walls in less detail (faster)');
+      WriteLn('WOLF3DB, far walls and sprites in less detail (faster)');
       Write('    K  [');
       if BspTree then Write('X') else Write(' ');
       WriteLn('] ', Pad('BSP', 10), '  the BSP tree finds the walls (slower here)');
       Write('    L  [');
       if BspNoLod then Write('X') else Write(' ');
-      WriteLn('] ', Pad('NOLOD', 10), '  far walls at full detail');
+      WriteLn('] ', Pad('NOLOD', 10), '  far walls and sprites at full detail');
     end
     else
       WriteLn('WOLF3DV, id''s rays: id''s picture exactly');
