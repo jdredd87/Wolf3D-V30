@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D FOR 8086-CLASS PCs  --  optimized by StevenC and Claude
 =======================================================================
-Version 1.11, 2026-10-22
+Version 1.11.3, 2026-10-26
 
 id Software's Wolfenstein 3-D, rebuilt from id's released source to run
 as fast as an 8086, 8088, V20 or V30 PC allows -- and faster on anything
@@ -84,6 +84,12 @@ the memory manager's 700 block handles, until "MM_ClearBlock: No purgable
 blocks!" hours into a game.  Neither changes a picture or a demo.  And WINDOWS:
 W3DWIN.ZIP, on the same releases page, has the whole game for Windows 95
 and later -- registered, shareware and Spear -- built from this source.
+
+New in 1.11.3: WOLF3DB draws far sprites in less detail too -- an enemy or
+an object under 64 pixels high in column pairs, as LOWSPRITES does, every
+nearer one with every column: 1.7% faster over the attract loop on an 8 MHz
+V30, 2.5% on demo 0.  NOLOD turns it off with the far walls; LOWSPRITES
+still pairs every sprite.  Every other program is 1.11's, byte for byte.
 
 The network game -- up to four players, deathmatch, team deathmatch,
 capture the flag or co-op, a server for DOS, Windows or Python -- is its
