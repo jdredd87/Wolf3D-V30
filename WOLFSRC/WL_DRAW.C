@@ -41,7 +41,8 @@ long 	frameon;
 
 unsigned	wallheight[MAXVIEWWIDTH];
 int			pixstep = 1;				// NEC V30 build (step 79): 2 with LOWWALLS
-int			lowsprites;					// NEC V30 build (step 80): 1 with LOWSPRITES
+int			lowsprites = 2;				// NEC V30 build (step 80): 1 with LOWSPRITES; the
+										// BSP version's 2 (2026-10-26): far sprites only
 int			flatwalls;					// NEC V30 build (step 81): 1 with FLATWALLS, 2 once set up
 int			solidart;					// NEC V30 build (step 84): 1 with FLATART
 memptr		flatbuf;					// NEC V30 build (step 84): FLATWALLS' buffer, locked

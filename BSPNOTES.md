@@ -481,3 +481,40 @@ old 225000.  V30, demo 0: the default (rays, far walls coarser) 5.25 fps,
 7.28 with the map up; BSP 4.47 and 6.90.  StevenC & Claude.
 
 **Measured 2026-10-05, every mode on both machines: [BENCHMARKS.md](BENCHMARKS.md).**  V30, demo 0: the default 5.26 fps in play, NOLOD 4.89, BSP 4.45, BSP NOLOD 4.27, the map up 7.24; the whole attract loop 6.15 (the exact version 5.57).  The 486: 105.5 over the loop.  StevenC & Claude.
+
+## Far sprites in column pairs (2026-10-26)
+
+The planned milestones were done by 2026-10-05, and they settled that on a
+grid id's rays find walls more cheaply than the tree; what the BSP version
+took from them was the level of detail.  So the next thing was detail for
+sprites, as the walls have it.  The ceiling first, on the V30 (demo 0,
+`TIMEDEMO QUICK PRELOAD`, three rounds each): WOLF3DB 689-690 ticks in play,
+with `LOWSPRITES` 669-672 -- 2.7%.
+
+`LOWSPRITES` (step 80) draws every sprite's one-pixel columns in pairs.  A
+sprite under 64 pixels high is drawn by the pixel walk (step 55), every
+nearer one by the column loops; so the BSP version's default is
+`LOWSPRITES` for the pixel walk only -- far sprites in column pairs, near
+ones with every column.  `lowsprites = 2` (`WL_DRAW.C`), and the first call
+to `ScaleShape` patches only the pixel walk's two jumps and two masks to
+`LOWSPRITES`' own stubs (`@@fcfar`, `WL_SC_A.ASM`, after the stubs so
+nothing hot moves).  `LOWSPRITES` is all of them still; `NOLOD` none.
+
+| V30 | demo 0, play (3 rounds) | whole loop, play |
+|---|---|---|
+| WOLF3DB 1.11 | 689, 689, 690 ticks | 15,999 ticks, 6.12 fps |
+| far sprites in pairs | 672, 673, 672 | **15,732, 6.22 fps** |
+
+2.5% on demo 0 and 1.7% over the loop -- nearly all of `LOWSPRITES`' gain,
+the near sprites untouched.  The page misses were the same in both runs.
+`WALK NOLOD`'s whole loop is still id's picture (view 0707C966, screen
+F2A10CEB); the capture card's stills of far guards and lamps show no gaps.
+
+Every generated demo on the 486, the default against 1.11's WOLF3DB
+(`TIMEDEMO CRC GEN n`, G0-G288): **all 289 played to the end in the same
+number of frames** -- play unchanged, nothing hung -- and 237 pictures
+differ, 52 do not (no far sprite drawn by the pixel walk).  On the way:
+the 486 had lost `G90.DEM`, and a `GEN` demo that is not there stops either
+build with id's "MM_SetLock: Block not found!" -- put back, it played.
+
+StevenC & Claude.

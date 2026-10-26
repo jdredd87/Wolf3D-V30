@@ -1266,7 +1266,9 @@ void InitGame (void)
 		{								// NOLOD: far walls at full detail too
 			void BSPNoLod (void);		// (WL_DR_A.ASM; by default a wall under
 			BSPNoLod ();				// 64 pixels is textured every second
-		}								// column, under 32 every fourth)
+			if (lowsprites == 2)		// column, under 32 every fourth) -- and
+				lowsprites = 0;			// far sprites (2026-10-26), unless LOWSPRITES
+		}
 	}
 	if (flatwalls)						// NEC V30 build (step 84): the columns and the
 	{									// colours' averages, before the page cache
@@ -1728,7 +1730,7 @@ void TimeDemo (void)
 	printf (s,pmbigsize,pmruns);
 	}
 	printf ("view %d x %d%s%s%s%s%s%s%s\n",viewwidth,viewheight,pixstep > 1 ? ", LOWWALLS" : "",
-		lowsprites ? ", LOWSPRITES" : "",flatwalls ? ", FLATWALLS" : "",lowvert ? ", LOWVERT" : "",solidart ? ", FLATART" : "",
+		lowsprites == 1 ? ", LOWSPRITES" : "",flatwalls ? ", FLATWALLS" : "",lowvert ? ", LOWVERT" : "",solidart ? ", FLATART" : "",
 		tdmaxframes ? ", QUICK (demo 0, 200 frames)" : "",
 		tdpreload ? ", PRELOAD" : "");
 	tf = tt = tl = 0;

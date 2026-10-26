@@ -1146,6 +1146,10 @@ PUBLIC	ScaleShape
 	sub	ax,OFFSET @@once+3
 	mov	[BYTE cs:@@once],0E9h
 	mov	[WORD cs:@@once+1],ax
+	cmp	[lowsprites],2			; the BSP version's default: far sprites only
+	jne	@@fcall
+	jmp	@@fcfar
+@@fcall:
 	cmp	[pixstep],1
 	jne	@@fcwalls
 	mov	ax,OFFSET @@pl2
@@ -1339,6 +1343,38 @@ PUBLIC	ScaleShape
 	and	bx,3
 	mov	al,[onemask+bx]		; one pixel
 	jmp	@@r1draw
+
+;
+; The BSP version (2026-10-26), StevenC & Claude: far sprites in column pairs
+; -- the first call's patches for LOWSPRITES, the pixel walk's only.  A
+; sprite under 64 pixels high is drawn by the pixel walk (step 55), every
+; nearer one by the column loops, so the near ones keep every column.
+; Here, after the stubs, so nothing above moves.
+;
+@@fcfar:
+	mov	ax,OFFSET @@pl2
+	cmp	[pixstep],1
+	je	@@fcf1
+	mov	ax,OFFSET @@pl2w		; LOWWALLS too: the lean stubs
+@@fcf1:
+	sub	ax,OFFSET @@plj+3
+	mov	[BYTE cs:@@plj],0E9h
+	mov	[WORD cs:@@plj+1],ax
+	mov	ax,OFFSET @@pr2
+	cmp	[pixstep],1
+	je	@@fcf2
+	mov	ax,OFFSET @@pr2w
+@@fcf2:
+	sub	ax,OFFSET @@prj+3
+	mov	[BYTE cs:@@prj],0E9h
+	mov	[WORD cs:@@prj+1],ax
+	mov	ax,9F8Dh				; LEA BX,[BX+0]: the stub set AL
+	mov	[WORD cs:@@plm],ax
+	mov	[WORD cs:@@prm],ax
+	xor	ax,ax
+	mov	[WORD cs:@@plm+2],ax
+	mov	[WORD cs:@@prm+2],ax
+	jmp	@@onceback
 ENDP
 
 
