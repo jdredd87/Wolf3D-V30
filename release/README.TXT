@@ -16,8 +16,9 @@ better -- for the registered game, the free shareware episode (since
                   WOLF3DV refuses: every 80186 instruction written the
                   8086 way, id's picture exactly, the same switches.  On
                   anything newer, use WOLF3DV.
-    WOLF3DB.EXE   the faster version: far walls drawn in less detail,
-                  near walls and every edge exact.  The BSP switch draws
+    WOLF3DB.EXE   the faster version: far walls and far sprites drawn
+                  in less detail, near ones and every edge exact.  The
+                  BSP switch draws
                   the walls with a BSP tree, the way the SNES port did.
     WOLF3DO.EXE   id Software's own code -- id's renderer and game code,
                   rebuilt for the V20/V30 and 186 (id's WOLF3D.EXE needs
@@ -148,7 +149,7 @@ PLAYING
                  240 x 120).  Full detail, just smaller
 
   WOLF3DB only:
-    NOLOD        far walls at full detail: id's picture
+    NOLOD        far walls and sprites at full detail: id's picture
     BSP          the walls found by a BSP tree instead of id's rays
                  (slower on an 8086: the rays are cheaper on Wolf's
                  grid maps; the wall switches above use the rays)
