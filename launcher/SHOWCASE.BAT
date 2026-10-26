@@ -24,7 +24,7 @@ ECHO   The showcase: a version with every one of its modes, 180 seconds
 ECHO   of the game's demos each -- after id Software's original code, if wanted.
 ECHO.
 ECHO     V  WOLF3DV -- id's picture exactly, and every detail option
-ECHO     B  WOLF3DB -- far walls in less detail, and every detail option
+ECHO     B  WOLF3DB -- far walls and sprites coarser, every detail option
 ECHO     T  WOLF3DB with the BSP tree finding the walls
 ECHO     A  all three, one after another
 ECHO     C  choose: any of the three, and id's code, asked one by one

@@ -7,7 +7,8 @@ recording -- StevenC & Claude, 2026.
 On the DOS machine, in C:\\WOLF3D, type SHOWCASE and pick a version:
 
     V  WOLF3DV -- id's picture exactly, and every detail option
-    B  WOLF3DB -- id's rays with far walls in less detail, and every option
+    B  WOLF3DB -- id's rays with far walls and sprites in less detail, and
+                  every option
     T  WOLF3DB with the BSP tree finding the walls
     A  all three, one after another (the long video)
     C  choose: Y or N for each of V, B, T and id's code -- any combination,
@@ -95,18 +96,19 @@ REELS = {
              "faster code: assembly for the 8086, every step checked against id's."])]
           + DETAIL, MAP),
     "B": ("WOLF3DB", "WOLF3DB -- the faster version",
-          [("", "FAR WALLS IN LESS DETAIL  (the default)",
+          [("", "FAR WALLS AND SPRITES COARSER  (the default)",
             ["id's rays, but a wall under 64 pixels tall is textured every second",
-             "column, under 32 every fourth.  Near walls and every edge exact."]),
+             "column, under 32 every fourth, and a sprite under 64 is drawn in",
+             "column pairs.  Near ones and every edge exact."]),
            ("NOLOD", "NOLOD  (full detail)",
-            ["The same program with every wall at full detail: id's picture."])]
+            ["Every wall and sprite at full detail: id's picture."])]
           + DETAIL, MAP),
     "T": ("WOLF3DB", "WOLF3DB with the BSP tree",
           [("BSP", "THE BSP TREE  (as the SNES version)",
             ["The walls found by a tree built from the level, front to back,",
-             "instead of id's rays.  Far walls in less detail."]),
+             "instead of id's rays.  Far walls and sprites in less detail."]),
            ("BSP NOLOD", "THE BSP TREE, full detail",
-            ["The tree, every wall at full detail."]),
+            ["The tree, every wall and sprite at full detail."]),
            ("BSP LOWSPRITES", "BSP and LOWSPRITES",
             ["The tree, enemies and items in two-pixel columns."]),
            ("BSP LOWVERT", "BSP and LOWVERT",
@@ -206,7 +208,7 @@ def menu():
         "ECHO   of the game's demos each -- after id Software's original code, if wanted.",
         "ECHO.",
         "ECHO     V  WOLF3DV -- id's picture exactly, and every detail option",
-        "ECHO     B  WOLF3DB -- far walls in less detail, and every detail option",
+        "ECHO     B  WOLF3DB -- far walls and sprites coarser, every detail option",
         "ECHO     T  WOLF3DB with the BSP tree finding the walls",
         "ECHO     A  all three, one after another",
         "ECHO     C  choose: any of the three, and id's code, asked one by one",

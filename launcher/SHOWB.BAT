@@ -8,10 +8,11 @@ IF EXIST SHOWCPU.TXT TYPE SHOWCPU.TXT
 ECHO   ------------------------------------------------------------------
 ECHO   WOLF3DB -- the faster version
 ECHO.
-ECHO   1 of 12:  FAR WALLS IN LESS DETAIL  (the default)
+ECHO   1 of 12:  FAR WALLS AND SPRITES COARSER  (the default)
 ECHO.
 ECHO   id's rays, but a wall under 64 pixels tall is textured every second
-ECHO   column, under 32 every fourth.  Near walls and every edge exact.
+ECHO   column, under 32 every fourth, and a sprite under 64 is drawn in
+ECHO   column pairs.  Near ones and every edge exact.
 ECHO.
 ECHO   180 seconds of the game's own demos, then the speed: the faster
 ECHO   the mode, the further it gets.
@@ -24,10 +25,10 @@ IF ERRORLEVEL 2 GOTO QUIT
 WOLF3DB TIMEDEMO PRELOAD SECS 180 > SHOWRES.TXT
 CLS
 ECHO.
-ECHO   WOLF3DB -- the faster version -- FAR WALLS IN LESS DETAIL  (the default)
+ECHO   WOLF3DB -- the faster version -- FAR WALLS AND SPRITES COARSER  (the default)
 ECHO.
 TYPE SHOWRES.TXT
-ECHO WOLF3DB: FAR WALLS IN LESS DETAIL  (the default) >> SHOWSUM.TXT
+ECHO WOLF3DB: FAR WALLS AND SPRITES COARSER  (the default) >> SHOWSUM.TXT
 FIND "secs " < SHOWRES.TXT >> SHOWSUM.TXT
 ECHO.
 ECHO   Next in 10 seconds  (S goes on now, Q quits)
@@ -42,7 +43,7 @@ ECHO   WOLF3DB -- the faster version
 ECHO.
 ECHO   2 of 12:  NOLOD  (full detail)
 ECHO.
-ECHO   The same program with every wall at full detail: id's picture.
+ECHO   Every wall and sprite at full detail: id's picture.
 ECHO.
 ECHO   180 seconds of the game's own demos, then the speed: the faster
 ECHO   the mode, the further it gets.
