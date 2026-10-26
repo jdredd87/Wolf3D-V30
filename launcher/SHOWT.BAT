@@ -11,7 +11,7 @@ ECHO.
 ECHO   1 of 5:  THE BSP TREE  (as the SNES version)
 ECHO.
 ECHO   The walls found by a tree built from the level, front to back,
-ECHO   instead of id's rays.  Far walls in less detail.
+ECHO   instead of id's rays.  Far walls and sprites in less detail.
 ECHO.
 ECHO   180 seconds of the game's own demos, then the speed: the faster
 ECHO   the mode, the further it gets.
@@ -42,7 +42,7 @@ ECHO   WOLF3DB with the BSP tree
 ECHO.
 ECHO   2 of 5:  THE BSP TREE, full detail
 ECHO.
-ECHO   The tree, every wall at full detail.
+ECHO   The tree, every wall and sprite at full detail.
 ECHO.
 ECHO   180 seconds of the game's own demos, then the speed: the faster
 ECHO   the mode, the further it gets.

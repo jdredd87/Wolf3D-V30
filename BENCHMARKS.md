@@ -76,3 +76,17 @@ WOLF3DO is id's own renderer and game code (id's WOLF3D.EXE needs a 286), built
 by `refsrc.py` with the same timing harness: the speed everything here is
 measured against.  It draws the same picture as WOLF3DV, checksum for checksum.
 
+## Far sprites in column pairs (2026-10-26)
+
+WOLF3DB's default since: sprites under 64 pixels high in column pairs (the
+pixel walk's `LOWSPRITES`), every nearer one at full detail; `NOLOD` all at
+full detail.  The V30, the whole attract loop (`TIMEDEMO`), the same day
+and the same page misses for both:
+
+| | frames | 1.11's WOLF3DB fps in play | far sprites in pairs |
+|---|---|---|---|
+| demo 0 | 691 | 5.50 | 5.63 |
+| demo 1 | 1899 | 6.17 | 6.25 |
+| demo 2 | 1140 | 6.00 | 6.11 |
+| demo 3 | 1656 | 6.45 | 6.56 |
+| **all four** | 5386 | 6.12 | **6.22** |
