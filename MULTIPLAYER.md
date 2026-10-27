@@ -2437,6 +2437,21 @@ waiting for the watchdog to see it.  The six hours also showed the
 snapshot fix at work: the V30 refused the watchdog build's snapshot,
 replayed from step 0 and was in 53 s later.
 
+**And then it hung, on the release build -- 2026-10-27** (StevenC & Claude):
+eight hours of 1.11.2 everywhere, the Python server's co-op game with
+enemies, a new floor every 10 minutes, the V30 late with its Sound Blaster
+on (`stage/tests/run8h-20261027`).  The 486 went silent at step 169,536,
+2 h 42 min in: 55 W, no poll in ten minutes, `PHASE.LOG` inside the game --
+the hang, with no watchdog to see where.  Its plug cycled, it rejoined the
+same game on the watchdog build (it refused P3's snapshot and replayed
+185,000 steps from step 0 in 233 s, everyone waiting) and played the last
+5 h 3 min clean.  P3, the V30 and WOLF3DW: 504,000 steps each, 0 bad, no
+desync; the server 0 desyncs, nothing dropped.  So: twice in about 30
+hours of the 486 playing, both times on the release build, none in about
+17 hours on the watchdog build.  Whether the watchdog build's difference
+-- its INT 8 painter, its other timing -- keeps it away is not known yet;
+the next long runs put the watchdog build on the 486 from the start.
+
 ## Where the V30's time goes in the network game -- 2026-10-23
 
 The single-player game's V30 tuning was closed on 2026-10-02 with every
