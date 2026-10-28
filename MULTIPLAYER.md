@@ -2549,3 +2549,36 @@ The second hunt's first freeze had the V30 on the same test build as the
 486; its server log was written over before anyone looked.  P3 was on
 1.11.1 in it, and could have been the one asked -- the likely answer, not
 a shown one.
+
+## Twenty-four hours with the 486 on AdLib only, and a Windows desync -- 2026-10-28
+
+StevenC: the 486 never locked up when the network game began, and the one
+big change to it since was the real Sound Blaster (the AWE64, 2026-10-06:
+`BLASTER=A220 I2 D1`, IRQ 9 to Wolf3D as IRQ 2).  Nearly all its network
+play has been with it.  So `tests/series.py` (StevenC & Claude): 8-hour
+games one after another, the Python server's co-op game with a new floor
+every 10 minutes, the release builds everywhere, the V30 late with its own
+Sound Blaster on -- and the 486 with `NOSB`, so the game never touches its
+Sound Blaster (music and effects through the AWE64's OPL3).  A machine that
+drops is power-cycled and put back into the same game.
+
+| game (2026-10-27/28) | 486 (`NOSB`) | P3 | V30 | WOLF3DW |
+|---|---|---|---|---|
+| 1 | 504,000 steps, clean | clean | clean | dropped 6 h in -- StevenC had closed his Remote Desktop session to that PC |
+| 2 | clean | clean | clean | clean |
+| 3 | clean | clean | clean | **desynced** at step 340,700 |
+
+**No hang in 24 hours on `NOSB`**, against two in about 30 hours on the
+Sound Blaster.  Not proof -- the hang has come about once in 15 hours --
+but the first evidence pointing anywhere.  One thing to look at on the
+machine: P3's PicoMEM 2 had to have its IRQ 5 and DMA jumpers pulled before
+the onboard Yamaha's Sound Blaster would work, as a card wired to a line
+holds it with its own sound off; a PicoMEM 1 in the 486 jumpered to DMA 1,
+IRQ 9 or IRQ 2 would share the AWE64's lines.
+
+**The Windows desync** is a different fault: at step 340,700, 110 s after
+a floor change, WOLF3DW's checksum differed from the three DOS machines',
+which agreed with each other (8EFEF71D against B3E3A542), and it never came
+back.  The game was not recorded, so it cannot be replayed; the series now
+records every game (`NETRECORD=1`: `runN.MPR`), so that the next one can be
+replayed on DOS and on `W3DREP` side by side to the step that differs.
