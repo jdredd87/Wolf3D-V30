@@ -2582,3 +2582,12 @@ which agreed with each other (8EFEF71D against B3E3A542), and it never came
 back.  The game was not recorded, so it cannot be replayed; the series now
 records every game (`NETRECORD=1`: `runN.MPR`), so that the next one can be
 replayed on DOS and on `W3DREP` side by side to the step that differs.
+
+**And 24 hours more, recorded -- 2026-10-28/29**: the same three games
+again, each one's recording kept (`stage/tests/series-nosb-rec-20261028`,
+6.4 MB a game): all four machines 504,000 steps in each, 0 bad, no desync,
+the server 0 desyncs.  **48 hours on `NOSB` and no hang**, against two in
+about 30 on the Sound Blaster; and WOLF3DW did not desync again in 40
+hours.  Next, to make it a proof: the PicoMEM 1's jumpers looked at, and
+the Sound Blaster back on for as long -- if the hang comes back with it,
+it is the Sound Blaster's (or the card's lines), not the 486.
