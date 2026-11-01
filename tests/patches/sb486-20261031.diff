@@ -1,0 +1,199 @@
+diff --git a/WOLFSRC/ID_SD.C b/WOLFSRC/ID_SD.C
+index 8e88d0a..980d2b1 100644
+--- a/WOLFSRC/ID_SD.C
++++ b/WOLFSRC/ID_SD.C
+@@ -52,8 +52,24 @@ boolean	MPHear (void);		// WL_MP.C: multiplayer, near enough to hear?
+ // Macros for SoundBlaster stuff
+ #define	sbOut(n,b)	outportb((n) + sbLocation,b)
+ #define	sbIn(n)		inportb((n) + sbLocation)
+-#define	sbWriteDelay()	while (sbIn(sbWriteStat) & 0x80);
+-#define	sbReadDelay()	while (sbIn(sbDataAvail) & 0x80);
++// NEC V30 build (2026-10-29, StevenC & Claude): every wait on the DSP
++// bounded.  id's waited for the DSP's status bit with no limit, and most of
++// the waits are made with interrupts off (SDL_SBStopSample, SDL_SBPlaySeg,
++// SDL_SBPlaySample): a DSP that stayed busy froze the whole machine -- no
++// tick, no network, no report.  The 486 hung with its Sound Blaster on
++// (twice in 30 hours, once 47 minutes in) and never with NOSB (48 hours).
++// 16384 reads is milliseconds on any bus; past it the command is sent
++// anyway, and sbstuck counts it (the network game's report says so).
++unsigned	sbstuck;
++
++// TEST (2026-10-31, StevenC & Claude): a pause before and after each burst of
++// DSP commands, as the watchdog build's HangMark makes there by repainting
++// its code through the VGA's ports -- the 486 froze with its Sound Blaster
++// on, on the release build, every few hours, and never on the watchdog build
++// (33 hours).  32 reads of the VGA's input status: tens of microseconds.
++#define	sbPause()	{int sbp_; for (sbp_ = 0;sbp_ < 32;sbp_++) inportb(0x3da);}
++#define	sbWriteDelay()	{unsigned sbw_ = 16384; while ((sbIn(sbWriteStat) & 0x80) && --sbw_); if (!sbw_) sbstuck++;}
++#define	sbReadDelay()	{unsigned sbw_ = 16384; while ((sbIn(sbDataAvail) & 0x80) && --sbw_); if (!sbw_) sbstuck++;}
+ 
+ // Macros for AdLib stuff
+ #define	selreg(n)	outportb(alFMAddr,n)
+@@ -278,8 +294,10 @@ asm	cli
+ 	{
+ 		sbSamplePlaying = false;
+ 
++		sbPause();
+ 		sbWriteDelay();
+ 		sbOut(sbWriteCmd,0xd0);	// Turn off DSP DMA
++		sbPause();
+ 
+ 		is = inportb(0x21);	// Restore interrupt mask bit
+ 		if (sbOldIntMask & (1 << sbInterrupt))
+@@ -333,12 +351,14 @@ asm	cli
+ 	outportb(0x0a,sbDMA);						// Re-enable DMA on channel sbDMA
+ 
+ 	// Start playing the thing
++	sbPause();
+ 	sbWriteDelay();
+ 	sbOut(sbWriteCmd,0x14);
+ 	sbWriteDelay();
+ 	sbOut(sbWriteData,(byte)uselen);
+ 	sbWriteDelay();
+ 	sbOut(sbWriteData,(byte)(uselen >> 8));
++	sbPause();
+ asm	popf
+ 
+ 	return(uselen + 1);
+@@ -409,8 +429,10 @@ asm	cli
+ 	sbOldIntMask = inportb(0x21);
+ 	outportb(0x21,sbOldIntMask & ~(1 << sbInterrupt));
+ 
++	sbPause();
+ 	sbWriteDelay();
+ 	sbOut(sbWriteCmd,0xd4);						// Make sure DSP DMA is enabled
++	sbPause();
+ 
+ 	sbSamplePlaying = true;
+ 
+diff --git a/WOLFSRC/WL_MAIN.C b/WOLFSRC/WL_MAIN.C
+index 169e0ed..65c8dd6 100644
+--- a/WOLFSRC/WL_MAIN.C
++++ b/WOLFSRC/WL_MAIN.C
+@@ -182,6 +182,17 @@ void ReadConfig(void)
+ 	SD_SetMusicMode (sm);
+ 	SD_SetSoundMode (sd);
+ 	SD_SetDigiDevice (sds);
++	{									// TEST (2026-10-31): NODIGI -- the Sound Blaster
++		int		i;						// found and set up, but no digitized sound: is
++										// it the card, or its DMA and IRQ in play?
++		for (i = 1;i < _argc;i++)		// (compared in code: no string in DGROUP)
++		{
++			char far *a = _argv[i];
++			if ((a[0]|32)=='n' && (a[1]|32)=='o' && (a[2]|32)=='d' && (a[3]|32)=='i'
++				&& (a[4]|32)=='g' && (a[5]|32)=='i' && !a[6])
++				SD_SetDigiDevice (sds_Off);
++		}
++	}
+ 
+ }
+ 
+diff --git a/WOLFSRC/WL_MP.C b/WOLFSRC/WL_MP.C
+index 48356b7..f38d636 100644
+--- a/WOLFSRC/WL_MP.C
++++ b/WOLFSRC/WL_MP.C
+@@ -4812,6 +4812,26 @@ void MPNetGame (void)
+ 			mpdesync < 0 ? (char far *)ok : (char far *)bad);			// checksum, dropped)
+ 		_fstrcpy ((char far *)s,f);
+ 		printf (s,mpframes,mpticks/70,r10/10,r10%10,viewsize,pixstep);
++#ifndef W32
++		{							// 2026-10-29: the DSP waits that ran out
++			extern unsigned sbstuck;	// (ID_SD.C) -- each one a freeze before
++			static char far fs[] = "net: the Sound Blaster's DSP stayed busy %u times\n";
++			if (sbstuck)
++			{
++				_fstrcpy ((char far *)s,fs);
++				printf (s,sbstuck);
++			}
++		}
++		{							// 2026-10-31: WL_NET.C's NetQuiet
++			extern long far netquiets, far netquietmax;
++			static char far fq[] = "net: nothing came in for 20 s or more %ld times, the longest %ld s\n";
++			if (netquiets)
++			{
++				_fstrcpy ((char far *)s,fq);
++				printf (s,netquiets,netquietmax);
++			}
++		}
++#endif
+ 		{
+ 			static char far e[] = "net: ended by %Fs\n";
+ 			static char far e0[] = "the game", far e1[] = "this player (ESC, Y)",
+diff --git a/WOLFSRC/WL_NET.C b/WOLFSRC/WL_NET.C
+index c69de91..86cc47f 100644
+--- a/WOLFSRC/WL_NET.C
++++ b/WOLFSRC/WL_NET.C
+@@ -963,6 +963,65 @@ static void HangStop (void)
+ }
+ #endif
+ 
++//
++// The network gone quiet (2026-10-31, StevenC & Claude): the 486's PicoMEM 1
++// stops receiving now and then with its Sound Blaster playing -- the game
++// goes on and sends, nothing comes in -- and past the server's 60 s it was
++// dropped, every few hours.  The watchdog build, which writes a line to
++// HANG.LOG on the card's own disk 20 s into such a spell, was never dropped
++// in 33 hours: its spells ended.  So after 20 s with nothing in, a line goes
++// to NETQUIET.LOG, and another when the network is back; the report counts
++// them.
++//
++long	far	netquiets = 0, far netquietmax = 0;	// spells, and the longest (s)
++
++static void QuietLog (char far *fmt, long a, long b)
++{
++	static char far name[] = "NETQUIET.LOG";
++	char		nm[14], f[48], s[64];
++	int			h;
++	unsigned	w;
++
++	_fstrcpy ((char far *)nm,name);
++	_fstrcpy ((char far *)f,fmt);
++	sprintf (s,f,a,b);
++	if (_dos_open (nm,O_WRONLY,&h) && _dos_creat (nm,0,&h))
++		return;
++	lseek (h,0L,SEEK_END);
++	_dos_write (h,(char far *)s,strlen (s),&w);
++	_dos_close (h);
++}
++
++static void NetQuiet (void)
++{
++	static char far fq[] = "quiet: nothing in for 20 s (%ld in, %ld out)\r\n",
++		far fb[] = "back after %ld s (%ld in)\r\n";
++	static long far lastn = -1, far lastt;
++	static int far quiet;
++	long	t = *(long far *)MK_FP (0x40,0x6c);	// the BIOS tick, 18.2 a second
++
++	if (netrecvn != lastn)
++	{
++		if (quiet)
++		{
++			long s = (t - lastt) * 10 / 182;
++
++			if (s > netquietmax)
++				netquietmax = s;
++			QuietLog (fb,s,netrecvn);
++			quiet = 0;
++		}
++		lastn = netrecvn;
++		lastt = t;
++	}
++	else if (netrecvn && !quiet && t - lastt >= 20 * 182L / 10)
++	{
++		quiet = 1;
++		netquiets++;
++		QuietLog (fq,netrecvn,netsentn);
++	}
++}
++
+ //
+ // Every frame that has come in: ARP answered and learnt, and each UDP
+ // datagram from the server to our port handed to take()
+@@ -976,6 +1035,7 @@ void NetPump (void (*take) (byte far *data, unsigned len))
+ #ifdef HANGDUMP
+ 	HangPump ();
+ #endif
++	NetQuiet ();
+ 	while (ns->tail != ns->head)
+ 	{
+ 		netframes++;

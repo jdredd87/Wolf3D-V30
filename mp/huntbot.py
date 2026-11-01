@@ -13,6 +13,8 @@ some players with 8 bullets and some with 50.
     python mp/huntbot.py --spear    the same for Spear of Destiny: w3dbuild.py's
                                     buildsod, back as stage/SPEART.EXE and .MAP
                                     (2026-10-22)
+    python mp/huntbot.py --botasis  the watchdog and the checks, but NETBOT as the
+                                    release plays (2026-10-30, StevenC & Claude)
     python mp/huntbot.py --memonly  only the "mainmem N" line, the bot as it is:
                                     what the real build leaves the 486 (run it
                                     with TIMEDEMO MGEN 0 LOCAL 1), 60-odd bytes
@@ -1238,6 +1240,8 @@ def main():
         raise SystemExit("stage/*.keep exist: a run did not finish -- check them, then --restore")
     quit = sys.argv[sys.argv.index("--quit")+1] if "--quit" in sys.argv else "5"
     mp = [(a, b.replace("QUITAT", quit)) for a, b in MP] + CHECK
+    if "--botasis" in sys.argv:         # the watchdog with the release's NETBOT (2026-10-30):
+        mp = CHECK                      # the 486 hung on the release, never on this bot
     if "--leak" in sys.argv:
         mp += LEAK
     trace = "--trace" in sys.argv

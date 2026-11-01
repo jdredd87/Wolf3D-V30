@@ -63,6 +63,13 @@ def rejoin(box, n):
             return
         time.sleep(10)
     exe = os.environ.get(box.upper() + "EXE", os.environ.get("NETEXE", GAME[1]))
+    if exe.upper() in ("WOLF3DT", "WOLF3DQ"):   # what it wrote on its own disk: the
+        r = subprocess.run(D + ["exec", "TYPE %s\\HANG.LOG" % GAME[0], "DEL %s\\HANG.LOG" % GAME[0],
+                                "TYPE %s\\NETQUIET.LOG" % GAME[0], "DEL %s\\NETQUIET.LOG" % GAME[0],
+                                "--box", box, "--timeout", "120"], capture_output=True, text=True, env=ENV)
+        p = os.path.join(OUT, "run%d-%s-hang-%s.txt" % (n, box, time.strftime("%H%M%S")))
+        open(p, "w", encoding="utf-8").write(r.stdout + r.stderr)
+        say("   %s's HANG.LOG and NETQUIET.LOG (%d lines) kept: %s" % (box, len(r.stdout.splitlines()), os.path.basename(p)))
     cmd = "%s NET %s NAME %s NETBOT SHOW%s%s" % (exe, "192.168.50.46" if KIND not in ("mpsrv", "sodsrv") else "",
                                                NAME[box], EXTRA[box], os.environ.get(box.upper() + "EXTRA", ""))
     say("   %s back after %.0f s; joining again: %s" % (box, time.time() - t, cmd))
@@ -80,7 +87,7 @@ def watch(n, stop):
         except OSError:
             lines = []
         for l in lines[seen:]:
-            m = re.search(r"\]\s+P\d (X86|XP3|X30) was not heard from for 60 s.*had step (\d+)", l)
+            m = re.search(r"\]\s+P\d (X86|XP3|X30) (?:was not heard from for 60 s|left \().*had step (\w+)", l)
             if m:
                 box = {v: k for k, v in NAME.items()}[m.group(1)]
                 say("run %d: %s dropped -- %s" % (n, box, l.split("] ", 1)[-1][:120]))

@@ -2591,3 +2591,45 @@ about 30 on the Sound Blaster; and WOLF3DW did not desync again in 40
 hours.  Next, to make it a proof: the PicoMEM 1's jumpers looked at, and
 the Sound Blaster back on for as long -- if the hang comes back with it,
 it is the Sound Blaster's (or the card's lines), not the 486.
+
+## The 486's freezes: digitized sound through its Sound Blaster -- 2026-11-01
+
+Six more series of 8-hour games (`tests/series.py`, every game recorded),
+each changing one thing on the 486 and nothing on the others (StevenC &
+Claude).  On 2026-10-29 StevenC pulled two of the 486's PicoMEM 1 jumpers
+(the IRQ 5 one stays): the AWE64 then proved its lines alone
+(`SNDPROBE /T /I:9 /D:1`: "IRQ 9 and DMA 1 proven").
+
+| the 486, its Sound Blaster on | hours | dropped |
+|---|---|---|
+| the release, jumpers in (before) | ~30 | 2 |
+| the release, jumpers out | 8 | 1 (47 min in) |
+| every DSP wait bounded and counted | 4.7 | 2 -- and no wait ever ran out in 8 h |
+| a `NETQUIET.LOG` line 20 s into any deaf spell | 6.3 | 1 -- **no line**: it froze, it did not go deaf |
+| a pause around each DSP command burst | 4.2 | 1 |
+| the watchdog build (either bot) | ~33 | **0** |
+| **`NODIGI`: the Sound Blaster found, set up and hooked, no digitized sound** | 24 | **0** |
+| `NOSB`: never touched (above) | 48 | 0 |
+
+So it freezes **while digitized sound plays through the card** -- its DMA
+(channel 1) and its interrupt (IRQ 9) in play -- and not for the card
+merely being there.  A freeze that only a power cycle undoes is what an
+ISA bus held forever looks like; the PicoMEM 1, which stretches the bus's
+cycles while its own processor answers, is the likely party, with the
+AWE64's DMA on the same bus.  Why the watchdog build never froze is not
+known: it adds VGA port traffic around the DSP commands, the packet
+driver's sends, the XMS moves and the DOS reads, and checks the heap every
+frame; the pause around the DSP commands alone did not help.  The test
+patches (the bounded waits, `NETQUIET.LOG`, `NODIGI`, the pauses) are kept
+in `tests/patches/sb486-20261031.diff`, not in the game.
+
+**For now the 486 plays the network game with `NOSB`** (music and effects
+through the AWE64's OPL3; `NODIGI` exists only in the test patch).
+
+The same days showed the other fault plainly: **a PicoMEM's WiFi goes deaf
+to what comes in**, the machine sending and hearing nothing -- the V30 once
+(its screen: "No word from the server: 57 s"), P3 three times in two days
+(after ~100 hours without), the 486's watchdog logging spells of 20-57 s.
+Under 60 s the game rides it out; past it, the server lets the machine go.
+`series.py` puts a dropped DOS machine back -- one that "left", too, since
+2026-10-31.
