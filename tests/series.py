@@ -87,7 +87,7 @@ def watch(n, stop):
         except OSError:
             lines = []
         for l in lines[seen:]:
-            m = re.search(r"\]\s+P\d (X86|XP3|X30) (?:was not heard from for 60 s|left \().*had step (\w+)", l)
+            m = re.search(r"\]\s+P\d (X86|XP3|X30) (?:was not heard from for 60 s|left \(|never loaded).*had step (\w+)", l)
             if m:
                 box = {v: k for k, v in NAME.items()}[m.group(1)]
                 say("run %d: %s dropped -- %s" % (n, box, l.split("] ", 1)[-1][:120]))
