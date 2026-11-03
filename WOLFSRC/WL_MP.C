@@ -1632,7 +1632,11 @@ static void Dump (void)
 		dumpto = 0;
 		for (i=1;i<_argc;i++)
 			if (Is (_argv[i],w) && i+1 < _argc)
-				dumpto = Num (_argv[i+1]);
+			{							// a long (2026-11-02): Num is 16-bit on DOS,
+				char far *p = _argv[i+1];	// and SUMDUMP 381300 dumped step 53620
+				for (;*p >= '0' && *p <= '9';p++)
+					dumpto = dumpto*10 + *p - '0';
+			}
 	}
 	if (mpsteps > dumpto || mpsteps + 50 <= dumpto)	// the 50 steps to n
 		return;

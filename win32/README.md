@@ -220,6 +220,13 @@ crashed it -- and none could be seen without the DOS sums to hold it to:
 * **`TimeCount` written, not added to.**  The game sets it back to 0 and
   counts on it climbing from there; written from the clock it never heard,
   and a replay at normal speed stalled for 60 s and gave up.
+* **`CheckLine`'s ints** (2026-11-03, found in play, not by the gate):
+  `w32logic.c` had id's `int`s, 32 bits here.  DOS steps the sight line's
+  `yfrac`/`xfrac` in 16 bits and takes a door's `intercept` as a 16-bit
+  `unsigned`; a steep line (the step clamped to 7FFFh) wraps there and not
+  here.  An SS saw a player on Windows and not on DOS 381,287 steps into an
+  8-hour game, and shot.  `short` now: the recorded game replayed by
+  `W3DREP` matches the DOS `SUMDUMP` replay at all 9,980 checks to the end.
 
 | `ref/` | |
 |---|---|

@@ -297,16 +297,24 @@ moveok:
 	ob->distance -=move;
 }
 
+//
+// 2026-11-03 (StevenC & Claude): DOS's ints, 16 bits -- id's C and the V30's
+// assembly both step yfrac/xfrac in a 16-bit int and take the door's
+// intercept as a 16-bit unsigned.  With 32-bit ones a steep line (the step
+// clamped to 7FFFh) did not wrap where DOS's does, and an SS 381,287 steps
+// into an 8-hour game saw a player on Windows and not on DOS: it shot, the
+// rest followed it, and WOLF3DW desynced (the recording replayed on both)
+//
 boolean CheckLine (objtype *ob)
 {
-	int	x1,y1,xt1,yt1,x2,y2,xt2,yt2;
-	int	x,y;
-	int	xdist,ydist,xstep,ystep;
-	int	temp;
-	int	partial,delta;
+	short	x1,y1,xt1,yt1,x2,y2,xt2,yt2;
+	short	x,y;
+	short	xdist,ydist,xstep,ystep;
+	short	temp;
+	short	partial,delta;
 	long	ltemp;
-	int	xfrac,yfrac,deltafrac;
-	unsigned	value,intercept;
+	short	xfrac,yfrac,deltafrac;
+	unsigned short	value,intercept;
 
 	x1 = ob->x >> UNSIGNEDSHIFT;		// 1/256 tile precision
 	y1 = ob->y >> UNSIGNEDSHIFT;

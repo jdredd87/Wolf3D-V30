@@ -2633,3 +2633,27 @@ to what comes in**, the machine sending and hearing nothing -- the V30 once
 Under 60 s the game rides it out; past it, the server lets the machine go.
 `series.py` puts a dropped DOS machine back -- one that "left", too, since
 2026-10-31.
+
+## DMA 3 ends the 486's freezes, and WOLF3DW's desync was CheckLine -- 2026-11-03
+
+**The 486 on DMA 3** (StevenC & Claude): PNPSB `/D:3` moved its AWE64 off
+DMA 1 (the DOS Bridge's `projects/pnpsb`), `BLASTER=...D3`, and the same
+recorded 8-hour games as before with the 486 on the plain release build,
+digitized sound playing: **24 hours, no freeze** (against 7 in about 53
+on DMA 1).  Its PicoMEM 1's jumper is IRQ 7, the card's own (its ROM hands
+it on to the NE2000's IRQ 5, `PM2000`'s); the others came off.  Why DMA 1
+froze it is not known -- something else on that machine touches channel 1
+or its page register -- but the 486 plays with its Sound Blaster again.
+
+**WOLF3DW's desync, found.**  The third game desynced Windows alone at step
+381,300 (the DOS machines agreed with each other), as one had on 2026-10-28
+unrecorded.  This one was recorded: `W3DREP` replayed it to Windows' own
+value, the DOS `SUMDUMP` build on P3 to DOS's, and their 50-step state
+dumps differed first at step 381,287 -- an SS whose chase ended in a shot on
+Windows and a step on DOS.  `T_Chase` shoots when `CheckLine` sees the
+player and the shared die allows; the die was the same, so `CheckLine`
+was not.  Windows has it in C (`win32/src/w32logic.c`, id's source), with
+32-bit `int`s where DOS's are 16: a steep sight line wraps `yfrac` on DOS
+and not on Windows.  With `short`s the recording replays to DOS's sums at
+all 9,980 checks, the gate 8 of 8.  The SUMDUMP switch now reads its step
+as a long (it took 381,300 as 53,620 on DOS).
