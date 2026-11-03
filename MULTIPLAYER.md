@@ -2657,3 +2657,10 @@ was not.  Windows has it in C (`win32/src/w32logic.c`, id's source), with
 and not on Windows.  With `short`s the recording replays to DOS's sums at
 all 9,980 checks, the gate 8 of 8.  The SUMDUMP switch now reads its step
 as a long (it took 381,300 as 53,620 on DOS).
+
+And the fix moves nothing else: `tests/repcmp.py` replayed all 12 other
+recorded 8-hour games of the series on the Win32 replay before the fix and
+after it, every 50th step's sum compared -- **the same at every one of
+about 115,000 checks** (2026-11-03).  Those games had no desync in play, so
+the old build's sums were the DOS machines'; 13 recorded games, about 100
+hours, now replay on Windows exactly as on DOS.
