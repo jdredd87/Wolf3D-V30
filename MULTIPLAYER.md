@@ -2664,3 +2664,9 @@ after it, every 50th step's sum compared -- **the same at every one of
 about 115,000 checks** (2026-11-03).  Those games had no desync in play, so
 the old build's sums were the DOS machines'; 13 recorded games, about 100
 hours, now replay on Windows exactly as on DOS.
+
+**And in play, 2026-11-03/04**: three more recorded 8-hour games, the
+fixed WOLF3DW on Windows and the three DOS machines on 1.11.2 (the 486 on
+DMA 3, digitized sound on): **all four 504,000 steps in each, 0 bad, no
+desync, the server 0 desyncs**.  The 486 is at 48 hours on DMA 3 without a
+freeze (`stage/tests/series-mix-20261103`).
