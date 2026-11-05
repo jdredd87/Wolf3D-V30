@@ -186,7 +186,9 @@ rule for UDP 31992 does it -- but a prompt left unanswered makes a rule that
 *blocks* it, and that one wins.  The Python server needs the same rule.
 
 `--mode coop|dm`, `--noenemies`, `--ff off`, `--fraglimit N`,
-`--timelimit MIN`, `--itemrespawn SECS`, `--bots N`, `--map N` (0-59),
+`--timelimit MIN`, `--itemrespawn SECS`, `--dmitems on|off` (deathmatch:
+a machine gun and a chaingun on every floor, DMITEMS.md), `--drops on|off`
+(deathmatch: the dead drop their gun), `--bots N`, `--map N` (0-59),
 `--skill 0-3`.  The game starts when the first player has loaded the level;
 anyone who joins later replays the game so far at full speed, catches up,
 and walks in.

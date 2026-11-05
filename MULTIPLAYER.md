@@ -599,6 +599,15 @@ TAB to show the score board? ... not sure if T for message works?").
   `WELCOME`, `START` and a recording carry it with no new field.  A dropped
   item does not come back, a slot whose item will is not handed to a drop
   (`PlaceItemType`), and the Spear never does.
+* **Guns on every floor, and the dead drop -- 2026-11-04** (StevenC: "every
+  level should have 1 machine gun and 1 chaingun at least ... we are not
+  editing map files"): `--dmitems` and `--drops`, both on in a deathmatch
+  mode.  **DMITEMS.md** is the whole account and the place to change it.
+  Every floor of both games ends with two machine guns, a chaingun and six
+  clips on its main floor at least (checked from the map by
+  `tests/dmicheck.py`), and two 10-minute live games on all four machines
+  -- one with enemies, so players died and dropped -- played with no
+  desync.  MPVER 0x0112: a 1.11 machine is kept out.
 * **Dying**: no gun in hand; the view goes red at once and fades in a
   second to a red that holds until the respawn (the palette is set only
   when it changes -- each set waits for the retrace, and a hit's flash sets
@@ -1116,7 +1125,7 @@ server that disagrees with it is wrong.
 |---|---|---|---|
 | 1 | `HELLO` | client | name (16 bytes, NUL-padded), build (u32: the protocol version and the data set, `MPBUILD` -- 0108h << 16 or'd with 6 for `*.WL6`, 1 for the shareware's `*.WL1`, so two that cannot play together never do; until 2026-10-17 it was a constant, 12345678h, and the check never caught anything), wanted slot (u8, FFh = any, FEh = to watch, since 2026-10-17) |
 | 2 | `WELCOME` | server | slot (u8: 0-3 a player, 4-7 a watcher), players expected (u8), map (u8), skill (u8), rules (u8), pad, frag limit (u16), time limit (u16, minutes) |
-| 3 | `START` | server | players (u8), map, skill, rules (u8 each), then for each player a start: x, y, direction, 0 -- x 0 means "the map's own start" for P1 and "beside P1" for the others (scattered, in deathmatch), found by the game itself (the same search on every machine).  Rules bits: 1 deathmatch, 2 no friendly fire (co-op), 4 no enemies; bits 3-7 (since 2026-10-08) n: a taken item comes back after 5n seconds, 0 never.  A recording keeps them in P2's start's 4th byte, as it keeps the skill + 1 in P1's.  Then (since 2026-10-17) rules2 (u8): 1 teams, 2 capture the flag (with 1); a packet without it means 0 |
+| 3 | `START` | server | players (u8), map, skill, rules (u8 each), then for each player a start: x, y, direction, 0 -- x 0 means "the map's own start" for P1 and "beside P1" for the others (scattered, in deathmatch), found by the game itself (the same search on every machine).  Rules bits: 1 deathmatch, 2 no friendly fire (co-op), 4 no enemies; bits 3-7 (since 2026-10-08) n: a taken item comes back after 5n seconds, 0 never.  A recording keeps them in P2's start's 4th byte, as it keeps the skill + 1 in P1's.  Then (since 2026-10-17) rules2 (u8): 1 teams, 2 capture the flag (with 1), 4 guns on every deathmatch floor, 8 the dead drop (both since 2026-11-04, DMITEMS.md); a packet without it means 0 |
 | 4 | `INPUT` | client | slot (u8), buttons (u8), turn (s8), move (s8), seq (u16), have (u32), played (u32: the highest step it has played; since 2026-10-07 -- the server lets a joiner in once it has caught up) |
 | 5 | `STEPS` | server | first (u32), count (u8), players (u8), then count steps of players x 3 bytes -- buttons, turn, move, P1 first: a step exactly as `Mn.DEM` holds it.  An empty slot's 3 bytes are 0, -128, -128 (since 2026-10-07): no player's are, as id's PollControls clamps a turn and a move to 100 a tic.  Then the events (since 2026-10-13: a count, 7 bytes each), and (since 2026-10-17) the server's newest step (u32) -- the count is sent as 0 when there are no events, so it can follow |
 | 6 | `SYNC` | client | slot (u8), pad, step (u32), sum (u32) |

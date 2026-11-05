@@ -169,6 +169,10 @@ examples -- on DOS, MPSRV /? | MORE shows it a page at a time.
     --fraglimit N     deathmatch: a floor ends at N frags
     --timelimit MIN   a floor ends after MIN minutes
     --itemrespawn S   items come back after S seconds
+    --dmitems off     deathmatch: id's items only -- on (the default), every
+                      floor has a machine gun and a chaingun at least
+    --drops off       deathmatch: the dead drop nothing -- on (the default),
+                      their best gun or a clip, gone after 30 seconds
     --bots N          the server plays N of the slots itself
     --map N           start on map N (0-59: episode*10 + floor-1)
     --skill 0-3       as the game's own difficulty

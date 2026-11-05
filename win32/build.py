@@ -58,6 +58,11 @@ TARGETS = {
     "spend": ("W3DWEND.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP", "ENDTEST"]),
     "sp1end": ("W3D1END.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP", "UPLOAD", "ENDTEST"]),
     "spsodend": ("SPEAREND.EXE", "nt_win", GUI + ["w32sp", "w32vis", "w32sign"], SPGAME, ["W32SP", "SPEAR", "ENDTEST"]),
+    # TEST replays (2026-11-04, tests/dmitems.py): Spear of Destiny's, run in
+    # C:\wolf3d\SOD; and a second WL6 one, built while W3DREP.EXE is busy
+    # (its define does nothing but give it its own obj/)
+    "repsod": ("W3DREPS.EXE", "nt", ["w32null"], [], ["SPEAR"]),
+    "rep2": ("W3DREP2.EXE", "nt", ["w32null"], [], ["REP2"]),
 }
 
 

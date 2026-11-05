@@ -3,6 +3,7 @@
     python mp/mpserver.py [--players 4] [--bots 0] [--map 0] [--skill 2]
                           [--mode coop|dm|tdm|ctf] [--ff on|off] [--noenemies]
                           [--fraglimit N] [--timelimit MIN] [--itemrespawn SECS]
+                          [--dmitems on|off] [--drops on|off]
                           [--port 31992] [--bind 0.0.0.0] [--steps N] [--once]
                           [--drop-after 60] [--record GAME.MPR] [--drop 0.0] [--quiet]
                           [--control 31999] [--txgap 1000] [--name NAME]
@@ -44,6 +45,10 @@ friendly fire off in co-op (on by default, as DOOM's); --noenemies spawns
 no enemies; --fraglimit and --timelimit end a deathmatch level;
 --itemrespawn SECS brings a taken item back that long after (in 5 s steps,
 to 155; 30 in deathmatch unless given, never in co-op unless given).
+--dmitems off leaves a deathmatch floor's items as id placed them -- on (the
+default) every floor has a machine gun and a chaingun at least, and a few
+clips (DMITEMS.md); --drops off: a player who dies drops nothing -- on (the
+default) its best gun or a clip, gone 30 s later.  Neither touches co-op.
 
 Every player's name goes to every machine (NAMES) when anyone comes or
 goes, and every two seconds -- the game shows them in its notices, its
@@ -91,6 +96,7 @@ import mpconsole                    # noqa: E402  (typed commands: kick, end, ne
 
 RULE_DM, RULE_NOFF, RULE_NOENEMIES = 1, 2, 4
 RULE2_TEAM, RULE2_CTF = 1, 2           # START's byte after the starts (2026-10-17)
+RULE2_ITEMS, RULE2_DROPS = 4, 8         # deathmatch's items (2026-11-04, DMITEMS.md)
 MODES = {"coop": (0, 0), "dm": (RULE_DM, 0), "tdm": (RULE_DM, RULE2_TEAM),
          "ctf": (RULE_DM, RULE2_TEAM | RULE2_CTF)}     # --mode: rules, rules2
 CAUGHT_UP = 4                       # steps behind the newest: let it in
@@ -138,6 +144,11 @@ class Server:
         if "--noenemies" in sys.argv:
             self.rules |= RULE_NOENEMIES
         self.respawn = arg("--itemrespawn", 30 if self.rules & RULE_DM else 0, int)
+        # deathmatch's items (DMITEMS.md): kept apart from the mode, which the
+        # console's "next mode" changes, and put into rules2 by dm_bits()
+        self.items = (RULE2_ITEMS if arg("--dmitems", "on") != "off" else 0) | \
+                     (RULE2_DROPS if arg("--drops", "on") != "off" else 0)
+        self.rules2 |= self.dm_bits()
         self.rules = (self.rules & 7) | P.respawn_bits(self.respawn)
         self.next_names = 0
         self.frags = arg("--fraglimit", 0, int)
@@ -466,6 +477,10 @@ class Server:
         return P.start(self.players, self.map, self.skill, self.rules, [(0, 0, 0, 0)] * self.players,
                        self.rules2)
 
+    def dm_bits(self):
+        """rules2's deathmatch items: only in a deathmatch mode"""
+        return self.items if self.rules & RULE_DM else 0
+
     def mode_name(self):
         if self.rules2 & RULE2_CTF:
             return "capture the flag"
@@ -533,7 +548,9 @@ class Server:
                  % (self.sock.getsockname()[1], self.players, self.humans, self.bots, self.map, self.rules,
                     self.mode_name(),
                     ", no enemies" if self.rules & RULE_NOENEMIES else "",
-                    "back after %d s" % ((self.rules >> 3) * 5) if self.rules >> 3 else "do not come back"))
+                    "back after %d s" % ((self.rules >> 3) * 5) if self.rules >> 3 else "do not come back")
+                 + ("; guns on every floor" if self.rules2 & RULE2_ITEMS else "")
+                 + ("; the dead drop" if self.rules2 & RULE2_DROPS else ""))
         self.console.start()
         try:
             while True:

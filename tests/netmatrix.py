@@ -2,6 +2,7 @@
 together, on one of the servers:
 
     python      mp/mpserver.py on this PC: co-op WITH enemies
+    dmen        mp/mpserver.py: deathmatch WITH enemies -- the dead drop
     mpsrv@BOX   MPSRV.EXE on that DOS machine (p3, dx486, v30): deathmatch, a bot
     mpsrvw      MPSRVW.EXE on this PC: team deathmatch
     wl1         mp/mpserver.py: the shareware network game, WOLF3DM1 in C:\\WL1,
@@ -48,6 +49,9 @@ PLAN = {   # the server's host, its rules, from the start, late, the Windows pro
               [b for b in ("dx486", "p3", "v30") if b != SRVBOX][:1],
               "p3" if SRVBOX == "v30" else "v30", "WOLF3DMW", ""),
     "mpsrvw": (PC, "--players 4 --mode tdm --noenemies --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW", ""),
+    # deathmatch WITH enemies (2026-11-04): they kill the bots, so the dead drop
+    # (DMITEMS.md) on every machine, and the floors' guns are fought over
+    "dmen": (PC, "--players 4 --mode dm --skill 3 --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW", ""),
     "wl1": (PC, "--players 4 " + DM, ["dx486", "p3"], "v30", None, ""),
     "wl1w": (PC, "--players 4 " + DM, ["dx486", "p3"], "v30", "WOLF3DW1", ""),   # the shareware, with Windows
     "soak": (PC, "--players 4 --timelimit 10 " + DM, ["dx486", "p3"], "v30", "WOLF3DW", " WIDE"),
@@ -111,7 +115,7 @@ open(os.path.join(OUT, "events.txt"), "w").close()
 open(os.path.join(OUT, "console.txt"), "w").close()
 note("%s server on %s: %s" % (ARG, HOST, RULES))
 srvout = open(os.path.join(OUT, "server.txt"), "w")
-if KIND in ("python", "wl1", "wl1w", "sod", "sod30", "sodfloors"):
+if KIND in ("python", "dmen", "wl1", "wl1w", "sod", "sod30", "sodfloors"):
     srv = subprocess.Popen([sys.executable, "-u", "mp/mpserver.py"] + RULES.split(), cwd=WOLF,
                            stdin=subprocess.DEVNULL, stdout=srvout, stderr=subprocess.STDOUT, env=ENV)
 elif KIND in ("mpsrvw", "soak", "sodw"):

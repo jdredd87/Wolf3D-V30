@@ -1,6 +1,8 @@
 obj/
 run/
 W3DREP.EXE
+W3DREP2.EXE
+W3DREPS.EXE
 test/*.EXE
 test/*.obj
 test/*.lnk

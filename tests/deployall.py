@@ -1,6 +1,9 @@
 """deployall.py -- every DOS build onto every machine that has it: in each
 folder, a program present is replaced by its new build (the old kept as
-NAME.PRV), then read back by CRC-32 on the machine (HD)."""
+NAME.PRV), then read back by CRC-32 on the machine (HD).
+
+    python tests/deployall.py BOX...          ONLY="WOLF3DM.EXE SPEARM.EXE": just those
+"""
 import os
 import re
 import shutil
@@ -21,7 +24,8 @@ NEW = {  # folder: {name on the machine: the build}
                 "WOLF3D18.EXE": os.path.join(V30W, "WOLF3D18.EXE"),
                 "WOLF3DM1.EXE": os.path.join(MPW, "WOLF3DM1.EXE")},
     r"C:\SPEAR": {"SPEARV.EXE": os.path.join(V30W, "SPEARV.EXE"),
-                  "SPEAR8.EXE": os.path.join(V30W, "SPEAR8.EXE")},
+                  "SPEAR8.EXE": os.path.join(V30W, "SPEAR8.EXE"),
+                  "SPEARM.EXE": os.path.join(MPW, "SPEARM.EXE")},
     r"C:\MPSRV": {"MPSRV.EXE": r"C:\wolf3d\mp\build\mpsrv.exe"},
 }
 
@@ -41,6 +45,8 @@ for box in sys.argv[1:]:
     for d, files in NEW.items():
         listing = dosctl("exec", "--box", box, "--quiet", "DIR %s\\*.EXE" % d).upper()
         for name, src in files.items():
+            if os.environ.get("ONLY") and name not in os.environ["ONLY"].upper().split():
+                continue
             base, ext = name.split(".")
             if not re.search(r"\b%s\s+%s\b" % (base, ext), listing):
                 continue                        # not on this machine: nothing to replace

@@ -11,6 +11,7 @@
     MPSRV [--players 4] [--bots 0] [--map 0] [--skill 2]
           [--mode coop|dm|tdm|ctf] [--ff on|off] [--noenemies]
           [--fraglimit N] [--timelimit MIN] [--itemrespawn SECS]
+          [--dmitems on|off] [--drops on|off]
           [--port 31992] [--control 31999] [--drop-after 60] [--steps N]
           [--once] [--record GAME.MPR] [--name NAME]
 
@@ -56,6 +57,7 @@ const
   { START's byte after the starts (2026-10-17): teams -- Gold P1+P3, Silver
     P2+P4 -- and capture the flag, with teams }
   RULE2_TEAM = 1; RULE2_CTF = 2;
+  RULE2_ITEMS = 4; RULE2_DROPS = 8;   { deathmatch's items (DMITEMS.md, 2026-11-04) }
   SERVER_SLOT = $FF;
   STEPS_MAX = 64;
   CAUGHT_UP = 4;
@@ -128,6 +130,7 @@ type
 var
   { settings }
   Players, Bots, Humans, MapNum, Skill, Rules, Rules2, Respawn: Integer;
+  DmItems: Integer;                   { --dmitems, --drops: rules2's bits in deathmatch }
   Frags, Minutes: Word;
   GamePort, CtlPort: Word;
   StepLimit: LongInt;
@@ -1664,6 +1667,7 @@ begin
   if M = 2 then Rules2 := RULE2_TEAM
   else if M = 3 then Rules2 := RULE2_TEAM or RULE2_CTF
   else Rules2 := 0;
+  if M <> 0 then Rules2 := Rules2 or DmItems;
 end;
 
 function Settings: ShortString;
@@ -1678,6 +1682,8 @@ begin
   if Rules and RULE_NOFF <> 0 then S := S + ', ff off' else S := S + ', ff on';
   if Rules shr 3 <> 0 then S := S + ', items back after ' + I2S((Rules shr 3) * 5) + ' s'
   else S := S + ', items back never';
+  if Rules2 and RULE2_ITEMS <> 0 then S := S + ', guns on every floor';
+  if Rules2 and RULE2_DROPS <> 0 then S := S + ', the dead drop';
   if Minutes <> 0 then S := S + ', timelimit ' + I2S(Minutes);
   if Frags <> 0 then S := S + ', fraglimit ' + I2S(Frags);
   if LiveFrag >= 0 then S := S + ', fraglimit ' + I2S(LiveFrag) + ' in this game';
@@ -2548,6 +2554,10 @@ begin
   WriteLn('  --timelimit MIN  a floor ends after MIN minutes                    (0: none)');
   WriteLn('  --itemrespawn S  a taken item comes back after S seconds, in steps of 5,');
   WriteLn('                   up to 155                 (30 in deathmatch, never in co-op)');
+  WriteLn('  --dmitems on|off deathmatch: every floor a machine gun and a       (on)');
+  WriteLn('                   chaingun at least, and a few clips (DMITEMS.md)');
+  WriteLn('  --drops on|off   deathmatch: the dead drop their best gun or a     (on)');
+  WriteLn('                   clip, gone after 30 s');
   WriteLn;
   WriteLn('THE SERVER');
   WriteLn('  --port N         the UDP port the game talks on; players then join (31992)');
@@ -2699,6 +2709,9 @@ begin
   Humans := Players - Bots;
   Rules := 0;
   Rules2 := 0;
+  DmItems := 0;
+  if ArgS('--dmitems', 'on') <> 'off' then DmItems := DmItems or RULE2_ITEMS;
+  if ArgS('--drops', 'on') <> 'off' then DmItems := DmItems or RULE2_DROPS;
   I := ModeOf(Lower(ArgS('--mode', 'coop')));
   if I < 0 then begin WriteLn('--mode: coop, dm, tdm or ctf'); Halt(1); end;
   SetMode(I, Rules);

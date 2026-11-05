@@ -43,8 +43,9 @@ typedef unsigned		word16;
 // joined a registered game).
 // A release that changes what the game does in a network game raises MPVER.
 // 1.11 (2026-10-21): the sum reads a state by what it is, not where it is
-// (StateSum, below) -- so 1.10 and 1.11 are kept apart.
-#define MPVER		0x0111
+// (StateSum, below) -- so 1.10 and 1.11 are kept apart.  1.12 (2026-11-04):
+// deathmatch's items (DMITEMS.md) -- a 1.11 would play id's items beside it.
+#define MPVER		0x0112
 #if defined(SPEAR)
 #define MPBUILD		(((unsigned long)MPVER << 16) | 0x53)
 #elif defined(UPLOAD)
@@ -136,6 +137,10 @@ int		far	mprules2;			// and more (2026-10-17: START's last byte):
 								//   frags are its score
 #define RULE2_CTF		2		//   capture the flag (with RULE2_TEAM): a capture
 								//   is a team's point, the frag limit counts them
+#define RULE2_ITEMS		4		//   deathmatch: every floor a machine gun and a
+								//   chaingun at least (DMITEMS.md, 2026-11-04)
+#define RULE2_DROPS		8		//   deathmatch: a player who dies drops a gun or
+								//   a clip, gone 30 s later (DMITEMS.md)
 #define TEAM(i)			((i) & 1)
 long	far	mptook[MAXPLAYERS];	// damage each player has been dealt (the
 								// report: god mode hides it from health)
@@ -411,6 +416,21 @@ byte	far	mpbonus[64*64/8];
 // (PlaceItemType) is not, and its slot is not given to a drop while the
 // item that was there waits to come back.  The Spear never comes back
 //
+//
+// Deathmatch items (RULE2_ITEMS, RULE2_DROPS): the numbers to tune.
+// DMITEMS.md says what each does and how it was chosen
+//
+#define DMI_WANTMG(n)	((n) > 2 ? 2 : 1)	// machine guns a floor has at least,
+											//   for n player slots
+#define DMI_WANTCG		1			// chainguns a floor has at least
+#define DMI_SPACE		8			// tiles kept between two guns where it can be
+#define DMI_MINCLIPS	6			// clips a floor has at least (added if fewer)
+#define DMI_ROOM		8			// statics never taken by an added item, for the
+									//   drops (SpawnStatic quits at MAXSTATS)
+#define DMI_DROPSTEPS	525			// a death's drop lies 30 s (17.5 steps a s)
+#define DMI_DROPCAP		(MAXSTATS-4)	// a death's drop past this many statics only
+									//   in a free slot: the rest for enemies' drops
+
 long	far	mpitemdue[MAXSTATS];	// the step it comes back at (0: not waiting)
 int		far	mpitemshape[MAXSTATS];	// the map's item in each slot
 byte	far	mpitemdrop[MAXSTATS];	// the slot holds a dropped item
@@ -430,9 +450,20 @@ void MPBonusOrig (statobj_t *s)		// SpawnStatic: the map's own item
 	mpitemdrop[s-statobjlist] = 0;
 }
 
+static int far dmimark;				// DeathDrop: the next drop is a death's
+
 void MPBonusDrop (statobj_t *s)		// PlaceItemType: a dropped one
 {
-	mpitemdrop[s-statobjlist] = 1;
+	int		i = s-statobjlist;
+	long	due;
+
+	mpitemdrop[i] = 1;
+	if (!dmimark)
+		return;
+	mpitemdrop[i] = 2;				// a death's: it goes (DMI_DROPSTEPS, below)
+	mpitemdue[i] = due = mpsteps + DMI_DROPSTEPS;
+	if (!mpitemnext || due < mpitemnext)
+		mpitemnext = due;
 }
 
 boolean MPBonusWaits (statobj_t *s)	// PlaceItemType: not a free slot yet
@@ -453,6 +484,11 @@ static void ItemsBack (void)
 		if (due <= mpsteps)
 		{
 			mpitemdue[i] = 0;
+			if (mpitemdrop[i] == 2)		// a death's drop, its time up: gone
+			{							// (its tile's bit stays: a superset)
+				st->shapenum = -1;
+				continue;
+			}
 			st->shapenum = mpitemshape[i];	// its flags and number stay
 			MPBonusAt (st->tilex,st->tiley);
 		}
@@ -473,6 +509,8 @@ void MPBonusGone (statobj_t *gone)
 	statobj_t	*st;
 	byte		x = gone->tilex, y = gone->tiley;
 
+	if (mpitemdrop[gone-statobjlist] == 2)
+		mpitemdue[gone-statobjlist] = 0;	// a death's drop, taken: the slot is free
 	if (mpplayers && RULE_RESPAWN (mprules) && !mpitemdrop[gone-statobjlist]
 	&& gone->itemnumber != bo_spear)
 	{
@@ -486,6 +524,308 @@ void MPBonusGone (statobj_t *gone)
 		if (st->tilex == x && st->tiley == y && st->shapenum != -1 && (st->flags & FL_BONUS))
 			return;
 	mpbonus[(x<<3) | (y>>3)] &= ~(1 << (y&7));
+}
+
+/*
+=============================================================================
+
+				DEATHMATCH ITEMS -- no map edited (DMITEMS.md)
+
+id's floors were made for one player: a machine gun on 12 of the 60, the
+chaingun usually one, often behind a pushwall.  As a deathmatch floor is set
+up (MPSpawn, RULE2_ITEMS) the same rules on every machine read id's own map:
+the floor's biggest open region is found -- where a player can walk, every
+door open, without moving a pushwall -- and if it has fewer guns than it
+should, a clip there becomes one, or one is put on open floor, whichever is
+the better place by the rules below.  An item made so comes back as itself
+(--itemrespawn).  A floor short of clips gets some.  Nothing about the map changes but the statics, which are in the
+sum and the snapshot like every other.  StevenC & Claude (Anthropic).
+
+=============================================================================
+*/
+
+#define DMIGUNS	64					// guns or clips a floor's spacing looks at
+static byte far dmix[DMIGUNS], far dmiy[DMIGUNS], far dmia[DMIGUNS];
+static int far dmin;
+
+static int Walkable (int x, int y)	// a player can stand there (doors open)
+{
+	unsigned	t = tilemap[x][y], a = (unsigned)actorat[x][y];
+
+	if (t)
+		return t >= 128 && t < 0xc0;	// a door, never a wall or a pushwall
+	if (a && a < 128)
+		return 0;						// a static that blocks
+	return *(mapsegs[0] + farmapylookup[y]+x) >= AREATILE;
+}
+
+// spotvis is the scratch (the renderer clears it), a byte a tile, x*64+y:
+// 0 open and not yet reached, 1 reached, 2 spread from, 3 a smaller region,
+// 4 the biggest so far -- the floor (DMIFLOOR), 5 not open (DMIWALL); and,
+// once the floor is found, DMIUSED where a static lies.  A walk along the
+// array, not calls per tile: the V30 makes about 46,000 calls a second
+#define DMIFLOOR	4
+#define DMIWALL		5
+#define DMIUSED		8
+
+static void Spread (byte *p)		// 1: its open neighbours are reached
+{
+	*p = 2;
+	if (!p[64])
+		p[64] = 1;					// x+1
+	if (!p[-64])
+		p[-64] = 1;					// x-1
+	if (!p[1])
+		p[1] = 1;					// y+1
+	if (!p[-1])
+		p[-1] = 1;					// y-1
+}
+
+static int Area (int x, int y)
+{
+	return *(mapsegs[0] + farmapylookup[y]+x) - AREATILE;
+}
+
+static int IsGun (statobj_t *st)
+{
+	return st->itemnumber == bo_machinegun || st->itemnumber == bo_chaingun;
+}
+
+static int IsClip (statobj_t *st)
+{
+	return st->itemnumber == bo_clip || st->itemnumber == bo_25clip;
+}
+
+// a reachable item of id's or ours, not taken
+static int Here (statobj_t *st)
+{
+	return st->shapenum != -1 && (st->flags & FL_BONUS)
+		&& (spotvis[st->tilex][st->tiley] & ~DMIUSED) == DMIFLOOR;
+}
+
+static void Kind (int (*is) (statobj_t *))	// the spacing set: where they lie
+{
+	statobj_t	*st;
+
+	dmin = 0;
+	for (st = &statobjlist[0];st != laststatobj && dmin < DMIGUNS;st++)
+		if (Here (st) && is (st))
+		{
+			dmix[dmin] = st->tilex;
+			dmiy[dmin] = st->tiley;
+			dmia[dmin++] = Area (st->tilex,st->tiley);
+		}
+}
+
+// how good a place: far enough from the others 4, a room without one 2
+static int Score (int x, int y)
+{
+	int		i,d,a = Area (x,y),far_ = 4,room = 2;
+
+	for (i=0;i<dmin;i++)
+	{
+		d = abs (dmix[i] - x);
+		if (abs (dmiy[i] - y) > d)
+			d = abs (dmiy[i] - y);
+		if (d < DMI_SPACE)
+			far_ = 0;
+		if (dmia[i] == a)
+			room = 0;
+	}
+	return far_ + room;
+}
+
+// the order ties are broken in: fixed for a floor, the same everywhere
+static word16 Order (int x, int y)
+{
+	word16	h = (word16)((gamestate.episode*10 + gamestate.mapon)*163 + x*251 + y*241);
+
+	h = h*25173 + 13849;
+	h = h*25173 + 13849;
+	return h;
+}
+
+static int Open (int x, int y)		// the floor, with nothing on it
+{
+	return spotvis[x][y] == DMIFLOOR && !tilemap[x][y] && !actorat[x][y];
+}
+
+// One more of a kind: a clip made into it (shape > 0), or a new static of
+// statinfo's type on open floor -- the clip if it is as good a place as any
+// open tile (so id's clips are used, and a floor whose clips lie together
+// does not get its guns side by side); 0 if there is nowhere
+static int Add (int shape, int itemnum, int type, int (*is) (statobj_t *))
+{
+	statobj_t	*st,*best = NULL;
+	int			x,y,sc,bs = -1,os = -1,bx = 0,by = 0;
+	word16		h,bh = 0;
+
+	Kind (is);
+	if (shape > 0)
+		for (st = &statobjlist[0];st != laststatobj;st++)
+		{
+			if (!Here (st) || !IsClip (st))
+				continue;
+			sc = Score (st->tilex,st->tiley)*2 + (st->itemnumber == bo_clip);
+			h = Order (st->tilex,st->tiley);
+			if (sc > bs || (sc == bs && h < bh))
+			{
+				best = st;
+				bs = sc;
+				bh = h;
+			}
+		}
+	if (laststatobj < &statobjlist[MAXSTATS-DMI_ROOM])
+		for (x=1;x<MAPSIZE-1;x++)
+			for (y=1;y<MAPSIZE-1;y++)
+			{
+				if (!Open (x,y))
+					continue;
+				sc = Score (x,y);
+				h = Order (x,y);
+				if (sc > os || (sc == os && h < bh))
+				{
+					bx = x;
+					by = y;
+					os = sc;
+					bh = h;
+				}
+			}
+	if (best && bs/2 >= os)
+	{
+		best->shapenum = shape;
+		best->itemnumber = itemnum;
+		mpitemshape[best-statobjlist] = shape;	// and it comes back as itself
+		return 1;
+	}
+	if (os < 0)
+		return 0;
+	SpawnStatic (bx,by,type);
+	spotvis[bx][by] |= DMIUSED;
+	return 1;
+}
+
+static int Count (int itemnum)
+{
+	statobj_t	*st;
+	int			n = 0;
+
+	for (st = &statobjlist[0];st != laststatobj;st++)
+		if (Here (st) && (st->itemnumber == itemnum
+		|| (itemnum == bo_clip && st->itemnumber == bo_25clip)))
+			n++;
+	return n;
+}
+
+// the region the tile marked 1 is in, both ways round until nothing new:
+// left marked 2, and how many tiles.  The edge is DMIWALL, so a neighbour
+// is always on the map
+static int Region (void)
+{
+	byte	*p,*first = &spotvis[0][0],*last = &spotvis[MAPSIZE-1][MAPSIZE-1];
+	int		more,n = 0;
+
+	do
+	{
+		more = 0;
+		for (p = first;p <= last;p++)
+			if (*p == 1)
+			{
+				Spread (p);
+				n++;
+				more = 1;
+			}
+		for (p = last;p >= first;p--)
+			if (*p == 1)
+			{
+				Spread (p);
+				n++;
+				more = 1;
+			}
+	} while (more);
+	return n;
+}
+
+// The floor: the biggest open region.  A deathmatch player comes back
+// anywhere (DMStart), so the first start's region is not enough -- E3L8's is
+// a room of 14 tiles shut by a pushwall.  From the first start, then from
+// the first tile no region has, until one region is half the open floor or
+// DMITRIES have been tried
+#define DMITRIES	8
+static void Floor (void)
+{
+	byte	*p,*first = &spotvis[0][0],*last = &spotvis[MAPSIZE-1][MAPSIZE-1],*seed;
+	int		x,y,n,best = 0,all = 0,tries;
+
+	for (x=0;x<MAPSIZE;x++)
+		for (y=0;y<MAPSIZE;y++)
+			if (x && y && x < MAPSIZE-1 && y < MAPSIZE-1 && Walkable (x,y))
+				all++;
+			else
+				spotvis[x][y] = DMIWALL;
+	seed = &spotvis[mpctx[0].sx][mpctx[0].sy];
+	for (tries = 0;tries < DMITRIES && best*2 < all;tries++)
+	{
+		*seed = 1;
+		n = Region ();
+		for (p = first;p <= last;p++)
+			if (*p == 2)
+				*p = n > best ? DMIFLOOR : 3;
+			else if (*p == DMIFLOOR && n > best)
+				*p = 3;				// the old biggest is a smaller one now
+		if (n > best)
+			best = n;
+		for (seed = first;seed <= last && *seed;seed++)
+			;						// the next region's first tile
+		if (seed > last)
+			break;					// every open tile has its region
+	}
+}
+
+static void DMItems (void)			// MPSpawn: every deathmatch floor
+{
+	statobj_t	*st;
+	int			n;
+
+	_fmemset (spotvis,0,sizeof(spotvis));
+	Floor ();
+	for (st = &statobjlist[0];st != laststatobj;st++)
+		if (st->shapenum != -1)
+			spotvis[st->tilex][st->tiley] |= DMIUSED;
+
+	for (n = Count (bo_machinegun);n < DMI_WANTMG (mpplayers);n++)
+		if (!Add (SPR_STAT_27,bo_machinegun,27,IsGun))
+			break;
+	for (n = Count (bo_chaingun);n < DMI_WANTCG;n++)
+		if (!Add (SPR_STAT_28,bo_chaingun,28,IsGun))
+			break;
+	for (n = Count (bo_clip);n < DMI_MINCLIPS;n++)
+		if (!Add (0,bo_clip,26,IsClip))
+			break;
+	_fmemset (spotvis,0,sizeof(spotvis));	// as the renderer leaves it
+}
+
+// MPDie: the player in the globals drops its best gun, or a clip -- one a
+// tile, gone after DMI_DROPSTEPS, never back (RULE2_DROPS)
+static void DeathDrop (void)
+{
+	statobj_t	*st;
+	int			x = player->tilex, y = player->tiley,
+				room = laststatobj < &statobjlist[DMI_DROPCAP];
+
+	if (!(mprules & RULE_DM) || !(mprules2 & RULE2_DROPS))
+		return;
+	for (st = &statobjlist[0];st != laststatobj;st++)
+		if (st->shapenum == -1)
+			room |= !MPBonusWaits (st);	// a free slot PlaceItemType will take
+		else if (mpitemdrop[st-statobjlist] == 2 && st->tilex == x && st->tiley == y)
+			return;					// one death's drop a tile
+	if (!room)
+		return;
+	dmimark = 1;
+	PlaceItemType (gamestate.bestweapon == wp_chaingun ? bo_chaingun
+		: gamestate.bestweapon == wp_machinegun ? bo_machinegun : bo_clip2,x,y);
+	dmimark = 0;
 }
 
 static void Think (objtype *ob, void (*think) (objtype *))
@@ -927,6 +1267,7 @@ void MPDie (objtype *attacker)
 	mpctx_t	far *c = &mpctx[mpcur];
 
 	FlagDrop (mpcur);				// capture the flag: where it fell
+	DeathDrop ();					// deathmatch: its gun, or a clip
 	c->dead = 1;
 	c->deadtime = 0;
 	c->deaths++;
@@ -1401,6 +1742,18 @@ void MPSpawn (byte far *b)
 									// PlaceActors from the list's head
 	InitAreas ();					// every player's area, now they all exist
 	FlagsInit ();					// capture the flag: both flags home, no captures
+	if ((mprules & RULE_DM) && (mprules2 & RULE2_ITEMS))
+		DMItems ();					// deathmatch: guns on every floor (DMITEMS.md)
+#ifdef W32
+	if (getenv ("W3DDMI"))			// tests/dmitems.py: the floor's statics now,
+	{								// before anyone takes one
+		statobj_t	*st;
+
+		for (st = &statobjlist[0];st != laststatobj;st++)
+			if (st->shapenum != -1)
+				printf ("dmi st%d %d at %u,%u\n",(int)(st-statobjlist),st->shapenum,st->tilex,st->tiley);
+	}
+#endif
 	if (mprules & RULE_DM)			// deathmatch: every door, and a respawn's
 		for (i=0;i<mpplayers;i++)	// 50 bullets -- a player in from the first
 		{							// step had id's 8 while one who joined

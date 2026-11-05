@@ -155,6 +155,7 @@ class Console:
         respawn = p.get("itemrespawn", (s.rules >> 3) * 5)
         s.respawn = respawn
         s.rules = (rules & 7) | P.respawn_bits(respawn)
+        s.rules2 = (s.rules2 & 3) | s.dm_bits()    # deathmatch's items (DMITEMS.md)
         if "timelimit" in p:
             s.minutes = p["timelimit"]
         if "fraglimit" in p:
@@ -187,6 +188,10 @@ class Console:
                  "enemies %s" % ("off" if r & self.RULE_NOENEMIES else "on"),
                  "ff %s" % ("off" if r & self.RULE_NOFF else "on"),
                  "items back %s" % ("after %d s" % ((r >> 3) * 5) if r >> 3 else "never")]
+        if s.rules2 & 4:                # deathmatch's items (DMITEMS.md)
+            parts.append("guns on every floor")
+        if s.rules2 & 8:
+            parts.append("the dead drop")
         if s.minutes:
             parts.append("timelimit %d" % s.minutes)
         if s.frags:

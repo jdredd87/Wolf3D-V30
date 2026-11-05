@@ -95,6 +95,7 @@ word SD_SoundPlaying (void) { return 0; }
 void SD_PositionSound (int leftvol,int rightvol) {}
 void SD_SetPosition (int leftvol,int rightvol) {}
 void SD_WaitSoundDone (void) {}
+void SD_StopSound (void) {}				// (Spear's WL_GAME.C, the replay W3DREPS)
 void SD_StartMusic (MusicGroup far *music) {}
 void SD_MusicOn (void) {}
 void SD_MusicOff (void) {}
