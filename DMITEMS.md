@@ -238,6 +238,20 @@ happens in the game logic, at the same step on every machine.
 
 The recordings are `stage/dmi/LIVE1.MPR` and `LIVE2.MPR`.
 
+**An hour of each mode, 2026-11-04/05** (`tests/netmatrix.py KIND 63000`,
+`NETNEXT=600`: a new floor every 10 minutes, so six floors each, E1L1 to
+E1L6; enemies on in all four, so players died and dropped).  The 486 and
+P3 from the start, WOLF3DW on Windows, the V30 in late from a snapshot:
+
+| mode | server | result |
+|---|---|---|
+| deathmatch (`dmen`, skill 3) | mp/mpserver.py | 63,000 steps on the 486, the V30 and Windows, **no desync**; P3 dropped at step 49,303 -- "60 s with nothing from the server", its PicoMEM's WiFi going deaf (its own report: no desync) |
+| team deathmatch (`tdmw`) | MPSRVW | all four 63,000 steps, **no desync** |
+| capture the flag (`ctf`) | mp/mpserver.py | all four 63,000 steps, **no desync** (the bots never captured: they wander) |
+| co-op (`python`), the rules off | mp/mpserver.py | all four 63,000 steps, **no desync** |
+
+Every server: 0 desyncs.  Recordings `stage/dmi/HOUR-*.MPR`.
+
 ## What it costs
 
 Nothing per step.  At a floor's start, a few sweeps of the 64x64 map (array
