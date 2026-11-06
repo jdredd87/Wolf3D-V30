@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D FOR WINDOWS  --  by StevenC and Claude (Anthropic)
 ==================================================================
-Version 1.12, 2026-11-05
+Version 1.12.1, 2026-11-06
 
 id Software's Wolfenstein 3-D, built for Windows (95 and later) from the
 same source as the DOS games in this project: id's own game, menus and all,
@@ -30,6 +30,10 @@ New in 1.12: in deathmatch, team deathmatch and capture the flag, every
 floor has two machine guns, a chaingun and six clips where the players
 can walk, and a player killed drops their best gun -- MULTI.TXT in
 W3DMP.ZIP has it.  1.12 plays with 1.12 only, Windows and DOS alike.
+
+New in 1.12.1: the game no longer crashes when a door closes beside a
+pushed wall, and stays in step with DOS machines after a player respawns
+(MULTI.TXT).  1.12.1 plays with 1.12.1 only.
 
 
 PLAYING
