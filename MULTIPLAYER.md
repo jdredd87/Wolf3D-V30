@@ -608,6 +608,15 @@ TAB to show the score board? ... not sure if T for message works?").
   `tests/dmicheck.py`), and two 10-minute live games on all four machines
   -- one with enemies, so players died and dropped -- played with no
   desync.  MPVER 0x0112: a 1.11 machine is kept out.
+* **1.12.1 -- 2026-11-05/06**: the first of the 3-hour games found two faults
+  that had been there all along.  WOLF3DW crashed 4 minutes in: id's
+  `CloseDoor` reads an actor through a pushwall's number beside a door
+  (Windows only; win32/README.md).  And replayed on both, Windows and DOS
+  parted 162,284 steps in: a player who respawns was, to the enemies thinking
+  after it that step, still where it died, and the sight line from tile to
+  point ran off the map (`Respawn`, WL_MP.C) -- every build, so MPVER 0x0113.
+  Fixed, the 3-hour game replays the same on Windows and DOS at every check,
+  the actors' targets and the random numbers' index included.
 * **Dying**: no gun in hand; the view goes red at once and fades in a
   second to a red that holds until the respawn (the palette is set only
   when it changes -- each set waits for the retrace, and a hit's flash sets

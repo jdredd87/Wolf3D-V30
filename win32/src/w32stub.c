@@ -194,7 +194,7 @@ byte	rndtable[256] = {
 	 17,  46,  52, 231, 232,  76,  31, 221,  84,  37, 216, 165, 212, 106,
 	197, 242,  98,  43,  39, 175, 254, 145, 190,  84, 118, 222, 187, 136,
 	120, 163, 236, 249 };
-static unsigned short rndindex;
+unsigned short rndindex;		// (WL_MP.C's snapshot takes it: not static)
 
 void US_InitRndT (boolean randomize)
 {

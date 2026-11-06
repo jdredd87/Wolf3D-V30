@@ -45,7 +45,9 @@ typedef unsigned		word16;
 // 1.11 (2026-10-21): the sum reads a state by what it is, not where it is
 // (StateSum, below) -- so 1.10 and 1.11 are kept apart.  1.12 (2026-11-04):
 // deathmatch's items (DMITEMS.md) -- a 1.11 would play id's items beside it.
-#define MPVER		0x0112
+// 1.12.1 (2026-11-06): a player who comes back is where enemies look for it
+// at once (Respawn's plux, pluy) -- a 1.12 would see it where it died.
+#define MPVER		0x0113
 #if defined(SPEAR)
 #define MPBUILD		(((unsigned long)MPVER << 16) | 0x53)
 #elif defined(UPLOAD)
@@ -121,6 +123,19 @@ int		far	mpcur;				// whose context is in the globals
 int		far	tdmgen;				// TIMEDEMO MGEN n: n+1, else 0
 unsigned long far mpsum;		// the game state's checksum, every step
 long	far	mpsteps;
+#ifdef SUMMORE					// a TEST build's (2026-11-06): the sum also
+								// takes every actor's target (flagspad) and
+								// US_RndT's index -- neither is in the game's
+								// sum, and a difference in either can lie
+								// hidden for a while before an actor acts on it
+#ifdef W32
+extern unsigned short rndindex;
+#define RNDINDEX rndindex
+#else
+extern byte far rndtable[];
+#define RNDINDEX (*(word16 far *)(rndtable-2))
+#endif
+#endif
 #define MAXCHECKS	64
 unsigned long far mpcheck[MAXCHECKS];	// the sum at every 50th step
 word16 far mprnd;				// the face's own random numbers (see MPFace)
@@ -1370,6 +1385,14 @@ static void Respawn (objtype *ob, int i)
 	}
 	else
 		SpawnPlayer (c->sx,c->sy,c->sdir);
+	plux = player->x >> UNSIGNEDSHIFT;	// 2026-11-06 (StevenC & Claude): where it
+	pluy = player->y >> UNSIGNEDSHIFT;	// is now.  Only its own think set these, and
+									// that does not run again this step: an enemy
+									// thinking after it saw it where it died, and
+									// CheckLine, its tile here and that point
+									// there, ran off the map -- 34 tiles left of
+									// it, reading memory DOS and Windows lay out
+									// differently, and the two games parted
 	ConnectAreas ();				// SpawnPlayer's InitAreas left only the
 	ob->state = &s_mpplayer;		// players' own areas
 	ob->temp1 = Spr (i,SPR_SS_S_1);
@@ -2004,6 +2027,15 @@ static void Dump (void)
 			mprintf (f3,mpsteps,n,st->shapenum,st->tilex,st->tiley);
 	for (i=0;i<doornum;i++)
 		mprintf (f4,mpsteps,i,doorposition[i]);
+#ifdef SUMMORE
+	{
+		static char far f6[] = "%ld rnd %u\n", far f7[] = "%ld fp%d %d\n";
+
+		mprintf (f6,mpsteps,(unsigned)RNDINDEX);
+		for (ob = &objlist[0],n=0;ob;ob = ob->next,n++)
+			mprintf (f7,mpsteps,n,(int)ob->flagspad);
+	}
+#endif
 	for (i=0;i<mpplayers;i++)
 		mprintf (f5,mpsteps,i,mpctx[i].gs.health,mpctx[i].gs.ammo,mpctx[i].gs.keys,
 			mpctx[i].gs.weapon,mpctx[i].gs.score,mpctx[i].deaths,mpctx[i].frags);
@@ -2049,6 +2081,11 @@ void MPStep (void)
 		SUMV (st->shapenum);
 	for (i=0;i<doornum;i++)
 		SUMV (doorposition[i]);
+#ifdef SUMMORE
+	for (ob = &objlist[0];ob;ob = ob->next)
+		SUMV (ob->flagspad);
+	SUMV (RNDINDEX);
+#endif
 	for (i=0;i<mpplayers;i++)
 	{
 		SUMV (mpctx[i].gs.health);
@@ -3975,6 +4012,9 @@ plain replay's
 extern	int			objcount;
 extern	LRstruct	LevelRatios[];
 extern	byte		far rndtable[];	// ID_US_A.ASM: US_RndT's index is the word before it
+#ifdef W32
+extern	unsigned short	rndindex;		// w32stub.c's: an index of its own
+#endif
 
 typedef struct
 {
@@ -3999,7 +4039,11 @@ static snapreg_t far snapregs[] =
 	{&pwallstate,sizeof(pwallstate)},	{&pwallpos,sizeof(pwallpos)},
 	{&pwallx,sizeof(pwallx)},		{&pwally,sizeof(pwally)},
 	{&pwalldir,sizeof(pwalldir)},	{&tics,sizeof(tics)},
+#ifdef W32
+	{&rndindex,sizeof(rndindex)},	// US_RndT's index (w32stub.c's: 2026-11-06,
+#else								// rndtable-2 was some other variable here)
 	{rndtable-2,2},					// US_RndT's index
+#endif
 	// the player in the globals (MPSwapIn/Out's list)
 	{&controlx,sizeof(controlx)},	{&controly,sizeof(controly)},
 	{buttonstate,sizeof(buttonstate)},	{buttonheld,sizeof(buttonheld)},

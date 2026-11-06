@@ -227,6 +227,27 @@ crashed it -- and none could be seen without the DOS sums to hold it to:
   here.  An SS saw a player on Windows and not on DOS 381,287 steps into an
   8-hour game, and shot.  `short` now: the recorded game replayed by
   `W3DREP` matches the DOS `SUMDUMP` replay at all 9,980 checks to the end.
+* **`CloseDoor`'s actors that are not actors** (2026-11-05, found in play:
+  WOLF3DW crashed): beside a door `actorat` can hold a number -- a pushwall's
+  wall that stopped there, 1 for a barrel -- and id reads `check->x` through
+  it.  DOS reads DGROUP at the number + 16, Borland's startup data; here it
+  was address 18.  `WL_ACT1.C` has those bytes (`dosds`) under `W32`, so a
+  door closes on Windows exactly when it does on DOS.
+* **US_RndT's index in a snapshot** (2026-11-06): DOS keeps it in the word
+  before `rndtable`, and the snapshot copied that word; `w32stub.c` keeps
+  its own `rndindex`, so a Windows machine joining from another's snapshot
+  took some other variable's two bytes.  The snapshot takes `rndindex` now.
+* **And a bug in the game, not the port** (2026-11-06): a player who came
+  back was where it died to every enemy thinking after it that step
+  (`plux`/`pluy`, set only by its own think), and `CheckLine` -- its tile
+  from here, its point from there -- ran 34 tiles off the map, into memory
+  DOS and Windows lay out differently: one guard shot on Windows and walked
+  on DOS, 162,284 steps into a 3-hour game.  `Respawn` sets them now, on
+  every build (MPVER 0x0113, 1.12.1).  Found with `SUMMORE` (WL_MP.C), a
+  test build's sum that also takes every actor's target and `US_RndT`'s
+  index: `build.py repmore` here, `SUMDUMP` + `SUMMORE` in DOS's
+  `VERSION.H`.  With the fixes the game replays the same on both, all
+  3,744 checks of the 3 hours.
 
 | `ref/` | |
 |---|---|
