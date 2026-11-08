@@ -248,6 +248,10 @@ crashed it -- and none could be seen without the DOS sums to hold it to:
   index: `build.py repmore` here, `SUMDUMP` + `SUMMORE` in DOS's
   `VERSION.H`.  With the fixes the game replays the same on both, all
   3,744 checks of the 3 hours.
+* **And again at a floor's start** (2026-11-07): after a boss's death the
+  next floor began with `victoryflag` set and every player's `plux`/`pluy`
+  last floor's; `CheckLine` ran off the map from a guard 3 steps in.
+  `MPSpawn` clears the flag and sets the points (1.12.2, MPVER 0x0114).
 
 | `ref/` | |
 |---|---|

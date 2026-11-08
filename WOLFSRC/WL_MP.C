@@ -47,7 +47,9 @@ typedef unsigned		word16;
 // deathmatch's items (DMITEMS.md) -- a 1.11 would play id's items beside it.
 // 1.12.1 (2026-11-06): a player who comes back is where enemies look for it
 // at once (Respawn's plux, pluy) -- a 1.12 would see it where it died.
-#define MPVER		0x0113
+// 1.12.2 (2026-11-07): a floor starts with no victory and every player where
+// it is (MPSpawn) -- a 1.12.1 spun after a boss.
+#define MPVER		0x0114
 #if defined(SPEAR)
 #define MPBUILD		(((unsigned long)MPVER << 16) | 0x53)
 #elif defined(UPLOAD)
@@ -1704,6 +1706,16 @@ void MPSpawn (byte far *b)
 
 	if (b[0])
 		SpawnPlayer (b[0],b[1],b[2]);
+	gamestate.victoryflag = false;	// 2026-11-07 (StevenC & Claude): a floor whose
+									// boss died ended in id's death cam, its flag
+									// set, and every player spun on the next floor
+									// for the rest of the game (VictorySpin, through
+									// the walls); each player's copy is P1's, below
+	plux = player->x >> UNSIGNEDSHIFT;	// and each player's point where it is: its
+	pluy = player->y >> UNSIGNEDSHIFT;	// own think sets these, and a player that has
+									// not thought yet left last floor's, against
+									// this floor's tile -- CheckLine ran off the
+									// map (as Respawn's, below)
 	mpcur = 0;
 	Save (0);
 	mpctx[0].sx = player->tilex;	// P1: the map's own start, or the demo's
@@ -1751,6 +1763,8 @@ void MPSpawn (byte far *b)
 		mpctx[i].dead = mpctx[i].deaths = mpctx[i].frags = 0;
 		mpctx[i].deadtime = 0;
 		SpawnPlayer (sx,sy,sd);		// sets player's place and Thrust's globals
+		plux = player->x >> UNSIGNEDSHIFT;
+		pluy = player->y >> UNSIGNEDSHIFT;
 		player->state = &s_mpplayer;
 		player->temp1 = Spr (i,SPR_SS_S_1);
 		player->flags = FL_SHOOTABLE;	// solid (DoActor marks it) and shootable

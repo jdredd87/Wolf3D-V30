@@ -617,6 +617,16 @@ TAB to show the score board? ... not sure if T for message works?").
   point ran off the map (`Respawn`, WL_MP.C) -- every build, so MPVER 0x0113.
   Fixed, the 3-hour game replays the same on Windows and DOS at every check,
   the actors' targets and the random numbers' index included.
+* **1.12.2 -- 2026-11-07**: the 3-hour games on 1.12.1 -- team deathmatch,
+  capture the flag and co-op clean on all four machines; deathmatch not:
+  Windows parted at step 117,200.  A bot had killed an episode's boss: id's
+  death cam set `victoryflag`, the floor ended, and the flag went on to the
+  next floor in every player's context -- every player spun (VictorySpin,
+  through the walls) for the rest of the game, and never thought, so its
+  `plux`/`pluy` stayed last floor's against this floor's tile: CheckLine ran
+  off the map, as the respawn's had.  `MPSpawn` clears the flag and sets
+  each player's point where it spawns; MPVER 0x0114.  Every build: in any
+  network game a boss's death froze everyone since multiplayer began.
 * **Dying**: no gun in hand; the view goes red at once and fades in a
   second to a red that holds until the respawn (the palette is set only
   when it changes -- each set waits for the retrace, and a hit's flash sets
