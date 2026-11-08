@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D, MULTIPLAYER  --  by StevenC and Claude (Anthropic)
 ==================================================================
-Version 1.12.1, 2026-11-06
+Version 1.12.2, 2026-11-07
 
 id Software's Wolfenstein 3-D for up to four players over a network:
 deathmatch, team deathmatch, capture the flag or co-op, each with or
@@ -126,6 +126,12 @@ decide differently and part, hours into a game.  And the Windows games
 could crash when a door closed beside a wall pushed up against it.  Both
 fixed; a recorded 3-hour game now replays the same on Windows and DOS at
 every check.  1.12.1 does not play with 1.12: put 1.12.1 on every machine.
+1.12.2: when an episode's boss died in a network game, the floor ended in
+id's death cam, and on every floor after it the players were frozen,
+spinning in place, for the rest of the game.  A new floor now starts with
+everyone playing.  Found by a 3-hour deathmatch, which also showed that
+Windows could part from DOS there; with the fix the recorded game replays
+the same on both.  1.12.2 does not play with 1.12.1.
 
 SETUP.TXT walks through setting it all up, step by step -- the network
 on each DOS machine, the game, the server, joining, and troubleshooting.
