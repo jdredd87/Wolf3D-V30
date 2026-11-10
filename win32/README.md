@@ -252,6 +252,13 @@ crashed it -- and none could be seen without the DOS sums to hold it to:
   next floor began with `victoryflag` set and every player's `plux`/`pluy`
   last floor's; `CheckLine` ran off the map from a guard 3 steps in.
   `MPSpawn` clears the flag and sets the points (1.12.2, MPVER 0x0114).
+* **A door's `ticcount`** (2026-11-10, a 3-hour deathmatch on 1.12.2): an
+  `int` that counts up while a door stands open -- on DOS 16 bits, so a door
+  a guard held open past 32,767 tics went negative and stopped trying to
+  close; here it kept trying, and closed when the guard stepped away.
+  `short` under `W32` (WL_DEF.H).  The fixed replay then matched all 1,402
+  DOS sums the server logged after the split, to the end of the game.  The
+  DOS games are unchanged: 1.12.3 is the Windows programs.
 
 | `ref/` | |
 |---|---|

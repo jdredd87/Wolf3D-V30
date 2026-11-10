@@ -627,6 +627,11 @@ TAB to show the score board? ... not sure if T for message works?").
   off the map, as the respawn's had.  `MPSpawn` clears the flag and sets
   each player's point where it spawns; MPVER 0x0114.  Every build: in any
   network game a boss's death froze everyone since multiplayer began.
+* **1.12.3 -- 2026-11-10** (Windows only): the 3-hour games on 1.12.2 -- team
+  deathmatch, capture the flag and co-op clean on all four; deathmatch:
+  Windows parted at step 117,150, a door a guard had held open for over
+  32,767 tics -- 16 bits on DOS, where its count wrapped and it stopped
+  trying to close, 32 on Windows (`ticcount`, win32/README.md).
 * **Dying**: no gun in hand; the view goes red at once and fades in a
   second to a red that holds until the respawn (the palette is set only
   when it changes -- each set waits for the retrace, and a hit's flash sets

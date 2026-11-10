@@ -637,7 +637,16 @@ typedef struct doorstruct
 	boolean	vertical;
 	byte	lock;
 	enum	{dr_open,dr_closed,dr_opening,dr_closing}	action;
+#ifdef W32
+	short	ticcount;			// 2026-11-10 (StevenC & Claude): 16 bits, as DOS's
+								// int -- a door held open past 32,767 tics wraps
+								// there and stops trying to close for as long
+								// again; with 32 here it closed when the guard
+								// holding it stepped away, and WOLF3DW parted from
+								// DOS 117,138 steps into a 3-hour deathmatch
+#else
 	int		ticcount;
+#endif
 } doorobj_t;
 
 
