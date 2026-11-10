@@ -632,6 +632,11 @@ TAB to show the score board? ... not sure if T for message works?").
   Windows parted at step 117,150, a door a guard had held open for over
   32,767 tics -- 16 bits on DOS, where its count wrapped and it stopped
   trying to close, 32 on Windows (`ticcount`, win32/README.md).
+  Then 4 hours of each mode on 1.12.3 (2026-11-10), the 486 and P3 from the
+  start, WOLF3DW on Windows, the V30 in late: deathmatch and capture the flag
+  clean on all four; in team deathmatch P3's WiFi went deaf at step 151,446
+  and it rejoined at once, in co-op the 486 froze at step 23,616 (silent, no
+  exit line) and was power-cycled back in -- and every server 0 desyncs.
 * **Dying**: no gun in hand; the view goes red at once and fades in a
   second to a red that holds until the respawn (the palette is set only
   when it changes -- each set waits for the retrace, and a hit's flash sets

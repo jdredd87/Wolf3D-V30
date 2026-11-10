@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D FOR WINDOWS  --  by StevenC and Claude (Anthropic)
 ==================================================================
-Version 1.12.2, 2026-11-07
+Version 1.12.3, 2026-11-10
 
 id Software's Wolfenstein 3-D, built for Windows (95 and later) from the
 same source as the DOS games in this project: id's own game, menus and all,
@@ -38,6 +38,10 @@ pushed wall, and stays in step with DOS machines after a player respawns
 New in 1.12.2: after an episode's boss dies in a network game, the next
 floor no longer leaves everyone frozen (MULTI.TXT).  1.12.2 plays with
 1.12.2 only.
+
+New in 1.12.3: stays in step with DOS machines when a door has been held
+open for a long time.  Plays with the DOS 1.12.2 programs (they are
+1.12.3's too).
 
 
 PLAYING
