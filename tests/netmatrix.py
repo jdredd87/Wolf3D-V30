@@ -60,6 +60,14 @@ PLAN = {   # the server's host, its rules, from the start, late, the Windows pro
     "ctf": (PC, "--players 4 --mode ctf --skill 2 --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW", ""),
     "wl1": (PC, "--players 4 " + DM, ["dx486", "p3"], "v30", None, ""),
     "wl1w": (PC, "--players 4 " + DM, ["dx486", "p3"], "v30", "WOLF3DW1", ""),   # the shareware, with Windows
+    # each mode WITH enemies, Windows in (2026-11-11): the shareware and Spear's
+    "wl1dm": (PC, "--players 4 --mode dm --skill 3 --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW1", ""),
+    "wl1tdm": (PC, "--players 4 --mode tdm --skill 2 --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW1", ""),
+    "wl1ctf": (PC, "--players 4 --mode ctf --skill 2 --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW1", ""),
+    "wl1coop": (PC, "--players 4 --mode coop --skill 2", ["dx486", "p3"], "v30", "WOLF3DW1", ""),
+    "soddm": (PC, "--players 4 --mode dm --skill 3 --itemrespawn 30", ["dx486", "p3"], "v30", "SPEARW", ""),
+    "sodtdm": (PC, "--players 4 --mode tdm --skill 2 --itemrespawn 30", ["dx486", "p3"], "v30", "SPEARW", ""),
+    "sodctf": (PC, "--players 4 --mode ctf --skill 2 --itemrespawn 30", ["dx486", "p3"], "v30", "SPEARW", ""),
     "soak": (PC, "--players 4 --timelimit 10 " + DM, ["dx486", "p3"], "v30", "WOLF3DW", " WIDE"),
     # Spear of Destiny (2026-10-22)
     "sod": (PC, "--players 4 --mode coop --skill 2", ["dx486", "p3"], "v30", "SPEARW", ""),
@@ -109,7 +117,7 @@ def step_now():
 
 
 def player(box):
-    d, exe = (r"C:\WL1", "WOLF3DM1") if KIND in ("wl1", "wl1w") else \
+    d, exe = (r"C:\WL1", "WOLF3DM1") if KIND.startswith("wl1") else \
         (r"C:\SPEAR", "SPEARM") if SPEAR else (r"C:\WOLF3D", "WOLF3DM")
     exe = os.environ.get("NETEXE", exe)     # a test build in its place (mp/huntbot.py's)
     exe = os.environ.get(box.upper() + "EXE", exe)   # one machine's own: DX486EXE=WOLF3DT
@@ -121,7 +129,8 @@ open(os.path.join(OUT, "events.txt"), "w").close()
 open(os.path.join(OUT, "console.txt"), "w").close()
 note("%s server on %s: %s" % (ARG, HOST, RULES))
 srvout = open(os.path.join(OUT, "server.txt"), "w")
-if KIND in ("python", "dmen", "ctf", "wl1", "wl1w", "sod", "sod30", "sodfloors"):
+if KIND in ("python", "dmen", "ctf", "wl1", "wl1w", "wl1dm", "wl1tdm", "wl1ctf", "wl1coop", "sod", "sod30",
+            "sodfloors", "soddm", "sodtdm", "sodctf"):
     srv = subprocess.Popen([sys.executable, "-u", "mp/mpserver.py"] + RULES.split(), cwd=WOLF,
                            stdin=subprocess.DEVNULL, stdout=srvout, stderr=subprocess.STDOUT, env=ENV)
 elif KIND in ("mpsrvw", "tdmw", "soak", "sodw"):

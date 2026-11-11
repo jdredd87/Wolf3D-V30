@@ -260,6 +260,32 @@ crashed it -- and none could be seen without the DOS sums to hold it to:
   DOS sums the server logged after the split, to the end of the game.  The
   DOS games are unchanged: 1.12.3 is the Windows programs.
 
+**The audit after them** (2026-11-11): three of those four were id's code
+leaning on DOS's 16-bit `int`, so the game logic was read for the rest of
+the kind -- a counter that grows, a product that outgrows 16 bits, a read
+off the map:
+
+* **Counters** (`+=`, `++`, `-=` in WL_ACT1/2, WL_AGENT, WL_STATE, WL_PLAY,
+  WL_MP): ammo is capped at 99, health at 100, lives at 9; the score,
+  `TimeCount`, `deadtime`, `walkdist` and `mptook` are `long`; kills,
+  treasures, frags and deaths start again each floor; the flag's
+  `flagtime` at 525; `temp1`/`temp2` count a few steps.  The door's
+  `ticcount` was the one that grew without a cap (fixed).
+* **Products**: a network game's `tics` is always 4 (`DEMOTICS`), so
+  `tics*4096`, `tics<<10`, `RUNMOVE*tics` and the rest stay far inside 16
+  bits; DMStart's and the face's generators are `word16` on both.
+* **Off the map**: `CheckLine` with a stale `plux`/`pluy`, and `Thrust`'s
+  `farmapylookup` once VictorySpin had walked a player to a negative y --
+  both closed by 1.12.1 and 1.12.2.  `actorat` read as a pointer: only
+  `CloseDoor` did it without a test (`dosds`).
+* **Signed and unsigned**: `long` against `unsigned` is a signed compare on
+  DOS and an unsigned one here; the one place it mattered was `CheckLine`'s
+  `intercept`, `unsigned short` since 1.11.4.
+
+Nothing else was found.  The checker now makes the next one cheap to find:
+the servers log every machine's sums beside a recording, and
+`tests/winvsdos.py` checks a Windows replay against them in minutes.
+
 | `ref/` | |
 |---|---|
 | `*.MPR` | recordings (a server's `--record`: our protocol packets, none of id's data) |

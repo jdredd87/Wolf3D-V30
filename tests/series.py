@@ -34,7 +34,7 @@ KIND = sys.argv[3] if len(sys.argv) > 3 else "python"
 SRV = os.path.join(T, "net-" + KIND.replace("@", "-"), "server.txt")
 NAME = {"dx486": "X86", "p3": "XP3", "v30": "X30"}
 EXTRA = {"dx486": "", "p3": " VIEW 19", "v30": " LOWEST VIEW 10"}     # netmatrix's own
-GAME = (r"C:\WL1", "WOLF3DM1") if KIND in ("wl1", "wl1w") else \
+GAME = (r"C:\WL1", "WOLF3DM1") if KIND.startswith("wl1") else \
     (r"C:\SPEAR", "SPEARM") if KIND.startswith("sod") else (r"C:\WOLF3D", "WOLF3DM")
 SUMMARY = os.path.join(OUT, "summary.txt")
 
