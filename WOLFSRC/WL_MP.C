@@ -49,7 +49,9 @@ typedef unsigned		word16;
 // at once (Respawn's plux, pluy) -- a 1.12 would see it where it died.
 // 1.12.2 (2026-11-07): a floor starts with no victory and every player where
 // it is (MPSpawn) -- a 1.12.1 spun after a boss.
-#define MPVER		0x0114
+// 1.13 (2026-11-11): a deathmatch player comes back on the floor's main part,
+// never in a shut closet (FloorBits) -- a 1.12 would put it elsewhere.
+#define MPVER		0x0115
 #if defined(SPEAR)
 #define MPBUILD		(((unsigned long)MPVER << 16) | 0x53)
 #elif defined(UPLOAD)
@@ -799,6 +801,28 @@ static void Floor (void)
 	}
 }
 
+//
+// Where a deathmatch player comes back (2026-11-11, StevenC & Claude): the
+// same floor, a bit a tile -- DMStart's spots had been any open tile, the
+// pushwall-shut closets and secret rooms too.  Made as a floor starts, before
+// anyone is placed, and in the snapshot for a late joiner
+//
+byte	far	mpfloor[64*64/8];
+
+static void FloorBits (void)		// MPSpawn: every deathmatch floor
+{
+	int		x,y;
+
+	_fmemset (mpfloor,0,sizeof(mpfloor));
+	_fmemset (spotvis,0,sizeof(spotvis));
+	Floor ();
+	for (x=0;x<MAPSIZE;x++)
+		for (y=0;y<MAPSIZE;y++)
+			if (spotvis[x][y] == DMIFLOOR)
+				mpfloor[(x<<3) | (y>>3)] |= 1 << (y&7);
+	_fmemset (spotvis,0,sizeof(spotvis));	// as the renderer leaves it
+}
+
 static void DMItems (void)			// MPSpawn: every deathmatch floor
 {
 	statobj_t	*st;
@@ -1349,7 +1373,8 @@ static void DMStart (int i, byte *x, byte *y)
 		n = n*25173 + 13849;
 		ty = 1 + (n >> 4) % 62;
 		if (tilemap[tx][ty] || actorat[tx][ty]
-		|| *(mapsegs[0] + farmapylookup[ty]+tx) < AREATILE)
+		|| *(mapsegs[0] + farmapylookup[ty]+tx) < AREATILE
+		|| !(mpfloor[(tx<<3) | (ty>>3)] & (1 << (ty&7))))	// the floor (FloorBits)
 			continue;
 		for (k = 1,j=0;j<mpplayers;j++)
 		{
@@ -1721,6 +1746,8 @@ void MPSpawn (byte far *b)
 	mpctx[0].sx = player->tilex;	// P1: the map's own start, or the demo's
 	mpctx[0].sy = player->tiley;
 	mpctx[0].sdir = (1 - player->angle/90) & 3;	// SpawnPlayer: angle = (1-dir)*90
+	if (mprules & RULE_DM)
+		FloorBits ();				// where DMStart may put a player, from P1's start
 	for (i=1;i<mpplayers;i++)
 	{
 		_fmemcpy (&mpctx[i],&mpctx[0],sizeof(mpctx_t));
@@ -4072,6 +4099,7 @@ static snapreg_t far snapregs[] =
 	{mpcheck,sizeof(mpcheck)},		{&mpnoise,sizeof(mpnoise)},
 	{mptook,sizeof(mptook)},		{mpkiller,sizeof(mpkiller)},
 	{mpseen,sizeof(mpseen)},		{mpbonus,sizeof(mpbonus)},
+	{mpfloor,sizeof(mpfloor)},
 	{mpitemdue,sizeof(mpitemdue)},	{mpitemshape,sizeof(mpitemshape)},
 	{mpitemdrop,sizeof(mpitemdrop)},	{&mpitemnext,sizeof(mpitemnext)},
 	{mpcaps,sizeof(mpcaps)},		{flagobj,sizeof(flagobj)},
