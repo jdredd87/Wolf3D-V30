@@ -131,6 +131,9 @@ var
   { settings }
   Players, Bots, Humans, MapNum, Skill, Rules, Rules2, Respawn: Integer;
   DmItems: Integer;                   { --dmitems, --drops: rules2's bits in deathmatch }
+  SumF: ^File;                        { the .SUM beside a recording (2026-11-11): every
+                                        SYNC every machine sent -- on the heap, the DOS
+                                        server's DGROUP has nothing to spare }
   Frags, Minutes: Word;
   GamePort, CtlPort: Word;
   StepLimit: LongInt;
@@ -917,6 +920,20 @@ end;
 
 procedure ApplyNext; forward;
 procedure GameOver(const Why: ShortString); forward;
+procedure SumLine(StepN: LongInt; const Name: ShortString; Sum: LongInt);
+var L: ShortString;
+begin
+  L := I2S(StepN) + ' ' + Name + ' ' + HexStr(Sum, 8) + #13#10;
+  {$I-} BlockWrite(SumF^, L[1], Length(L)); {$I+}
+  if IOResult <> 0 then
+  begin
+    {$I-} Close(SumF^); {$I+}
+    if IOResult <> 0 then ;
+    Dispose(SumF);
+    SumF := nil;
+  end;
+end;
+
 procedure RecOpen; forward;              { the recording: below MakeStep's StepsLen }
 procedure RecClose; forward;
 procedure RecOther(Len: Word); forward;
@@ -1349,6 +1366,7 @@ begin
         if (I < 0) or (RxLen < 14) then Exit;
         StepN := GetL(6);
         Sum := GetL(10);
+        if SumF <> nil then SumLine(StepN, Slots[I].Name, Sum);
         if (RxLen >= 30) and ((not HaveScores) or (LongInt(StepN) >= ScoresStep)) then
         begin
           HaveScores := True;
@@ -1521,7 +1539,7 @@ begin
 end;
 
 procedure RecOpen;
-var Ext: string[12]; I: Integer;
+var Ext: string[12]; SumName: string[80]; I: Integer;
 begin
   if RecPath = '' then Exit;
   RecName := RecPath;
@@ -1558,6 +1576,18 @@ begin
   RecWrite(Tx, StartLen);
   RecNamesNow;
   Log('recording the game in ' + RecName);
+  I := Length(RecName);                { and its sums: GAME.MPR's in GAME.SUM }
+  while (I > 0) and (RecName[I] <> '.') and (RecName[I] <> '\') do Dec(I);
+  if (I > 0) and (RecName[I] = '.') then SumName := Copy(RecName, 1, I - 1) + '.SUM'
+  else SumName := RecName + '.SUM';
+  if SumF = nil then New(SumF);
+  Assign(SumF^, SumName);
+  {$I-} Rewrite(SumF^, 1); {$I+}
+  if IOResult <> 0 then
+  begin
+    Dispose(SumF);
+    SumF := nil;
+  end;
 end;
 
 procedure RecClose;
@@ -1570,6 +1600,13 @@ begin
     if IOResult <> 0 then ;
     Recording := False;
     Log('recorded ' + I2S(RecFirst) + ' steps as ' + RecName + ' -- WOLF3DM REPLAY ' + RecName);
+  end;
+  if SumF <> nil then
+  begin
+    {$I-} Close(SumF^); {$I+}
+    if IOResult <> 0 then ;
+    Dispose(SumF);
+    SumF := nil;
   end;
 end;
 
@@ -2710,6 +2747,7 @@ begin
   Rules := 0;
   Rules2 := 0;
   DmItems := 0;
+  SumF := nil;
   if ArgS('--dmitems', 'on') <> 'off' then DmItems := DmItems or RULE2_ITEMS;
   if ArgS('--drops', 'on') <> 'off' then DmItems := DmItems or RULE2_DROPS;
   I := ModeOf(Lower(ArgS('--mode', 'coop')));

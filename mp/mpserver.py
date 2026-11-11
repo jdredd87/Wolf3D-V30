@@ -74,6 +74,9 @@ snapshot for the next joiner for a minute.  If none comes in 20 s the
 joiner plays from the first step, as before.  --nosnap: never.
 
 --record writes each game, when it ends, as an Mn.DEM for TIMEDEMO MGEN.
+A .MPR recording comes with a .SUM beside it (2026-11-11): every SYNC every
+machine sent, "step name sum" a line -- each machine's own sums, so a replay
+on another build can be checked against them (tests/winvsdos.py).
 --drop P throws away that fraction of packets each way, for testing.
 --silence STEP:SECS[,STEP:SECS...] is a network outage on demand: from that
 step the server hears and sends nothing for SECS seconds, while its clock
@@ -161,6 +164,7 @@ class Server:
         # is sent, for WOLF3DM REPLAY -- every floor, as long as the game goes.
         # A name ending .DEM is the old one-floor demo (TIMEDEMO MGEN) instead
         self.rec = None
+        self.sumlog = None              # the .SUM beside a .MPR (rec_open)
         self.drop = arg("--drop", 0.0, float)
         # --txgap: microseconds to wait after each packet sent, as MPSRV's and
         # MPSRVW's -- a PicoMEM card's WiFi garbles packets that arrive back to
@@ -444,6 +448,8 @@ class Server:
             s.inputs += 1
         elif kind == P.SYNC:
             slot, step, total = P.un_sync(b)
+            if self.rec and self.sumlog:
+                self.sumlog.write("%d %s %08X\n" % (step, s.name or "P%d" % (i + 1), total))
             sc = P.un_sync_scores(b)
             if sc and (self.scores is None or step >= self.scores[0]):
                 self.scores = (step, sc)
@@ -819,6 +825,7 @@ class Server:
             name = base + chr(ord("A") + self.games) + ext
         self.rec, self.rec_name = open(name, "wb"), name
         self.rec.write(b"WMR1")
+        self.sumlog = open(os.path.splitext(name)[0] + ".SUM", "w")
         self.rec_rows, self.rec_first, self.rec_names = [], 0, None
         self.rec_pkt(P.welcome(4, self.players, self.map, self.skill, self.rules,
                                self.frags, self.minutes, 0))       # a watcher's
@@ -862,6 +869,9 @@ class Server:
         self.rec_flush()
         self.rec.close()
         self.rec = None
+        if self.sumlog:
+            self.sumlog.close()
+            self.sumlog = None
         self.log("recorded %d steps as %s -- WOLF3DM REPLAY %s" % (self.rec_first, self.rec_name,
                  os.path.basename(self.rec_name)))
 

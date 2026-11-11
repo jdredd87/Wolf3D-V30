@@ -62,6 +62,7 @@ TARGETS = {
     # C:\wolf3d\SOD; and a second WL6 one, built while W3DREP.EXE is busy
     # (its define does nothing but give it its own obj/)
     "repsod": ("W3DREPS.EXE", "nt", ["w32null"], [], ["SPEAR"]),
+    "rep1": ("W3DREP1.EXE", "nt", ["w32null"], [], ["UPLOAD"]),     # the shareware's (tests/winvsdos.py)
     "rep2": ("W3DREP2.EXE", "nt", ["w32null"], [], ["REP2"]),
     # TEST (2026-11-06): the replay whose sum also takes every actor's target and
     # US_RndT's index (WL_MP.C's SUMMORE), against the DOS SUMDUMP+SUMMORE build
