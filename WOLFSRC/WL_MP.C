@@ -2335,6 +2335,7 @@ byte	far	mpserver[4];
 unsigned far mpport = 31992;
 int		far	mpbot;				// NETBOT: random controls of its own
 int		far	mpbotshow;			// NETBOT SHOW: and the camera's displays (2026-10-20)
+int		far	mpbothunt;			// NETBOT HUNT: plays like a player (2026-11-11)
 char	far	mpname[17];
 int		far	mpstate;			// 0 hello, 1 welcomed, 2 started, 3 over
 unsigned far mpfraglimit;		// WELCOME: deathmatch ends a level at these
@@ -2577,6 +2578,118 @@ static void LocalInput (byte *bits, int *x, int *y)
 	boolean	save[NUMBUTTONS],held[NUMBUTTONS];
 	int		sx = controlx, sy = controly, st = tics, i;
 
+	if (mpbot && mpbothunt)			// NETBOT HUNT (2026-11-11, StevenC & Claude:
+	{								// mp/huntbot.py's, made a switch): the flags
+		static int far tog, far wander, far calls;	// first in capture the flag,
+		static long far lastx, far lasty;			// else after the nearest player;
+		mpctx_t	far *me = &mpctx[mplocal];			// fires only aimed, within 8
+		objtype	*o = me->ob, *t;					// tiles, nothing between
+		long	best = 0x7fffffffl, dx, dy, d, fx, fy, cr, dt, tx = 0, ty = 0;
+		int		j, bj = -1, flag = 0, mt, et;
+
+		tog ^= 1;
+		if (me->dead || !o)
+		{
+			*bits = (me->deadtime > 280 && tog) ? 8 : 0;	// SPACE, after 4 s
+			*x = *y = 0;
+			wander = 0;
+			return;
+		}
+		for (j=0;j<mpplayers;j++)
+			if (j != mplocal && !mpctx[j].absent && !mpctx[j].dead && mpctx[j].ob)
+			{
+				t = mpctx[j].ob;
+				d = labs (t->x - o->x) + labs (t->y - o->y);
+				if (d < best)
+				{
+					best = d;
+					bj = j;
+				}
+			}
+		if (flagobj[0])
+		{
+			mt = TEAM (mplocal);
+			et = !mt;
+			flag = 1;
+			if (flagby_[et] == mplocal)		// carrying theirs: home
+			{
+				tx = flagbx[mt];
+				ty = flagby[mt];
+			}
+			else if (flagby_[et] < 0)		// theirs, lying: take it
+			{
+				tx = flagx[et];
+				ty = flagy[et];
+			}
+			else if (flagby_[mt] < 0 && (flagx[mt] != flagbx[mt] || flagy[mt] != flagby[mt]))
+			{								// ours, dropped: send it home
+				tx = flagx[mt];
+				ty = flagy[mt];
+			}
+			else
+				flag = 0;					// nothing to do with a flag: hunt
+			if (flag)
+			{
+				tx = (tx << 16) + 0x8000l;
+				ty = (ty << 16) + 0x8000l;
+				best = labs (tx - o->x) + labs (ty - o->y);
+				bj = mplocal;
+			}
+		}
+		if (++calls >= 35)					// got nowhere in a while: wander
+		{
+			calls = 0;
+			if (labs (o->x - lastx) + labs (o->y - lasty) < 0x6000l && !wander)
+			{
+				mpbotrnd = mpbotrnd*25173 + 13849;
+				wander = 20 + (mpbotrnd >> 10);
+			}
+			lastx = o->x;
+			lasty = o->y;
+		}
+		if (bj >= 0 && !wander)
+		{
+			if (!flag)
+			{
+				t = mpctx[bj].ob;
+				tx = t->x;
+				ty = t->y;
+			}
+			dx = (tx - o->x) >> 8;
+			dy = -((ty - o->y) >> 8);		// map y runs south
+			fx = costable[o->angle] >> 8;
+			fy = sintable[o->angle] >> 8;
+			cr = fx*dy - fy*dx;				// over 0: the target is to the left
+			dt = fx*dx + fy*dy;
+			if (dt > 0 && labs (cr) < dt/12)
+			{
+				long	sx = o->x, sy = o->y, ddx = (tx - o->x)/16, ddy = (ty - o->y)/16;
+				int		k, n, see = !flag && best < 8*65536l;
+
+				for (k=1;k<16 && see;k++)		// nothing between: a wall or a shut
+				{								// door, every 16th of the way
+					sx += ddx;
+					sy += ddy;
+					n = tilemap[(int)(sx>>16)][(int)(sy>>16)];
+					if (n && (!(n & 0x80) || doorposition[n & 0x7f] < 0xc000))
+						see = 0;
+				}
+				*x = 0;
+				*bits = 4 | (see ? tog : 0);	// fire, pressed and let go
+			}
+			else
+			{
+				*x = (dt <= 0 || labs (cr) > dt/3) ? 60 : 12;
+				if (cr > 0)
+					*x = -*x;
+				*bits = 4;
+			}
+			*y = (dt > 0 && labs (cr) < dt && (flag || best > 2*65536l)) ? -60 : 0;
+			return;
+		}
+		if (wander)
+			wander--;
+	}
 	if (mpbot)
 	{
 		if (--mpbotleft <= 0)		// NETBOT: runs, turns and strafes, a few
@@ -2588,7 +2701,8 @@ static void LocalInput (byte *bits, int *x, int *y)
 			mpbotb = ((mpbotrnd & 0x600) == 0x600) | ((mpbotrnd & 0x800) ? 4 : 0);
 		}
 		mpbotrnd = mpbotrnd*25173 + 13849;
-		*bits = mpbotb | ((mpbotrnd & 0x700) == 0x700 ? 8 : 0);	// use, now and then
+		*bits = (mpbothunt ? mpbotb & ~1 : mpbotb)	// (hunting: fire only aimed)
+			| ((mpbotrnd & 0x700) == 0x700 ? 8 : 0);	// use, now and then
 		*x = mpbotx;
 		*y = mpboty;
 		return;
@@ -2986,7 +3100,8 @@ int MPNetArgs (void)
 	static int far done;
 	static char far wnet[] = "net", far wport[] = "port", far wname[] = "name", far wbot[] = "netbot",
 		far wfind[] = "find", far wwatch[] = "watch", far wreplay[] = "replay",
-		far wsnaptest[] = "snaptest", far wfast[] = "fast", far wshow[] = "show";
+		far wsnaptest[] = "snaptest", far wfast[] = "fast", far wshow[] = "show",
+		far whunt[] = "hunt";
 	int		i,net = 0,given = 0,find = 0;
 	byte	d[4];
 
@@ -3038,6 +3153,8 @@ int MPNetArgs (void)
 			mpbot = 1;
 		if (Is (a,wshow))			// with NETBOT: the scores, a chat line, a death
 			mpbotshow = 1;			// screen now and then, for a camera
+		if (Is (a,whunt))			// with NETBOT: plays like a player (mpbothunt)
+			mpbothunt = 1;
 		if (Is (a,wwatch))
 			mpwatch = 1;
 		if (Is (a,wfind))
