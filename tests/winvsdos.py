@@ -5,7 +5,11 @@ SYNC, "step name sum").  Twenty-five minutes for a 3-hour game, where a DOS
 replay to compare against takes four hours.  StevenC & Claude (Anthropic),
 2026-11-11.
 
-    python tests/winvsdos.py GAME.MPR [wl6|wl1|sod] [--win XWIN ...]
+    python tests/winvsdos.py GAME.MPR [wl6|wl1|sod] [--win XWIN ...] [--repdir DIR]
+
+--repdir: the replays from another tree -- the release the machines played,
+when this tree has moved on (git worktree add C:/wolf3d-rel vX.Y; build
+rep/repsod/rep1 there).
 
 The game's data: wl6 (W3DREP.EXE in win32/run), wl1 (W3DREP1.EXE, the
 shareware in C:\\Software\\86Box\\Software\\wolf3d-sw), sod (W3DREPS.EXE in
@@ -26,6 +30,10 @@ GAMES = {"wl6": ("W3DREP.EXE", os.path.join(ROOT, "win32", "run")),
 args = sys.argv[1:]
 mpr = args[0]
 game = next((a for a in args[1:] if a in GAMES), "wl6")
+repdir = args[args.index("--repdir") + 1] if "--repdir" in args else os.path.join(ROOT, "win32")
+if "--repdir" in args:
+    i = args.index("--repdir")
+    del args[i:i + 2]
 win = set(args[args.index("--win") + 1:]) if "--win" in args else {"XWIN"}
 exe, run = GAMES[game]
 
@@ -39,9 +47,9 @@ for line in open(os.path.splitext(mpr)[0] + ".SUM"):
         split.append((step, name, s, dos[step]))
     dos.setdefault(step, (s, name))
 
-local = os.path.join(run, "WVD.MPR")
+local = os.path.join(run, "WVD%d.MPR" % (os.getpid() % 100000))
 shutil.copy(mpr, local)
-out = subprocess.run([os.path.join(ROOT, "win32", exe), "REPLAY", "WVD.MPR", "FAST", "NOAL"], cwd=run,
+out = subprocess.run([os.path.join(repdir, exe), "REPLAY", os.path.basename(local), "FAST", "NOAL"], cwd=run,
                      capture_output=True, text=True, errors="replace", env=dict(os.environ, W3DSUMS="1")).stdout
 os.remove(local)
 w = {int(m.group(1)): m.group(2).upper() for m in re.finditer(r"^w32 step (\d+): (\w+)", out, re.M)}

@@ -1066,7 +1066,20 @@ void Cmd_Use (void)
 	}
 
 	doornum = tilemap[checkx][checky];
+#ifdef W32
+	//
+	// 2026-11-11 (StevenC & Claude): a player can stand on the map's edge
+	// where a floor leaves it open (Spear), and facing out, the tile looked
+	// at is off the map: DOS reads farmapylookup[-1] -- nearmapylookup's last
+	// pointer -- and so a word somewhere past the object plane, never the
+	// pushwall code in play; here the address did not exist, and SPEARW died
+	// 155,221 steps into a game of capture the flag.  Off the map: no pushwall
+	//
+	if (checkx >= 0 && checkx < MAPSIZE && checky >= 0 && checky < MAPSIZE
+	&& *(mapsegs[1]+farmapylookup[checky]+checkx) == PUSHABLETILE)
+#else
 	if (*(mapsegs[1]+farmapylookup[checky]+checkx) == PUSHABLETILE)
+#endif
 	{
 	//
 	// pushable wall
