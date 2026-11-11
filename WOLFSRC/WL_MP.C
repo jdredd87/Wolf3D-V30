@@ -51,6 +51,8 @@ typedef unsigned		word16;
 // it is (MPSpawn) -- a 1.12.1 spun after a boss.
 // 1.13 (2026-11-11): a deathmatch player comes back on the floor's main part,
 // never in a shut closet (FloorBits) -- a 1.12 would put it elsewhere.
+// And a floor keeps 20 actor slots free for the players and the rockets
+// (ScanInfoPlane, WL_GAME.C): a crowded Spear floor had overflowed objlist.
 #define MPVER		0x0115
 #if defined(SPEAR)
 #define MPBUILD		(((unsigned long)MPVER << 16) | 0x53)

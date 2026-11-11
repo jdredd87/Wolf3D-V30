@@ -222,6 +222,9 @@ void ClearMemory (void)
 ==========================
 */
 
+#define MPACTORROOM	20		// actor slots a network game keeps free on a floor
+extern int objcount;
+
 void ScanInfoPlane (void)
 {
 	unsigned	x,y,i,j;
@@ -235,6 +238,13 @@ void ScanInfoPlane (void)
 			tile = *start++;
 			if (!tile)
 				continue;
+			if (mpplayers && tile >= 108 && objcount >= MAXACTORS - MPACTORROOM)
+				continue;		// 2026-11-11 (StevenC & Claude): a network game's
+								// players are actors too, and a Spear floor with
+								// id's full count at hard skill left no slot for
+								// them and the rockets: "GetNewActor: No free
+								// spots", every machine at once.  The floor's last
+								// enemies go unplaced instead
 
 			switch (tile)
 			{
