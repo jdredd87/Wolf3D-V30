@@ -1,6 +1,7 @@
 #!/bin/bash
 # gate.sh -- the Win32 gate: every recording in ref/ replayed by W3DREP.EXE,
-# its sums compared with DOS 1.11's: ref/*.ALL, every sum to the end (the
+# its sums compared with DOS 1.11's (T1-T3, deathmatch: 1.13's, whose respawns
+# moved -- MPVER 0x0115): ref/*.ALL, every sum to the end (the
 # SUMDUMP test build's), else ref/*.SUM, the first 64 (MAXCHECKS: what a
 # release reports).  Needs the game's *.WL6 in run/.  StevenC & Claude (Anthropic), 2026-10-21.
 cd "$(dirname "$0")/run" || exit 1
