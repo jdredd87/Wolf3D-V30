@@ -164,7 +164,8 @@ if WINEXE:
                                 WINDIR], capture_output=True, text=True).stdout.strip()
     note("%s%s on .37: %s" % (WINEXE, WINEXTRA, r))
 t = time.time()
-while step_now() < 1500 and time.time() - t < 400:
+LATEAT = int(os.environ.get("NETLATEAT", "1500"))   # NETLATEAT=STEP: the late one in then
+while step_now() < LATEAT and time.time() - t < 400 + LATEAT // 15:   # (latejoin under load, 2026-11-12)
     time.sleep(10)
 ctl("say Hello from %s" % ARG)
 jobs[LATE] = player(LATE)
