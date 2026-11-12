@@ -168,7 +168,17 @@ LATEAT = int(os.environ.get("NETLATEAT", "1500"))   # NETLATEAT=STEP: the late o
 while step_now() < LATEAT and time.time() - t < 400 + LATEAT // 15:   # (latejoin under load, 2026-11-12)
     time.sleep(10)
 ctl("say Hello from %s" % ARG)
-jobs[LATE] = player(LATE)
+if LATE == "win37b":                # NETLATE=win37b: a second Windows player, late, on .37
+    WINDIR2 = WINDIR + "2"          # too (2026-11-12): its own folder (a copy of WINDIR's
+    subprocess.run(AGENT + ["ps", "if (!(Test-Path %s)) { Copy-Item %s %s -Recurse }; "   # game),
+                            "Copy-Item %s\\%s.EXE %s -Force" % (WINDIR2, WINDIR, WINDIR2,   # its own log
+                                                               WINDIR, WINEXE, WINDIR2)],
+                   capture_output=True, text=True)
+    r = subprocess.run(AGENT + ["start", r"%s\%s.EXE NET %s NAME XWN2 NETBOT SHOW%s" % (WINDIR2, WINEXE, HOST, WINEXTRA),
+                                WINDIR2], capture_output=True, text=True).stdout.strip()
+    note("a second %s on .37, from %s: %s" % (WINEXE, WINDIR2, r))
+else:
+    jobs[LATE] = player(LATE)
 note("%s in, late (step %d)" % (LATE, step_now()))
 time.sleep(60)
 note("console: " + ctl("status").replace("\n", " | ")[:300])
@@ -204,9 +214,11 @@ time.sleep(5)
 if WINEXE:
     log = "WOLF3DMW.LOG" if WINEXE == "WOLF3DMW" else "WOLF3DW.LOG"
     subprocess.run(AGENT + ["get", WINDIR + "\\" + log, os.path.join(OUT, "win37.txt")], capture_output=True)
+    if LATE == "win37b":
+        subprocess.run(AGENT + ["get", WINDIR + "2\\" + log, os.path.join(OUT, "win37b.txt")], capture_output=True)
 PAT = r"net: \d+ steps played.*|net: ended.*|DESYNC.*|desync.*"
 ok = True
-for name in list(jobs) + (["win37"] if WINEXE else []):
+for name in list(jobs) + (["win37"] if WINEXE else []) + (["win37b"] if LATE == "win37b" else []):
     try:
         o = open(os.path.join(OUT, name + ".txt"), errors="replace").read()
     except OSError:
