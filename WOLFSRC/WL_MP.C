@@ -2597,8 +2597,9 @@ static void LocalInput (byte *bits, int *x, int *y)
 			wander = 0;
 			return;
 		}
-		for (j=0;j<mpplayers;j++)
-			if (j != mplocal && !mpctx[j].absent && !mpctx[j].dead && mpctx[j].ob)
+		for (j=0;j<mpplayers;j++)			// (teams: the other side only)
+			if (j != mplocal && !mpctx[j].absent && !mpctx[j].dead && mpctx[j].ob
+				&& (!(mprules2 & RULE2_TEAM) || TEAM (j) != TEAM (mplocal)))
 			{
 				t = mpctx[j].ob;
 				d = labs (t->x - o->x) + labs (t->y - o->y);

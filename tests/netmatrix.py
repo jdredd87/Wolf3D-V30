@@ -68,6 +68,11 @@ PLAN = {   # the server's host, its rules, from the start, late, the Windows pro
     "soddm": (PC, "--players 4 --mode dm --skill 3 --itemrespawn 30", ["dx486", "p3"], "v30", "SPEARW", ""),
     "sodtdm": (PC, "--players 4 --mode tdm --skill 2 --itemrespawn 30", ["dx486", "p3"], "v30", "SPEARW", ""),
     "sodctf": (PC, "--players 4 --mode ctf --skill 2 --itemrespawn 30", ["dx486", "p3"], "v30", "SPEARW", ""),
+    # NETBOT HUNT on every machine (2026-11-12): bots that fight -- after the
+    # nearest player of the other side, the flags first in capture the flag
+    "hunt": (PC, "--players 4 " + DM, ["dx486", "p3"], "v30", "WOLF3DW", " HUNT"),
+    "hunttdm": (PC, "--players 4 --mode tdm --noenemies --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW", " HUNT"),
+    "huntctf": (PC, "--players 4 --mode ctf --noenemies --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW", " HUNT"),
     "soak": (PC, "--players 4 --timelimit 10 " + DM, ["dx486", "p3"], "v30", "WOLF3DW", " WIDE"),
     # Spear of Destiny (2026-10-22)
     "sod": (PC, "--players 4 --mode coop --skill 2", ["dx486", "p3"], "v30", "SPEARW", ""),
@@ -80,6 +85,9 @@ PLAN = {   # the server's host, its rules, from the start, late, the Windows pro
 }
 SPEAR = KIND.startswith("sod")
 HOST, RULES, EARLY, LATE, WINEXE, WINEXTRA = PLAN[KIND]
+if KIND.startswith("hunt"):          # every DOS machine hunting too
+    for _b in EXTRA:
+        EXTRA[_b] += " HUNT"
 if os.environ.get("NETEARLY"):      # other machines: NETEARLY="p3", NETLATE="v30" (2026-10-22)
     EARLY = os.environ["NETEARLY"].split()
     LATE = os.environ.get("NETLATE", LATE)
