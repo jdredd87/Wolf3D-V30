@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D, MULTIPLAYER  --  by StevenC and Claude (Anthropic)
 ==================================================================
-Version 1.12.3, 2026-11-10
+Version 1.13, 2026-11-12
 
 id Software's Wolfenstein 3-D for up to four players over a network:
 deathmatch, team deathmatch, capture the flag or co-op, each with or
@@ -139,6 +139,21 @@ differently when it closed.  Only the Windows programs changed
 (W3DWIN.ZIP); the DOS ones are 1.12.2's, byte for byte, and play with
 1.12.3.  Tested: 4 hours each of deathmatch, team deathmatch, capture the
 flag and co-op, four machines, no desync.
+1.13: in deathmatch a player comes back on the floor's main part -- the
+part the weapons are put in -- never in a closet shut off by a pushwall.
+A crowded Spear of Destiny floor no longer stops every machine at once
+("No free spots in objlist"): the players are actors too, so a network
+floor keeps 20 places free, leaving out a few of its enemies if it must.
+The Windows games no longer crash when a player presses "use" facing off
+the edge of the map.  NETBOT HUNT, a machine that plays by itself as a
+player would (below).  The game asks 195,000 bytes of memory at the start
+(was 200,000), so an 8 MHz V30 with 570 KB free still starts it.  A
+server's --record also writes NAME.SUM beside the recording: every
+machine's checksum as it played, so a recorded game can be checked
+against any build later.  Tested: 3 hours of each mode on the shareware
+and on Spear (which found the two faults above); late joins into games
+12,000 steps old, 10 of 10; two Windows players on one PC, one joining
+late; 8 hours of deathmatch with enemies on the 486 (its digitized sound on), P3, the V30 and Windows, 504,000 steps on all four, no desync -- and its recording the same on Windows as on DOS at all 9,981 checks.  1.13 does not play with 1.12.3: put 1.13 on every machine.
 
 SETUP.TXT walks through setting it all up, step by step -- the network
 on each DOS machine, the game, the server, joining, and troubleshooting.
@@ -263,6 +278,14 @@ ridden out the same way.
 
 On a slow machine, LOWEST (or the menu's A) draws the least picture:
     WOLF3DM NET LOWEST VIEW 10
+
+Nobody at a machine?  NETBOT HUNT plays for it, as a player would: it
+goes after the nearest player of the other side, finding its way round
+walls and opening doors, shoots when it has them in sight, and in capture
+the flag goes for the flags first (NETBOT alone wanders and fires at
+random -- a test):
+
+    WOLF3DM NET 192.168.1.10 NAME BOT NETBOT HUNT
 
 Do not know the server's address?
 

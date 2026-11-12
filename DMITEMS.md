@@ -72,8 +72,9 @@ keeps the biggest.
 
 Why not "what the first start can reach"?  E3L8 starts in a 14-tile room
 shut by a pushwall, so on that floor everything would have been put in one
-closet.  Deathmatch players respawn anywhere (`DMStart`), so the main region
-is what they play in.
+closet.  Deathmatch players respawn on the main region (`DMStart`, since 1.13:
+`FloorBits` keeps it as a bitmap, `mpfloor`), so it is what they play in --
+before 1.13 they could come back anywhere, a shut closet too.
 
 Why not count pushwall secrets?  Because on the floors that need guns most
 (E1L1, the boss floors), id's weapons and clips are *all* in the secrets,

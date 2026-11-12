@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D FOR WINDOWS  --  by StevenC and Claude (Anthropic)
 ==================================================================
-Version 1.12.3, 2026-11-10
+Version 1.13, 2026-11-12
 
 id Software's Wolfenstein 3-D, built for Windows (95 and later) from the
 same source as the DOS games in this project: id's own game, menus and all,
@@ -42,6 +42,13 @@ floor no longer leaves everyone frozen (MULTI.TXT).  1.12.2 plays with
 New in 1.12.3: stays in step with DOS machines when a door has been held
 open for a long time.  Plays with the DOS 1.12.2 programs (they are
 1.12.3's too).
+
+New in 1.13: no crash when a player presses "use" facing off the edge of
+the map (Spear of Destiny's capture the flag found it).  In deathmatch a
+player comes back on the floor's main part.  NETBOT HUNT plays the network
+game by itself, as a player would (MULTI.TXT).  Two can play from one PC:
+the second copy takes another port by itself -- run each from its own
+folder, as each keeps a log beside it.  1.13 plays with 1.13 only.
 
 
 PLAYING

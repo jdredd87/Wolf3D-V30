@@ -2708,3 +2708,77 @@ fixed WOLF3DW on Windows and the three DOS machines on 1.11.2 (the 486 on
 DMA 3, digitized sound on): **all four 504,000 steps in each, 0 bad, no
 desync, the server 0 desyncs**.  The 486 is at 48 hours on DMA 3 without a
 freeze (`stage/tests/series-mix-20261103`).
+
+## 1.13: the long games' faults, bots that hunt, respawns on the floor -- 2026-11-11/12
+
+StevenC & Claude.  After 1.12.3, StevenC asked for "all of it": what to
+test and what to make better, one after another.
+
+**Every checksum, logged.**  A server's `--record X.MPR` writes `X.SUM` too
+(`mp/mpserver.py`, `mp/mpsrv.pas`): each machine's sum as it played, every
+50 steps.  `tests/winvsdos.py X.MPR [wl6|wl1|sod] [--repdir DIR]` replays
+the recording on a Windows replay and compares -- so a recorded game is
+checked against Windows with no second run on the DOS machines.  Check a
+release's games with that release's replays (`--repdir`): a later build
+replays an older game differently once the game itself changed.
+
+**Spear of Destiny and the shareware, 3 hours of each mode** (on 1.12.3).
+The shareware: all four modes, Windows the same as DOS at every one of
+3,744 sums each.  (The V30 froze in its deathmatch six times -- its
+PicoMEM's emulated Sound Blaster, as in Spear's games: it plays both with
+`NOSB` -- and in team deathmatch, CTF and co-op with `NOSB`, none.)  Spear
+found two faults:
+
+* **"GetNewActor: No free spots in objlist!" on every machine at once**,
+  106,801 steps into a deathmatch: the console's floor change loaded a
+  Spear floor whose enemies at hard skill fill id's 150 actors -- and a
+  network game's players are actors too.  Not a leak: linked plus free was
+  150 all game.  `ScanInfoPlane` keeps `MPACTORROOM` (20) slots free in a
+  network game, leaving out an enemy past that; the recording now replays
+  past the floor to its end.
+* **WOLF3DW crashed** in CTF at step 155,221: a player on an edge tile
+  pressed use facing north, and `Cmd_Use` read `farmapylookup[-1]`.  Under
+  W32 the pushwall check only runs on the map; that game's 3,744 sums then
+  all matched DOS's.
+
+**Deathmatch respawns on the main floor** (MPVER 0x0115).  `DMStart` took
+any open tile, a closet shut by a pushwall too.  `FloorBits` keeps the
+floor's main part -- the region `DMITEMS.md`'s weapons go in -- as a
+4096-bit map, `mpfloor` (in the snapshot), and a respawn must land on it.
+The gate's three deathmatch recordings change from step 2,150: their DOS
+sums were made again from a DOS 1.13 replay on P3, and T4 replayed the
+same way still matched 1.11's -- the gate 8 of 8.
+
+**NETBOT HUNT.**  `mp/huntbot.py`'s hunting, a switch: after the nearest
+player (in team games, of the other side), the flags first in CTF, fires
+only aimed, within 8 tiles, nothing between.  It steered straight at its
+target and never pressed use, so on a maze floor it ran into walls: four
+hunters, about 2 kills a floor.  Now, with a wall between, `BotRoute`
+searches `mpfloor` breadth first in `spotvis` (the renderer's scratch,
+cleared before and after), keeps the first 32 tiles of the way, walks them,
+presses use at a shut door, and looks again every 2 s -- about twice the
+kills, and the V30's screen showed it killed by the Windows hunter.  Only
+the bot's input changes, so nothing desyncs: 30 minutes each of deathmatch
+and CTF, four hunters, every machine's sums the same, Windows' too.
+
+**The V30 and the memory check.**  The first `BotRoute` (2.6 KB) left the
+V30 at id's "You do not have enough memory" screen.  A test build that
+printed `mminfo.mainmem` measured it: **199,506 bytes** with the smaller
+version (1.2 KB, its 1 KB ring from `MM_GetPtr` only on a hunting machine),
+so 1.13 before it had about 200,766 -- 770 bytes over our 200,000.  The
+network game asks 195,000 now (`WL_MAIN.C`).  And on Windows `unsigned` is
+4 bytes: the ring sized `BOTQ*2` overran its block and WOLF3DW died
+catching up -- `BOTQ*sizeof(unsigned)`.
+
+**Late joins under load**: `NETLATEAT=12000` makes netmatrix's late
+machine (the V30) join 12,000 steps in.  Deathmatch with enemies 4 times,
+Spear's 3, the shareware's 3: **10 of 10**, every machine OK; the V30 took
+a snapshot at step 12,334 and was playing 45 s later.
+
+**Two Windows players**: `NETLATE=win37b` starts a second WOLF3DW on .37,
+late, from its own folder (`C:\W3DWIN2`; each keeps its log beside it); it
+took port 64796, the first having 31992.  Co-op and deathmatch with
+enemies, 12,000 steps each: all four players OK, 0 desyncs, and the
+recordings' 239 sums each the same on Windows as DOS.
+
+**The 486, 8 hours**: 8 hours of deathmatch with enemies on the 486 (its digitized sound on), P3, the V30 and Windows, 504,000 steps on all four, no desync -- and its recording the same on Windows as on DOS at all 9,981 checks.
