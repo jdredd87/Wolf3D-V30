@@ -138,7 +138,7 @@ open(os.path.join(OUT, "console.txt"), "w").close()
 note("%s server on %s: %s" % (ARG, HOST, RULES))
 srvout = open(os.path.join(OUT, "server.txt"), "w")
 if KIND in ("python", "dmen", "ctf", "wl1", "wl1w", "wl1dm", "wl1tdm", "wl1ctf", "wl1coop", "sod", "sod30",
-            "sodfloors", "soddm", "sodtdm", "sodctf"):
+            "sodfloors", "soddm", "sodtdm", "sodctf", "hunt", "hunttdm", "huntctf"):
     srv = subprocess.Popen([sys.executable, "-u", "mp/mpserver.py"] + RULES.split(), cwd=WOLF,
                            stdin=subprocess.DEVNULL, stdout=srvout, stderr=subprocess.STDOUT, env=ENV)
 elif KIND in ("mpsrvw", "tdmw", "soak", "sodw"):
