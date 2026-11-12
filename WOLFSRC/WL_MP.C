@@ -2570,6 +2570,86 @@ static void Take (byte far *d, unsigned len)
 	}
 }
 
+// NETBOT HUNT's way round a wall (2026-11-12, StevenC & Claude): a breadth-
+// first search over the floor's main part (mpfloor, FloorBits: doors open,
+// deathmatch only), from the bot to its target's tile, in spotvis -- the
+// renderer's scratch, cleared before and after, as FloorBits leaves it.  It
+// keeps the first BOTPATH tiles of the way; the bot walks them a tile at a
+// time and looks again every 2 s.  Only the bot's own input comes of it.
+// Its ring comes from the memory manager the first time, so a machine that
+// is not hunting pays nothing for it (2.6 KB as static data and code put the
+// V30 under the start's 200,000 bytes, 2026-11-12).
+#define BOTQ		512				// the search's ring (a floor's frontier)
+#define BOTPATH		32
+#define FLOORC(c)	(mpfloor[(c)>>3] & (1 << ((c)&7)))	// c = x*64+y
+static memptr botqm;
+static byte far botpx[BOTPATH], far botpy[BOTPATH];
+static int far botpn, far botpk, far botroute, far botgx = -1, far botgy;
+static int far botd[4] = {64,-64,1,-1};	// spotvis 1-4: came by this; 9: the start
+
+static void BotRoute (int mx, int my, int gx, int gy)
+{
+	byte		*v = &spotvis[0][0];
+	unsigned	far *q, head = 0, tail = 0, c, n, goal = gx*64+gy, len, i;
+
+	botpn = botpk = 0;
+	if (!(mprules & RULE_DM) || !FLOORC (goal))
+		return;
+	if (!botqm)
+	{
+		MM_GetPtr (&botqm,BOTQ*2);
+		MM_SetLock (&botqm,true);
+	}
+	q = (unsigned far *)botqm;
+	_fmemset (spotvis,0,sizeof(spotvis));
+	c = mx*64+my;
+	v[c] = 9;
+	q[tail++] = c;
+	while (head != tail && tail - head < BOTQ-4)	// (too wide: no way this time)
+	{
+		c = q[head++ & (BOTQ-1)];
+		if (c == goal)
+		{								// back from the goal: the last BOTPATH
+			for (len = 0;v[c] != 9;len++)	// tiles before the bot's are its way
+				c -= botd[v[c]-1];
+			for (i = 0, c = goal;v[c] != 9;i++, c -= botd[v[c]-1])
+				if (len-1-i < BOTPATH)
+				{
+					botpx[len-1-i] = c >> 6;
+					botpy[len-1-i] = c & 63;
+				}
+			botpn = len < BOTPATH ? len : BOTPATH;
+			break;
+		}
+		for (i=0;i<4;i++)
+		{
+			n = c + botd[i];
+			if (n < 4096 && !v[n] && FLOORC (n))
+			{
+				v[n] = i+1;
+				q[tail++ & (BOTQ-1)] = n;
+			}
+		}
+	}
+	_fmemset (spotvis,0,sizeof(spotvis));	// as the renderer leaves it
+}
+
+static int BotSees (long x0, long y0, long x1, long y1)	// nothing between: a
+{														// wall or a shut door,
+	long	ddx = (x1 - x0)/16, ddy = (y1 - y0)/16;		// every 16th of the way
+	int		k, n;
+
+	for (k=1;k<16;k++)
+	{
+		x0 += ddx;
+		y0 += ddy;
+		n = tilemap[(int)(x0>>16)][(int)(y0>>16)];
+		if (n && (!(n & 0x80) || doorposition[n & 0x7f] < 0xc000))
+			return 0;
+	}
+	return 1;
+}
+
 //
 // This player's controls, as a demo would record them: button bits, turn,
 // move -- PollControls' polling at DEMOTICS, without touching what the
@@ -2652,11 +2732,41 @@ static void LocalInput (byte *bits, int *x, int *y)
 		}
 		if (bj >= 0 && !wander)
 		{
+			int		routed = 0, door = 0, clear;
+
 			if (!flag)
 			{
 				t = mpctx[bj].ob;
 				tx = t->x;
 				ty = t->y;
+			}
+			clear = BotSees (o->x,o->y,tx,ty);
+			if (!clear)						// a wall between: the way round
+			{
+				int		gx = (int)(tx >> 16), gy = (int)(ty >> 16), wx, wy, n;
+
+				if (--botroute <= 0 || botpk >= botpn
+					|| labs ((long)gx - botgx) + labs ((long)gy - botgy) > 3)
+				{
+					botroute = 35;
+					botgx = gx;
+					botgy = gy;
+					BotRoute (o->tilex,o->tiley,gx,gy);
+				}
+				while (botpk < botpn && o->tilex == botpx[botpk] && o->tiley == botpy[botpk])
+					botpk++;
+				if (botpk < botpn)
+				{
+					wx = botpx[botpk];
+					wy = botpy[botpk];
+					n = tilemap[wx][wy];
+					if ((n & 0x80) && doorposition[n & 0x7f] < 0xc000
+						&& labs ((long)wx - o->tilex) + labs ((long)wy - o->tiley) == 1)
+						door = 1;				// shut, and next: open it
+					tx = ((long)wx << 16) + 0x8000l;
+					ty = ((long)wy << 16) + 0x8000l;
+					routed = 1;
+				}
 			}
 			dx = (tx - o->x) >> 8;
 			dy = -((ty - o->y) >> 8);		// map y runs south
@@ -2666,17 +2776,8 @@ static void LocalInput (byte *bits, int *x, int *y)
 			dt = fx*dx + fy*dy;
 			if (dt > 0 && labs (cr) < dt/12)
 			{
-				long	sx = o->x, sy = o->y, ddx = (tx - o->x)/16, ddy = (ty - o->y)/16;
-				int		k, n, see = !flag && best < 8*65536l;
+				int		see = !flag && clear && best < 8*65536l;	// (BotSees above)
 
-				for (k=1;k<16 && see;k++)		// nothing between: a wall or a shut
-				{								// door, every 16th of the way
-					sx += ddx;
-					sy += ddy;
-					n = tilemap[(int)(sx>>16)][(int)(sy>>16)];
-					if (n && (!(n & 0x80) || doorposition[n & 0x7f] < 0xc000))
-						see = 0;
-				}
 				*x = 0;
 				*bits = 4 | (see ? tog : 0);	// fire, pressed and let go
 			}
@@ -2687,7 +2788,9 @@ static void LocalInput (byte *bits, int *x, int *y)
 					*x = -*x;
 				*bits = 4;
 			}
-			*y = (dt > 0 && labs (cr) < dt && (flag || best > 2*65536l)) ? -60 : 0;
+			*y = (dt > 0 && labs (cr) < dt && (flag || routed || best > 2*65536l)) ? -60 : 0;
+			if (door && tog)
+				*bits |= 8;						// use, pressed and let go
 			return;
 		}
 		if (wander)

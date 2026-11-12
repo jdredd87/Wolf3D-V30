@@ -1328,12 +1328,15 @@ void InitGame (void)
 	if (mminfo.mainmem < 150000L)	// (tests/mpprof.py): the profiler's 36 KB
 #elif !defined(SPEAR) || defined(NETGAME)	// (SPEARM, Spear's network game:
 									// the same, 2026-10-22)
-	if (mminfo.mainmem < 200000L)	// multiplayer (StevenC & Claude): id's 235000
-									// less 35 KB -- the network code put the 486
+	if (mminfo.mainmem < 195000L)	// multiplayer (StevenC & Claude): id's 235000
+									// less 40 KB -- the network code put the 486
 									// (550 KB free) just under 235000, then on
 									// 2026-10-07 under 215000.  id's figure is
 									// for a page cache it likes; less is a few
-									// pages fewer, from XMS
+									// pages fewer, from XMS.  195000 since
+									// 2026-11-12: the V30 had 200,766 with 1.13,
+									// and NETBOT HUNT's route (1.2 KB) left it
+									// 199,506 -- refused at 200000
 #else
 	// id asked 257,000 for Spear; an 8 MHz V30 has less, and played all 21
 	// floors' generated demos in it with the same checksums as a 486 -- so
