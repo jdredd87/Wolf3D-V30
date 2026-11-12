@@ -2597,7 +2597,7 @@ static void BotRoute (int mx, int my, int gx, int gy)
 		return;
 	if (!botqm)
 	{
-		MM_GetPtr (&botqm,BOTQ*2);
+		MM_GetPtr (&botqm,BOTQ*sizeof(unsigned));	// (Win32's are 4 bytes)
 		MM_SetLock (&botqm,true);
 	}
 	q = (unsigned far *)botqm;
