@@ -93,6 +93,7 @@ if os.environ.get("NETEARLY"):      # other machines: NETEARLY="p3", NETLATE="v3
     LATE = os.environ.get("NETLATE", LATE)
 WINDIR = {"WOLF3DW1": r"C:\W3DWIN1", "SPEARW": r"C:\W3DSOD"}.get(WINEXE, r"C:\W3DWIN")
 RULES += " --steps %d --once" % STEPS
+RULES += " " + os.environ.get("NETSRVEXTRA", "")   # the server's own: "--silence 6000:75" (2026-11-13)
 if os.environ.get("NETRECORD"):     # the game recorded, for REPLAY (mpprof.py, 2026-10-23)
     RULES += " --record " + os.environ["NETRECORD"]
 CTLHOST = HOST if KIND in ("mpsrv", "sodsrv") else "127.0.0.1"     # (the PC's servers: loopback only)

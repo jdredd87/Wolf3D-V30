@@ -202,6 +202,8 @@ class Console:
             parts.append("PAUSED")
         if getattr(s, "waitfor", None) is not None:
             parts.append("WAITING for %s to catch up" % s.who(s.waitfor))
+        if getattr(s, "lost_at", None) is not None:
+            parts.append("HELD: everyone was lost %d s ago" % (time.perf_counter() - s.lost_at))
         return ", ".join(parts)
 
     def slot(self, word):

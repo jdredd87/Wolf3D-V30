@@ -80,7 +80,13 @@ on another build can be checked against them (tests/winvsdos.py).
 --drop P throws away that fraction of packets each way, for testing.
 --silence STEP:SECS[,STEP:SECS...] is a network outage on demand: from that
 step the server hears and sends nothing for SECS seconds, while its clock
-runs on -- what a WiFi dropout looks like from both ends.  On
+runs on -- what a WiFi dropout looks like from both ends.
+--hold SECS (2026-11-13): when every player is lost at once -- not heard
+from for --drop-after, as a router's reboot does to them all -- the game is
+held for SECS (300) instead of ended: no steps are made, and whoever comes
+back joins it as a late joiner (from the last snapshot, or the first step),
+and it goes on once one is in.  A player who quits is not lost: when the
+last one quits, the game ends as before.  0: never hold.  On
 Windows the port needs an inbound firewall rule (UDP 31992, local subnet).
 """
 import os
@@ -171,6 +177,7 @@ class Server:
         # back, and a late joiner's catch-up is a burst of them (2026-10-16)
         self.txgap = arg("--txgap", 1000, int) / 1e6
         self.joinwait = arg("--joinwait", 60, float)
+        self.hold = arg("--hold", 300, float)
         self.nosnap = "--nosnap" in sys.argv
         self.silence = sorted(tuple(int(x) for x in w.split(":"))
                               for w in arg("--silence", "").split(",") if w)
@@ -212,6 +219,7 @@ class Server:
         self.paused = False         # pause: no steps until it goes on
         self.next_paused = 0.0
         self.waitfor = None         # everyone waits for this joiner (--joinwait)
+        self.lost_at = None         # everyone lost at once: held since (--hold)
         self.next_join = 0.0
         self.snapshot = None        # (step, bytes): the game, for joiners
         self.pull = None            # one being asked for from a player
@@ -327,7 +335,13 @@ class Server:
         if self.waitfor == i:
             self.go_on("%s has gone" % s.name)
         if self.state == "play" and not self.people():
-            self.game_over("everyone has left")
+            if reason == P.BYE_DROPPED and self.hold > 0 and self.lost_at is None:
+                self.lost_at = time.perf_counter()
+                self.next_paused = 0.0
+                self.log("everyone is lost at step %d: the game is held %d s for them to come back"
+                         % (len(self.history), self.hold))
+            elif self.lost_at is None:
+                self.game_over("everyone has left")
 
     def game_over(self, why):
         for i in self.everyone():
@@ -586,11 +600,31 @@ class Server:
                     self.joiners(now)
                 if self.pull:
                     self.snap_pull(now)
-                held = self.paused or self.waitfor is not None
+                if self.lost_at is not None:    # held for the lost (--hold): one is
+                    newest = len(self.history) - 1      # back once caught up, by the
+                    back = []                           # rule make_step lets one in by
+                    for i in self.people():             # (present is set only as a
+                        s = self.slots[i]               # step is made)
+                        done = s.played if s.played is not None else (
+                            None if s.have == P.NOBODY else s.have)
+                        if s.ready and done is not None and done >= newest - CAUGHT_UP:
+                            back.append(i)
+                    if back:
+                        self.log("going on at step %d: %s is back" % (len(self.history), self.who(back[0])))
+                        self.lost_at = None
+                        if not self.paused and self.waitfor is None:
+                            self.resume()
+                    elif now - self.lost_at > self.hold:
+                        self.lost_at = None
+                        for i in self.people():     # a joiner still loading
+                            self.leave(i, "never got in: the game is over", P.BYE_END)
+                        if self.state == "play":
+                            self.game_over("everyone was lost, and nobody came back in %d s" % self.hold)
+                held = self.paused or self.waitfor is not None or self.lost_at is not None
                 if self.state == "play" and held:
                     if now >= self.next_paused:     # why no steps come, every half second
                         self.next_paused = now + 0.5
-                        packet = P.paused(1) if self.paused else P.paused(2, self.waitfor)
+                        packet = P.paused(1) if self.paused or self.waitfor is None else P.paused(2, self.waitfor)
                         for i in self.everyone():
                             self.send(packet, self.get(i).addr)
                     if now >= self.tick:            # a joiner's catch-up goes on

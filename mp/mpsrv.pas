@@ -150,6 +150,9 @@ var
   PullStep, PullTotal, PullGot, PullBegan, PullAsked, SnapRest: LongInt;
   WaitFor: Integer;              { everyone waits for this joiner (--joinwait), -1 none }
   JoinWait: LongInt;             { seconds; 0 never }
+  Hold: LongInt;                 { --hold: seconds a game is held when everyone is lost; 0 never }
+  Lost: Boolean;                 { ... it is held: everyone lost at once (a router's reboot) }
+  LostAt: LongInt;
   NextJoin, NextFeed: LongInt;
   Slots: array[0..LASTSLOT] of TSlot;
   Newest: LongInt;               { the newest step made; -1 none }
@@ -908,6 +911,7 @@ begin
   Playing := False;
   Paused := False;
   WaitFor := -1;
+  Lost := False;
   SnapLen := 0;
   PullOn := False;
   HistReset;
@@ -949,7 +953,16 @@ begin
   Log(Who(I) + ' ' + Why + ' (' + I2S(Slots[I].Inputs) + ' inputs, had step ' + HaveStr(I) + ')');
   Slots[I].Used := False;
   NextNames := 0;
-  if Playing and not AnyPeople then GameOver('everyone has left');
+  if Playing and not AnyPeople then
+    if (Reason = BYE_DROPPED) and (Hold > 0) and not Lost then
+    begin                          { everyone lost at once: held for them (--hold) }
+      Lost := True;
+      LostAt := Ticks;
+      NextPausedT := 0;
+      Log('everyone is lost at step ' + I2S(Newest + 1) + ': the game is held ' + I2S(Hold)
+          + ' s for them to come back');
+    end
+    else if not Lost then GameOver('everyone has left');
 end;
 
 procedure GameOver(const Why: ShortString);
@@ -1727,6 +1740,7 @@ begin
   if LiveTime >= 0 then S := S + ', timelimit ' + I2S(LiveTime) + ' in this game';
   if Paused then S := S + ', PAUSED';
   if WaitFor >= 0 then S := S + ', WAITING for ' + Who(WaitFor) + ' to catch up';
+  if Lost then S := S + ', HELD: everyone was lost ' + I2S((Ticks - LostAt) div T_SEC) + ' s ago';
   Settings := S;
 end;
 
@@ -1860,6 +1874,40 @@ begin
   for K := 1 to 3 do
     for I := 0 to LASTSLOT do
       if IsReceiver(I) then SendTo(I, 6);
+end;
+
+{ ------------------------------------- everyone lost at once (--hold, 2026-11-13) }
+
+{ held: one is back once caught up, by MakeStep's rule (Present is set only as a step is made) }
+procedure HoldCheck(T: LongInt);
+var I, Back: Integer; D: LongInt; Ok: Boolean;
+begin
+  Back := -1;
+  for I := 0 to Players - 1 do
+    with Slots[I] do
+      if Used and not Bot and Ready and (Back < 0) then
+      begin
+        Ok := True;
+        D := 0;
+        if HasPlayed then D := LongInt(Played)
+        else if Have <> NOBODY then D := LongInt(Have)
+        else Ok := False;
+        if Ok and (D >= Newest - CAUGHT_UP) then Back := I;
+      end;
+  if Back >= 0 then
+  begin
+    Log('going on at step ' + I2S(Newest + 1) + ': ' + Who(Back) + ' is back');
+    Lost := False;
+    if not Paused and (WaitFor < 0) then Resume;
+  end
+  else if T - LostAt > Hold * T_SEC then
+  begin
+    Lost := False;
+    for I := 0 to Players - 1 do         { a joiner still loading }
+      if Slots[I].Used and not Slots[I].Bot then
+        Leave(I, 'never got in: the game is over', BYE_END, '');
+    if Playing then GameOver('everyone was lost, and nobody came back in ' + I2S(Hold) + ' s');
+  end;
 end;
 
 { ------------------------------------- a joiner that cannot catch up (--joinwait) }
@@ -2360,6 +2408,7 @@ begin
   if Playing then S := 'step ' + I2S(Newest + 1) else S := 'waiting';
   if Paused then S := S + ' PAUSED';
   if WaitFor >= 0 then S := S + ' WAITING';
+  if Lost then S := S + ' HELD';
   S := SPIN[T and 3] + ' MPSRV ' + S + ', ' + I2S(Ppl) + ' in, rx ' + I2S(RecvN) + ' tx ' + I2S(SentN)
        + '  > ' + Typed;
   if Length(S) > 79 then S := Copy(S, Length(S) - 78, 79);
@@ -2433,6 +2482,7 @@ begin
   if Playing then S := 'step ' + I2S(Newest + 1) else S := 'waiting';
   if Paused then S := S + ' PAUSED';
   if WaitFor >= 0 then S := S + ' WAITING';
+  if Lost then S := S + ' HELD';
   S := 'MPSRV ' + SPIN[T and 3] + ' ' + S + ', ' + I2S(Ppl) + ' in, rx ' + I2S(RecvN) + ' tx '
        + I2S(SentN) + ', ' + I2S(Desyncs) + ' desyncs' + #0;
   SetConsoleTitleA(@S[1]);
@@ -2614,6 +2664,7 @@ begin
 {$ENDIF}
   WriteLn('  --drop-after S   a player not heard from for S seconds loses its   (60)');
   WriteLn('                   slot -- a WiFi dropout shorter than that is ridden out');
+  WriteLn('  --hold S         all lost at once: held S s for them; 0 ends it (300)');
   WriteLn('  --joinwait S     a player joining late who would take more than S      (60)');
   WriteLn('                   seconds to catch up has everyone wait for them --');
   WriteLn('                   until the rest can be closed in S/2; 0: never wait');
@@ -2772,6 +2823,8 @@ begin
   Quiet := Flag('--quiet');
   DropAfter := Arg('--drop-after', 60) * T_SEC;
   JoinWait := Arg('--joinwait', 60);
+  Hold := Arg('--hold', 300);
+  Lost := False;
   WaitFor := -1;
   NoSnap := Flag('--nosnap');
   SnapLen := 0; PullOn := False; SnapRest := 0;
@@ -2926,13 +2979,14 @@ begin
       Joiners;
     end;
     if PullOn then SnapPull;
-    if Playing and (Paused or (WaitFor >= 0)) then
+    if Playing and Lost then HoldCheck(T);
+    if Playing and (Paused or (WaitFor >= 0) or Lost) then
     begin
       if T >= NextPausedT then
       begin
         NextPausedT := T + T_SEC div 2;
         Head(PAUSEDP);
-        if Paused then begin Tx[4] := 1; Tx[5] := 0; end
+        if Paused or (WaitFor < 0) then begin Tx[4] := 1; Tx[5] := 0; end
         else begin Tx[4] := 2; Tx[5] := WaitFor; end;
         for I := 0 to LASTSLOT do
           if IsReceiver(I) then SendTo(I, 6);
@@ -2943,7 +2997,7 @@ begin
         SendSteps;
       end;
     end;
-    if Playing and not Paused and (WaitFor < 0) then
+    if Playing and not Paused and (WaitFor < 0) and not Lost then
       while (Ticks - NextStep >= 0) and Playing and not StopNow do
       begin
         if Newest + 1 >= HistCapacity then
