@@ -193,6 +193,14 @@ def un_sync_scores(b):
     return [(v[2 * i], v[2 * i + 1]) for i in range(4)]
 
 
+def un_sync_caps(b):
+    """Since 2026-11-13 the scores end in the teams' captures (Gold, Silver),
+    or None from an older machine."""
+    if len(b) < 10 + 16 + 2:
+        return None
+    return b[26], b[27]
+
+
 def desync(step, mask):
     return head(DESYNC) + struct.pack("<IB", step, mask)
 

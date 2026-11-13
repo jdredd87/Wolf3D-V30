@@ -369,6 +369,12 @@ class Console:
             if sl is not None:
                 f, d = sc[i] if i < len(sc) else (0, 0)
                 self.say("  P%d  %-16s %4d frags  %4d deaths" % (i + 1, sl.name, f, d))
+        r2 = getattr(s, "rules2", 0)        # the teams: Gold P1 P3, Silver P2 P4
+        if r2 & 2 and getattr(s, "caps", None):
+            self.say("  Gold %d, Silver %d (captures)" % s.caps)
+        elif r2 & 1:
+            self.say("  Gold %d, Silver %d (frags)" % (sum(sc[k][0] for k in (0, 2) if k < len(sc)),
+                                                      sum(sc[k][0] for k in (1, 3) if k < len(sc))))
 
     def status(self):
         s, P = self.s, self.P

@@ -164,6 +164,7 @@ var
   ScoresStep: LongInt;
   Scores: array[0..MAXP - 1, 0..1] of SmallInt;
   HaveScores: Boolean;
+  Caps: array[0..1] of Byte;     { the teams' captures, from the newest SYNC }
   LiveTime, LiveFrag: LongInt;   { limits changed in play; -1 none }
   Desyncs, SentN, RecvN: LongInt;
   Games: Integer;
@@ -1389,6 +1390,8 @@ begin
             Scores[K, 0] := SmallInt(GetW(14 + K * 4));
             Scores[K, 1] := SmallInt(GetW(16 + K * 4));
           end;
+          Caps[0] := 0; Caps[1] := 0;
+          if RxLen >= 32 then begin Caps[0] := Rx[30]; Caps[1] := Rx[31]; end;
         end;
         P := SumAt(StepN);
         if P = nil then Exit;
@@ -2255,6 +2258,9 @@ begin
         if Slots[I].Used then
           Say('  P' + I2S(I + 1) + '  ' + Pad(Slots[I].Name, 16) + ' ' + I2S(Scores[I, 0]) + ' frags  '
               + I2S(Scores[I, 1]) + ' deaths');
+      if Rules2 and RULE2_CTF <> 0 then Say('  Gold ' + I2S(Caps[0]) + ', Silver ' + I2S(Caps[1]))
+      else if Rules2 and RULE2_TEAM <> 0 then
+        Say('  Gold ' + I2S(Scores[0, 0] + Scores[2, 0]) + ', Silver ' + I2S(Scores[1, 0] + Scores[3, 0]));
     end;
   end
   else if Cmd = 'kick' then

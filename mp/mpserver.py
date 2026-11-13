@@ -225,6 +225,7 @@ class Server:
         self.pull = None            # one being asked for from a player
         self.snap_rest = 0.0        # after a failure: none asked for until then
         self.scores = None          # (step, [(frags, deaths)]) from the last SYNC
+        self.caps = None            # ... and its teams' captures (2026-11-13)
         self.live = {}              # limits changed in play, for status
         for k in range(self.bots):              # a new game's bots play anew
             self.slots[self.humans + k] = self.new_bot(k)
@@ -467,6 +468,7 @@ class Server:
             sc = P.un_sync_scores(b)
             if sc and (self.scores is None or step >= self.scores[0]):
                 self.scores = (step, sc)
+                self.caps = P.un_sync_caps(b)
             first = self.sums.get(step)
             if first is None:
                 self.sums[step] = (total, i)
