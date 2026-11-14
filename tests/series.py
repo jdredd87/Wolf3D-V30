@@ -34,7 +34,7 @@ KIND = sys.argv[3] if len(sys.argv) > 3 else "python"
 SRV = os.path.join(T, "net-" + KIND.replace("@", "-"), "server.txt")
 NAME = {"dx486": "X86", "p3": "XP3", "v30": "X30"}
 EXTRA = {"dx486": "", "p3": " VIEW 19", "v30": " LOWEST VIEW 10"}     # netmatrix's own
-if KIND.startswith("hunt"):          # netmatrix's NETBOT HUNT plans: a rejoin hunts too
+if "hunt" in KIND:                  # netmatrix's NETBOT HUNT plans: a rejoin hunts too
     for _b in EXTRA:
         EXTRA[_b] += " HUNT"
 GAME = (r"C:\WL1", "WOLF3DM1") if KIND.startswith("wl1") else \
