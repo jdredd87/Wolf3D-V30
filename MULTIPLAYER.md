@@ -2807,9 +2807,7 @@ rule: `present` is set only as a step is made, so the hold checks it
 itself).  Nobody back in time: it ends as before.  Loopback with
 `mp/mpfake.py` first, then live: `NETSRVEXTRA="--silence 6000:62"` -- every
 machine lost at step 7,049, held, the 486 back and the game going on, the
-V30 and P3 back in, 15,000 steps, 0 desyncs.  (P3's first rejoin stopped at
-step 127 catching up from the first step, and left; its second got in.  Not
-understood -- its log was overwritten by the second.)
+V30 and P3 back in, 15,000 steps, 0 desyncs.  (P3's first rejoin stopped at step 127, catching up from the first step: its log -- series.py appends each rejoin's -- says 128 steps held, 2,128 packets sent and only 10 received in 60 s, while the server sent names every 2 s and steps all along: its PicoMEM's WiFi had stopped receiving, the card's known deafness, not the hold.  Its second rejoin got in.)
 
 **And the end of a game**: the servers send the last steps to every machine
 first (up to 3 s), then ten BYEs over 2 s -- the V30, 6 steps behind when
