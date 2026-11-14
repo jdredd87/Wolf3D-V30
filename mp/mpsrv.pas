@@ -2723,11 +2723,35 @@ begin
 {$ENDIF}
 end;
 
+{ the game is over: the last steps to every machine first, for up to 3 s --
+  a V30 6 steps behind missed the end, BYEs and all (2026-11-13) }
+procedure DrainEnd;
+var I: Integer; T: LongInt; All: Boolean;
+begin
+  if not Playing then Exit;
+  T := Ticks;
+  repeat
+    All := True;
+    for I := 0 to Players - 1 do
+      with Slots[I] do
+        if Used and not Bot and Ready and ((Have = NOBODY) or (LongInt(Have) < Newest)) then All := False;
+    if All then Break;
+    if Ticks - NextFeed >= 0 then
+    begin
+      NextFeed := Ticks + 4;
+      SendSteps;
+    end;
+    while SnPoll(Rx, SizeOf(Rx), RxLen) do
+      if SnToPort = GamePort then HandleGame;
+    SnWait(1);
+  until Ticks - T > 3 * T_SEC;
+end;
+
 procedure Cleanup;
-var I, K: Integer; L: Word;
+var I, K: Integer; L: Word; T: LongInt;
 begin
   RecClose;
-  for K := 1 to 5 do
+  for K := 1 to 10 do                  { ten, over 2 s: a PicoMEM loses frames back to back }
   begin
     for I := 0 to LASTSLOT do
       if IsReceiver(I) then
@@ -2735,6 +2759,8 @@ begin
         L := ByeLen(I, BYE_END, '');
         SendTo(I, L);
       end;
+    T := Ticks;
+    while Ticks - T < T_SEC div 5 do SnWait(1);
   end;
   TimerStop;
 {$IFNDEF WINDOWS}
@@ -3033,6 +3059,7 @@ begin
     LogTick;
     if not Busy and not StopNow then SnWait(1);   { Windows: a millisecond's sleep; DOS: nothing }
   until StopNow;
+  DrainEnd;
 
   ClearStatus;
   if Playing then

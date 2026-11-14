@@ -652,10 +652,22 @@ class Server:
                     pass                # Windows: an ICMP port-unreachable
         except (KeyboardInterrupt, StopIteration):
             pass
-        for k in range(5):              # UDP: one BYE lost left a V30 waiting
-            for i in self.everyone():   # for steps that never came
-                self.send(P.bye(i, P.BYE_END), self.get(i).addr)
-            time.sleep(0.05)
+        if self.state == "play":        # the last steps to every machine first, for up
+            newest = len(self.history) - 1      # to 3 s (2026-11-13: a V30 6 steps
+            until = time.perf_counter() + 3.0   # behind missed the end, BYEs and all)
+            while time.perf_counter() < until and any(
+                    self.get(i).ready and (self.get(i).have == P.NOBODY or self.get(i).have < newest)
+                    for i in self.people()):
+                self.feed()
+                try:
+                    data, addr = self.sock.recvfrom(2048)
+                    self.handle(data, addr)
+                except (socket.timeout, ConnectionResetError):
+                    pass
+        for k in range(10):             # UDP: one BYE lost left a V30 waiting for
+            for i in self.everyone():   # steps that never came -- ten, over 2 s (its
+                self.send(P.bye(i, P.BYE_END), self.get(i).addr)    # PicoMEM loses
+            time.sleep(0.2)                                         # back-to-back frames)
         self.finish()
 
     # ---- the console's (2026-10-13)
