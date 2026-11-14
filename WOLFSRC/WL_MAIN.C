@@ -1297,6 +1297,11 @@ void InitGame (void)
 		MM_SetLock (&flatbuf,true);
 	}
 #endif	// W32
+	{
+		extern int far mpbothunt;
+		if (mpbothunt)					// NETBOT HUNT's route (WL_MP.C): its ring before
+			MPBotAlloc ();				// the page cache takes the rest (2026-11-14)
+	}
 
 	SignonScreen ();
 

@@ -966,6 +966,7 @@ extern	memptr		demobuffer;
 
 void	InitRedShifts (void);
 byte	far *RedShift (int i);		// a flash's palette (WL_PLAY.C, 2026-11-13)
+void	MPBotAlloc (void);			// NETBOT HUNT's ring (WL_MP.C, 2026-11-14)
 byte	far *WhiteShift (int i);
 void 	FinishPaletteShifts (void);
 

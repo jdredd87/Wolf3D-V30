@@ -2576,9 +2576,12 @@ static void Take (byte far *d, unsigned len)
 // renderer's scratch, cleared before and after, as FloorBits leaves it.  It
 // keeps the first BOTPATH tiles of the way; the bot walks them a tile at a
 // time and looks again every 2 s.  Only the bot's own input comes of it.
-// Its ring comes from the memory manager the first time, so a machine that
-// is not hunting pays nothing for it (2.6 KB as static data and code put the
-// V30 under the start's 200,000 bytes, 2026-11-12).
+// Its ring comes from the memory manager at the start (MPBotAlloc, from
+// InitGame before the page cache takes the rest of memory), and only on a
+// hunting machine, which alone pays for it (2.6 KB as static data and code
+// put the V30 under the start's 200,000 bytes, 2026-11-12).  Taken at its
+// first use instead, it found no memory left: the V30 died "MM_GetPtr: Out
+// of memory!" joining late (2026-11-14).
 #define BOTQ		512				// the search's ring (a floor's frontier)
 #define BOTPATH		32
 #define FLOORC(c)	(mpfloor[(c)>>3] & (1 << ((c)&7)))	// c = x*64+y
@@ -2587,19 +2590,20 @@ static byte far botpx[BOTPATH], far botpy[BOTPATH];
 static int far botpn, far botpk, far botroute, far botgx = -1, far botgy;
 static int far botd[4] = {64,-64,1,-1};	// spotvis 1-4: came by this; 9: the start
 
+void MPBotAlloc (void)
+{
+	MM_GetPtr (&botqm,BOTQ*sizeof(unsigned));	// (Win32's are 4 bytes)
+	MM_SetLock (&botqm,true);
+}
+
 static void BotRoute (int mx, int my, int gx, int gy)
 {
 	byte		*v = &spotvis[0][0];
 	unsigned	far *q, head = 0, tail = 0, c, n, goal = gx*64+gy, len, i;
 
 	botpn = botpk = 0;
-	if (!(mprules & RULE_DM) || !FLOORC (goal))
+	if (!(mprules & RULE_DM) || !FLOORC (goal) || !botqm)
 		return;
-	if (!botqm)
-	{
-		MM_GetPtr (&botqm,BOTQ*sizeof(unsigned));	// (Win32's are 4 bytes)
-		MM_SetLock (&botqm,true);
-	}
 	q = (unsigned far *)botqm;
 	_fmemset (spotvis,0,sizeof(spotvis));
 	c = mx*64+my;
