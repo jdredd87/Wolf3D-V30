@@ -1220,8 +1220,12 @@ void StartMusic(void)
 #define WHITETICS		6
 
 
-byte	far redshifts[NUMREDSHIFTS][768];
-byte	far whiteshifts[NUMREDSHIFTS][768];
+// The flashes' palettes (StevenC & Claude, 2026-11-13): id made all nine at
+// the start, 9,216 bytes the network game's V30 lacked; one is made when a
+// step of a flash needs it, by id's own sums, into one buffer -- the same
+// colours.  RedShift (i) / WhiteShift (i), i 1-6 / 1-3, give it.
+static byte far shiftpal[768];
+static int far shiftmade;			// 0 none, i red, 16+i white
 
 int		damagecount,bonuscount;
 boolean	palshifted;
@@ -1236,20 +1240,21 @@ extern 	byte	far	gamepal;
 =====================
 */
 
-void InitRedShifts (void)
+void InitRedShifts (void)			// (gamepal may be new: made again)
+{
+	shiftmade = 0;
+}
+
+byte far *RedShift (int i)
 {
 	byte	far *workptr, far *baseptr;
-	int		i,j,delta;
+	int		j,delta;
 
-
-//
-// fade through intermediate frames
-//
-	for (i=1;i<=NUMREDSHIFTS;i++)
+	if (shiftmade != i)
 	{
-		workptr = (byte far *)&redshifts[i-1][0];
+		shiftmade = i;
+		workptr = shiftpal;
 		baseptr = &gamepal;
-
 		for (j=0;j<=255;j++)
 		{
 			delta = 64-*baseptr;
@@ -1260,12 +1265,19 @@ void InitRedShifts (void)
 			*workptr++ = *baseptr++ + delta * i / REDSTEPS;
 		}
 	}
+	return shiftpal;
+}
 
-	for (i=1;i<=NUMWHITESHIFTS;i++)
+byte far *WhiteShift (int i)
+{
+	byte	far *workptr, far *baseptr;
+	int		j,delta;
+
+	if (shiftmade != 16+i)
 	{
-		workptr = (byte far *)&whiteshifts[i-1][0];
+		shiftmade = 16+i;
+		workptr = shiftpal;
 		baseptr = &gamepal;
-
 		for (j=0;j<=255;j++)
 		{
 			delta = 64-*baseptr;
@@ -1276,6 +1288,7 @@ void InitRedShifts (void)
 			*workptr++ = *baseptr++ + delta * i / WHITESTEPS;
 		}
 	}
+	return shiftpal;
 }
 
 
@@ -1366,13 +1379,13 @@ void UpdatePaletteShifts (void)
 	if (red)
 	{
 		VW_WaitVBL(1);
-		VL_SetPalette (redshifts[red-1]);
+		VL_SetPalette (RedShift (red));
 		palshifted = true;
 	}
 	else if (white)
 	{
 		VW_WaitVBL(1);
-		VL_SetPalette (whiteshifts[white-1]);
+		VL_SetPalette (WhiteShift (white));
 		palshifted = true;
 	}
 	else if (palshifted)

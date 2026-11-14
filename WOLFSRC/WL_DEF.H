@@ -965,6 +965,8 @@ extern	memptr		demobuffer;
 
 
 void	InitRedShifts (void);
+byte	far *RedShift (int i);		// a flash's palette (WL_PLAY.C, 2026-11-13)
+byte	far *WhiteShift (int i);
 void 	FinishPaletteShifts (void);
 
 void	CenterWindow(word w,word h);

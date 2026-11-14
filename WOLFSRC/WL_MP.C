@@ -2677,9 +2677,11 @@ static void LocalInput (byte *bits, int *x, int *y)
 			wander = 0;
 			return;
 		}
-		for (j=0;j<mpplayers;j++)			// (teams: the other side only)
-			if (j != mplocal && !mpctx[j].absent && !mpctx[j].dead && mpctx[j].ob
-				&& (!(mprules2 & RULE2_TEAM) || TEAM (j) != TEAM (mplocal)))
+		for (j=0;j<mpplayers;j++)			// (teams: the other side only; one
+			if (j != mplocal && !mpctx[j].absent && !mpctx[j].dead && mpctx[j].ob	// it can
+				&& (!(mprules2 & RULE2_TEAM) || TEAM (j) != TEAM (mplocal))		// reach,
+				&& (!(mprules & RULE_DM)							// on the floor's
+				|| FLOORC (mpctx[j].ob->tilex*64 + mpctx[j].ob->tiley)))		// main part)
 			{
 				t = mpctx[j].ob;
 				d = labs (t->x - o->x) + labs (t->y - o->y);
@@ -2716,6 +2718,36 @@ static void LocalInput (byte *bits, int *x, int *y)
 				tx = (tx << 16) + 0x8000l;
 				ty = (ty << 16) + 0x8000l;
 				best = labs (tx - o->x) + labs (ty - o->y);
+				bj = mplocal;
+			}
+		}
+		if (!flag && (mprules & RULE_DM) && best > 6*65536l)	// nobody close, and short
+		{													// of health or a gun: the
+			gametype	far *g = mplocal == mpcur ? (gametype far *)&gamestate : &me->gs;
+			statobj_t	*st;								// nearest that helps,
+			long		ib = 10*65536l, ix, iy;				// within 10 tiles
+			int			hurt = g->health < 50, unarmed = g->bestweapon < wp_machinegun;
+
+			if (hurt || unarmed)
+				for (st = &statobjlist[0];st < laststatobj;st++)
+					if (st->shapenum != -1 && (st->flags & FL_BONUS)
+						&& ((hurt && (st->itemnumber == bo_firstaid || st->itemnumber == bo_food))
+						|| (unarmed && (st->itemnumber == bo_machinegun || st->itemnumber == bo_chaingun))))
+					{
+						ix = ((long)st->tilex << 16) + 0x8000l;
+						iy = ((long)st->tiley << 16) + 0x8000l;
+						d = labs (ix - o->x) + labs (iy - o->y);
+						if (d < ib)
+						{
+							ib = d;
+							tx = ix;
+							ty = iy;
+						}
+					}
+			if (ib < 10*65536l)
+			{
+				flag = 1;						// (steered to as a flag is)
+				best = ib;
 				bj = mplocal;
 			}
 		}
@@ -3347,7 +3379,6 @@ view (MPOverlay, from ThreeDRefresh), so only this machine sees it
 int		far	mpshowscores;			// TAB is down
 int		far	mpred;					// the dead tint shown (0: none)
 extern	int		lowvert;			// WL_DRAW.C: 2 while LOWVERT is shown
-extern	byte	far redshifts[][768];	// WL_PLAY.C
 extern	byte	far gamepal;
 extern	int		damagecount,bonuscount;
 extern	boolean	palshifted;
@@ -3500,7 +3531,7 @@ static void DeadTint (void)
 	VW_WaitVBL (1);
 	if (want)
 	{
-		VL_SetPalette (redshifts[want-1]);
+		VL_SetPalette (RedShift (want));
 		palshifted = true;
 	}
 	else
@@ -4790,7 +4821,9 @@ static void NetLoop (void)
 					mppkt[16+4*i] = mpctx[i].deaths;
 					mppkt[17+4*i] = mpctx[i].deaths >> 8;
 				}
-				NetSend (mppkt,14+4*MAXPLAYERS);
+				mppkt[14+4*MAXPLAYERS] = mpcaps[0];	// and the teams' captures
+				mppkt[15+4*MAXPLAYERS] = mpcaps[1];	// (2026-11-13)
+				NetSend (mppkt,16+4*MAXPLAYERS);
 			}
 			switch (mpevent[(unsigned)mpplayed & (RING-1)])	// the server's, at
 			{									// this step (its console)
