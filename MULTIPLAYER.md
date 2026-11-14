@@ -2782,3 +2782,75 @@ enemies, 12,000 steps each: all four players OK, 0 desyncs, and the
 recordings' 239 sums each the same on Windows as DOS.
 
 **The 486, 8 hours**: 8 hours of deathmatch with enemies on the 486 (its digitized sound on), P3, the V30 and Windows, 504,000 steps on all four, no desync -- and its recording the same on Windows as on DOS at all 9,981 checks.
+
+## After 1.13: memory back, a router's reboot ridden out, smarter hunters -- 2026-11-13/14
+
+StevenC & Claude.  StevenC: "do it all" -- the tests and improvements after
+1.13, one after another.
+
+**The V30's memory, measured** (a test build printing `mminfo.mainmem`):
+WOLF3DM 199,522, WOLF3DM1 200,304, SPEARM **197,084** -- Spear 2 KB over our
+check.  id made all nine red and white flash palettes at the start (9,216
+bytes of far data); `RedShift (i)` / `WhiteShift (i)` (WL_PLAY.C) make the
+one a flash's step needs, into one 768-byte buffer, by id's own sums -- the
+same colours.  After it, and the bots' new code: **207,298 / 208,080 /
+204,860**, and the network game asks 200,000 again.  (The floating-point
+emulator, 11.6 KB, stays: `atan2` aims the bosses' shots in WL_ACT2.C, game
+logic.  `amseen`, the automap's 4 KB, stays: the renderer marks it per wall
+in assembly.)
+
+**A router's reboot no longer ends a game** (`--hold SECS`, 300, in all three
+servers).  When the last player goes by being not heard from -- not by
+quitting -- the game is held: no steps are made, whoever comes back joins
+as a late joiner, and it goes on once one has caught up (by the step-making
+rule: `present` is set only as a step is made, so the hold checks it
+itself).  Nobody back in time: it ends as before.  Loopback with
+`mp/mpfake.py` first, then live: `NETSRVEXTRA="--silence 6000:62"` -- every
+machine lost at step 7,049, held, the 486 back and the game going on, the
+V30 and P3 back in, 15,000 steps, 0 desyncs.  (P3's first rejoin stopped at
+step 127 catching up from the first step, and left; its second got in.  Not
+understood -- its log was overwritten by the second.)
+
+**And the end of a game**: the servers send the last steps to every machine
+first (up to 3 s), then ten BYEs over 2 s -- the V30, 6 steps behind when
+`--steps` ran out, had missed all five BYEs sent within a quarter second
+(its PicoMEM loses frames back to back) and ended on 60 s of silence.
+
+**Team scores in the console**: SYNC ends in the teams' captures, and
+`scores` shows "Gold N, Silver M" -- captures in CTF, frags added up in TDM.
+
+**NETBOT HUNT, smarter**: after a player on the floor's main part only (one
+it can reach); nobody within 6 tiles, it fetches first aid or food under 50
+health, a machine gun or chaingun with only the pistol, within 10 tiles.
+Its route's ring is taken at the start, before the page cache
+(`MPBotAlloc`): taken at first use it found no memory on the V30 -- "MM_GetPtr:
+Out of memory!", every late join into a hunters' game (3 of 3) -- once the
+8.4 KB above had gone to the page cache.  After the fix, 3 of 3 OK.  In CTF
+the hunters still capture nothing (30 minutes, 0): open.
+
+**The tests** (all four machines unless said; every recording replayed on
+Windows the same as DOS at every check):
+
+| test | result |
+|---|---|
+| hunting bots, 4 hours | 252,000 steps, 0 drops, 0 desyncs; 4,990 checks |
+| Spear deathmatch, 2 hours, hard skill (past the floor that overflowed in 1.12.3) | PASS; 2,496 checks |
+| Spear CTF, 1 hour | PASS; 1,246 checks |
+| shareware deathmatch, 1 hour | the V30 missed the end (fixed above); 1,249 checks |
+| every registered floor with hunters, 90 s each | the V30's drop was the ring above; 1,766 checks |
+| Spear's 21 floors with hunters, hard skill, enemies | PASS; 626 checks |
+| joins 0.5 s and 4 s after a floor change | 6 of 6 OK |
+| joins into hunters fighting | 3 of 3 OK (after the ring's fix) |
+
+**The V30's emulated Sound Blaster freeze, without the game**: the DOS
+Bridge's `projects/sbstress` (SBSTRESS) plays digitized sound as id does --
+single-cycle DMA, the interrupt chaining the next segment -- with the V30
+sending 36 packets a second, receiving 17.5, writing the AdLib with
+interrupts off every tick and reading Spear's VSWAP from the card's
+emulated disk: two and a half hours, **no freeze**.  The game froze it in
+about 20 minutes in 7 games of 10, so the game does something more.
+
+**`tests/release.py VERSION`**: a release in one command -- the tree and the
+notes' version checked, every build, the gate (8 of 8 or nothing), every
+machine deployed and read back, both zips, the Windows programs committed,
+the tag, the pushes, the CRC table and the gh command.
