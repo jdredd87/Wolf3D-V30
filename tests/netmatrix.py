@@ -170,6 +170,9 @@ LATEAT = int(os.environ.get("NETLATEAT", "1500"))   # NETLATEAT=STEP: the late o
 while step_now() < LATEAT and time.time() - t < 400 + LATEAT // 15:   # (latejoin under load, 2026-11-12)
     time.sleep(10)
 ctl("say Hello from %s" % ARG)
+if os.environ.get("NETLATEFLOOR"):  # an awkward join (2026-11-13): the floor changes as the
+    note("console: nextfloor -> " + ctl("nextfloor").split("\n")[0][:100])   # late one comes
+    time.sleep(float(os.environ.get("NETLATEWAIT", "1")))                  # (the tally, a load)
 if LATE == "win37b":                # NETLATE=win37b: a second Windows player, late, on .37
     WINDIR2 = WINDIR + "2"          # too (2026-11-12): its own folder (a copy of WINDIR's
     subprocess.run(AGENT + ["ps", "if (!(Test-Path %s)) { Copy-Item %s %s -Recurse }; "   # game),
