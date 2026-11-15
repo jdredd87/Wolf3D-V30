@@ -603,16 +603,17 @@ class Server:
                 if self.pull:
                     self.snap_pull(now)
                 if self.lost_at is not None:    # held for the lost (--hold): one is
-                    newest = len(self.history) - 1      # back once caught up, by the
-                    back = []                           # rule make_step lets one in by
-                    for i in self.people():             # (present is set only as a
-                        s = self.slots[i]               # step is made)
-                        done = s.played if s.played is not None else (
-                            None if s.have == P.NOBODY else s.have)
-                        if s.ready and done is not None and done >= newest - CAUGHT_UP:
-                            back.append(i)
+                    newest = len(self.history) - 1      # back once it HOLDS the steps to
+                    back = []                           # the newest and has played them --
+                    for i in self.people():             # both: a joiner replaying from the
+                        s = self.slots[i]               # first step was let in on its own
+                        if (s.ready and s.have != P.NOBODY and s.have >= newest - CAUGHT_UP   # word
+                                and (s.played is None or s.played >= newest - CAUGHT_UP)):    # at load
+                            back.append(i)                                                 # (2026-11-14)
                     if back:
-                        self.log("going on at step %d: %s is back" % (len(self.history), self.who(back[0])))
+                        s = self.slots[back[0]]
+                        self.log("going on at step %d: %s is back (holds %s, played %s)"
+                                 % (len(self.history), self.who(back[0]), s.have, s.played))
                         self.lost_at = None
                         if not self.paused and self.waitfor is None:
                             self.resume()

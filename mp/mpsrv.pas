@@ -1890,12 +1890,12 @@ begin
     with Slots[I] do
       if Used and not Bot and Ready and (Back < 0) then
       begin
-        Ok := True;
+        { it HOLDS the steps to the newest and has played them -- both: a joiner
+          replaying from the first step was let in on its own word at load }
+        Ok := (Have <> NOBODY) and (LongInt(Have) >= Newest - CAUGHT_UP);
         D := 0;
-        if HasPlayed then D := LongInt(Played)
-        else if Have <> NOBODY then D := LongInt(Have)
-        else Ok := False;
-        if Ok and (D >= Newest - CAUGHT_UP) then Back := I;
+        if HasPlayed then D := LongInt(Played);
+        if Ok and ((not HasPlayed) or (D >= Newest - CAUGHT_UP)) then Back := I;
       end;
   if Back >= 0 then
   begin
