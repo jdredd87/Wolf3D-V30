@@ -2338,6 +2338,7 @@ unsigned far mpport = 31992;
 int		far	mpbot;				// NETBOT: random controls of its own
 int		far	mpbotshow;			// NETBOT SHOW: and the camera's displays (2026-10-20)
 int		far	mpbothunt;			// NETBOT HUNT: plays like a player (2026-11-11)
+int		far	mpbottrace;			// ... TRACE: what it is after, every 2 s (2026-11-15)
 char	far	mpname[17];
 int		far	mpstate;			// 0 hello, 1 welcomed, 2 started, 3 over
 unsigned far mpfraglimit;		// WELCOME: deathmatch ends a level at these
@@ -2668,12 +2669,23 @@ static void LocalInput (byte *bits, int *x, int *y)
 	{								// mp/huntbot.py's, made a switch): the flags
 		static int far tog, far wander, far calls;	// first in capture the flag,
 		static long far lastx, far lasty;			// else after the nearest player;
-		mpctx_t	far *me = &mpctx[mplocal];			// fires only aimed, within 8
-		objtype	*o = me->ob, *t;					// tiles, nothing between
+		static long far togstep = -2;				// fires only aimed, within 8
+		mpctx_t	far *me = &mpctx[mplocal];			// tiles, nothing between
+		objtype	*o = me->ob, *t;
 		long	best = 0x7fffffffl, dx, dy, d, fx, fy, cr, dt, tx = 0, ty = 0;
 		int		j, bj = -1, flag = 0, mt, et;
 
-		tog ^= 1;
+		// fire and use are pressed and let go a STEP apart (2026-11-15): the
+		// server keeps a step's last input, and a fast machine calls here
+		// several times a step -- toggled each call, every step it kept could
+		// show the same half, held or let go, never a press: doors never
+		// opened (a CTF trace: 1,100 steps at a shut door), the pistol never
+		// fired again.  A V30, a step or more a picture, never showed it
+		if (mpplayed != togstep)
+		{
+			togstep = mpplayed;
+			tog ^= 1;
+		}
 		if (me->dead || !o)
 		{
 			*bits = (me->deadtime > 280 && tog) ? 8 : 0;	// SPACE, after 4 s
@@ -2779,7 +2791,7 @@ static void LocalInput (byte *bits, int *x, int *y)
 			clear = BotSees (o->x,o->y,tx,ty);
 			if (!clear)						// a wall between: the way round
 			{
-				int		gx = (int)(tx >> 16), gy = (int)(ty >> 16), wx, wy, n;
+				int		gx = (int)(tx >> 16), gy = (int)(ty >> 16), wx, wy, n, k, wk;
 
 				if (--botroute <= 0 || botpk >= botpn
 					|| labs ((long)gx - botgx) + labs ((long)gy - botgy) > 3)
@@ -2789,8 +2801,9 @@ static void LocalInput (byte *bits, int *x, int *y)
 					botgy = gy;
 					BotRoute (o->tilex,o->tiley,gx,gy);
 				}
-				while (botpk < botpn && o->tilex == botpx[botpk] && o->tiley == botpy[botpk])
-					botpk++;
+				for (k = botpk;k < botpn;k++)	// on a tile of the way, however
+					if (o->tilex == botpx[k] && o->tiley == botpy[k])	// it came
+						botpk = k + 1;			// there: past it (2026-11-15)
 				if (botpk < botpn)
 				{
 					wx = botpx[botpk];
@@ -2798,11 +2811,36 @@ static void LocalInput (byte *bits, int *x, int *y)
 					n = tilemap[wx][wy];
 					if ((n & 0x80) && doorposition[n & 0x7f] < 0xc000
 						&& labs ((long)wx - o->tilex) + labs ((long)wy - o->tiley) == 1)
-						door = 1;				// shut, and next: open it
-					tx = ((long)wx << 16) + 0x8000l;
-					ty = ((long)wy << 16) + 0x8000l;
+					{
+						door = 1;				// shut, and next: open it -- and
+						lastx = o->x;			// waiting at it is not "got
+						lasty = o->y;			// nowhere": no wander (it went
+						calls = 1;				// off and the door shut again,
+					}							// 1,500 steps, 2026-11-15)
+					wk = botpk;					// steered at the farthest of the
+					if (!door)					// next six it can see -- corners
+						for (k = botpk + 1;k < botpn && k < botpk + 6;k++)	// cut, not
+						{						// stopping to turn at each tile's
+							n = tilemap[botpx[k]][botpy[k]];	// centre (2026-11-15)
+							if ((n & 0x80) && doorposition[n & 0x7f] < 0xc000)
+								break;			// (a shut door: up to it only)
+							if (!BotSees (o->x,o->y,((long)botpx[k] << 16) + 0x8000l,
+								((long)botpy[k] << 16) + 0x8000l))
+								break;
+							wk = k;
+						}
+					tx = ((long)botpx[wk] << 16) + 0x8000l;
+					ty = ((long)botpy[wk] << 16) + 0x8000l;
 					routed = 1;
 				}
+			}
+			if (mpbottrace && !calls)		// (once each 35 calls: about 2 s)
+			{
+				static char far tf[] =			// (numbers only: %s wants a near
+					"hunt %ld: at %d,%d flag %d to %d,%d goal %d,%d seen %d routed %d path %d/%d best %d\n";
+				mprintf (tf,mpsteps,(int)o->tilex,(int)o->tiley,	// pointer here)
+					flag,(int)(tx >> 16),(int)(ty >> 16),botgx,botgy,
+					clear,routed,botpk,botpn,(int)(best >> 16));
 			}
 			dx = (tx - o->x) >> 8;
 			dy = -((ty - o->y) >> 8);		// map y runs south
@@ -2819,9 +2857,20 @@ static void LocalInput (byte *bits, int *x, int *y)
 			}
 			else
 			{
+				static int far behind;		// the way it turned with the target behind
 				*x = (dt <= 0 || labs (cr) > dt/3) ? 60 : 12;
-				if (cr > 0)
-					*x = -*x;
+				if (dt <= 0)				// behind: keep turning the same way --
+				{							// by the side it was a hair on, each
+					if (!behind)			// 11 degree turn put it on the other
+						behind = cr > 0 ? -1 : 1;	// side, and the bot swung there
+					*x *= behind;			// and back for good (a replay of a
+				}							// CTF hunter, 2026-11-16)
+				else
+				{
+					behind = 0;
+					if (cr > 0)
+						*x = -*x;
+				}
 				*bits = 4;
 			}
 			*y = (dt > 0 && labs (cr) < dt && (flag || routed || best > 2*65536l)) ? -60 : 0;
@@ -3243,7 +3292,7 @@ int MPNetArgs (void)
 	static char far wnet[] = "net", far wport[] = "port", far wname[] = "name", far wbot[] = "netbot",
 		far wfind[] = "find", far wwatch[] = "watch", far wreplay[] = "replay",
 		far wsnaptest[] = "snaptest", far wfast[] = "fast", far wshow[] = "show",
-		far whunt[] = "hunt";
+		far whunt[] = "hunt", far wtrace[] = "trace";
 	int		i,net = 0,given = 0,find = 0;
 	byte	d[4];
 
@@ -3297,6 +3346,8 @@ int MPNetArgs (void)
 			mpbotshow = 1;			// screen now and then, for a camera
 		if (Is (a,whunt))			// with NETBOT: plays like a player (mpbothunt)
 			mpbothunt = 1;
+		if (Is (a,wtrace))			// with NETBOT HUNT: says what it is after
+			mpbottrace = 1;
 		if (Is (a,wwatch))
 			mpwatch = 1;
 		if (Is (a,wfind))
@@ -4806,6 +4857,29 @@ static void NetLoop (void)
 
 			for (i=0;i<mpplayers;i++)
 				SetControls (i,row+3*i);
+#ifdef W32
+			{							// W3DBOT="P FROM TO DX DY" (2026-11-16):
+				static int bdp = -2, bdx, bdy;	// player P each step FROM..TO
+				static long bdf, bdt;	// of a replay, and the door at DX,DY
+				if (bdp == -2)
+				{
+					char	*e = getenv ("W3DBOT");
+					bdp = -1;
+					if (e)
+						sscanf (e,"%d %ld %ld %d %d",&bdp,&bdf,&bdt,&bdx,&bdy);
+				}
+				if (bdp >= 0 && mpplayed >= bdf && mpplayed <= bdt && mpctx[bdp].ob)
+				{
+					objtype	*bo = mpctx[bdp].ob;
+					int		dn = tilemap[bdx][bdy];
+					printf ("bot %ld: tile %d,%d x%08lX y%08lX a%d btn%02X turn%d move%d door %d act %d pos %u\n",
+						mpplayed,bo->tilex,bo->tiley,bo->x,bo->y,bo->angle,row[3*bdp],
+						(signed char)row[3*bdp+1],(signed char)row[3*bdp+2],dn,
+						(dn & 0x80) ? doorobjlist[dn & 0x7f].action : -1,
+						(dn & 0x80) ? doorposition[dn & 0x7f] : 0);
+				}
+			}
+#endif
 			madenoise = false;
 			MoveDoors ();
 			MovePWalls ();
