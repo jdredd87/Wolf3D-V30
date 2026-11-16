@@ -73,6 +73,7 @@ PLAN = {   # the server's host, its rules, from the start, late, the Windows pro
     "hunt": (PC, "--players 4 " + DM, ["dx486", "p3"], "v30", "WOLF3DW", " HUNT"),
     "hunttdm": (PC, "--players 4 --mode tdm --noenemies --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW", " HUNT"),
     "huntctf": (PC, "--players 4 --mode ctf --noenemies --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW", " HUNT"),
+    "wl1hunt": (PC, "--players 4 --mode dm --skill 3 --itemrespawn 30", ["dx486", "p3"], "v30", "WOLF3DW1", " HUNT"),
     "sodhunt": (PC, "--players 4 --mode dm --skill 3 --itemrespawn 30", ["dx486", "p3"], "v30", "SPEARW", " HUNT"),
     "soak": (PC, "--players 4 --timelimit 10 " + DM, ["dx486", "p3"], "v30", "WOLF3DW", " WIDE"),
     # Spear of Destiny (2026-10-22)
@@ -140,7 +141,7 @@ open(os.path.join(OUT, "console.txt"), "w").close()
 note("%s server on %s: %s" % (ARG, HOST, RULES))
 srvout = open(os.path.join(OUT, "server.txt"), "w")
 if KIND in ("python", "dmen", "ctf", "wl1", "wl1w", "wl1dm", "wl1tdm", "wl1ctf", "wl1coop", "sod", "sod30",
-            "sodfloors", "soddm", "sodtdm", "sodctf", "hunt", "hunttdm", "huntctf", "sodhunt"):
+            "sodfloors", "soddm", "sodtdm", "sodctf", "hunt", "hunttdm", "huntctf", "sodhunt", "wl1hunt"):
     srv = subprocess.Popen([sys.executable, "-u", "mp/mpserver.py"] + RULES.split(), cwd=WOLF,
                            stdin=subprocess.DEVNULL, stdout=srvout, stderr=subprocess.STDOUT, env=ENV)
 elif KIND in ("mpsrvw", "tdmw", "soak", "sodw"):
