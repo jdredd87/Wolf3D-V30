@@ -2852,3 +2852,37 @@ about 20 minutes in 7 games of 10, so the game does something more.
 notes' version checked, every build, the gate (8 of 8 or nothing), every
 machine deployed and read back, both zips, the Windows programs committed,
 the tag, the pushes, the CRC table and the gh command.
+
+## The hunters in capture the flag, traced -- 2026-11-15/16
+
+StevenC & Claude.  `NETBOT HUNT TRACE` prints, every 2 s, where the hunter
+is, what it is after (a flag errand or a player), the target tile, whether
+it sees it and its route.  (Numbers only: this build's `%s` wants a near
+pointer, and far strings printed Borland's copyright.)  And the Windows
+builds take `W3DBOT="P FROM TO DX DY"`: replaying a recording, they print
+player P each step FROM..TO -- position, angle, buttons, turn, move -- and
+the door at DX,DY.  In CTF the hunters had never captured; four faults, one
+under the other:
+
+* **Use (and the pistol's fire) never pressed on a fast machine.**  The
+  hunter toggled the button every call; the server keeps a step's last
+  input, and the 486, P3 and Windows call several times a step, so every
+  step the server kept could show the same half.  The trace: 1,100 steps at
+  the first shut door.  Toggled once a step now (a V30, a step or more a
+  picture, never showed it).
+* **It left each door it waited at**: standing still while it opened was
+  "got nowhere", and it wandered off while the door shut again.  Waiting at
+  a door no longer counts.
+* **It stopped to turn at every tile's centre**: it is steered at the
+  farthest of the next six route tiles it can see, and goes past any tile of
+  the route it stands on.  The top of E1L1 in 430 steps, from 4,200.
+* **With its target behind it swung for good** -- W3DBOT showed the turn
+  flipping 60 / -60 every step at a door, the angle 264, 275, 264: each 11
+  degrees put the target on the other side.  It keeps turning one way now.
+
+After them, 30 minutes of CTF: the flags taken and dropped (the trace
+switching errands), 6 frags where there had been none -- still no capture.
+And then **8 hours each, all four machines, every machine hunting**: E1's
+deathmatch and Spear's at hard skill (the V30 with `NOSB`) -- 504,000 steps,
+0 drops, 0 desyncs, the recordings the same on Windows as DOS at all 9,980
+and 9,974 checks (WOLF3DM FFE5EC48, WOLF3DM1 1B01C819, SPEARM FF67317C).
