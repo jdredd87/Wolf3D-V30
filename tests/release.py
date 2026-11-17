@@ -89,7 +89,11 @@ def main():
     run([sys.executable, os.path.join("mp", "mkmpsrv.py"), "--windows"])
 
     step("3. the gate")
-    out = run(["bash", "gate.sh"], cwd=WIN, check=False)
+    # Git's bash by name: a bare "bash" from Python is Windows' own WSL one in
+    # System32 (searched before PATH), which chokes on gate.sh's CRLF (1.14's
+    # first run)
+    gitbash = r"C:\Program Files\Git\bin\bash.exe"
+    out = run([gitbash if os.path.exists(gitbash) else "bash", "gate.sh"], cwd=WIN, check=False)
     if not DRY and not re.search(r"gate: \d+ passed, 0 failed", out):
         sys.exit("the gate failed -- no release")
 
