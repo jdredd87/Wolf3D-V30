@@ -1,6 +1,6 @@
 WOLFENSTEIN 3-D FOR WINDOWS  --  by StevenC and Claude (Anthropic)
 ==================================================================
-Version 1.13, 2026-11-12
+Version 1.14, 2026-11-17
 
 id Software's Wolfenstein 3-D, built for Windows (95 and later) from the
 same source as the DOS games in this project: id's own game, menus and all,
@@ -49,6 +49,11 @@ player comes back on the floor's main part.  NETBOT HUNT plays the network
 game by itself, as a player would (MULTI.TXT).  Two can play from one PC:
 the second copy takes another port by itself -- run each from its own
 folder, as each keeps a log beside it.  1.13 plays with 1.13 only.
+
+New in 1.14: MPSRVW holds a game when every machine is lost at once (a
+router's reboot) and sends the last steps to a slow machine before the
+end; its console shows the teams' scores.  NETBOT HUNT finds its way and
+opens doors (MULTI.TXT).  Put 1.14 on every machine.
 
 
 PLAYING
