@@ -2339,6 +2339,9 @@ int		far	mpbot;				// NETBOT: random controls of its own
 int		far	mpbotshow;			// NETBOT SHOW: and the camera's displays (2026-10-20)
 int		far	mpbothunt;			// NETBOT HUNT: plays like a player (2026-11-11)
 int		far	mpbottrace;			// ... TRACE: what it is after, every 2 s (2026-11-15)
+#ifdef W32
+long	botdbg[10];					// what the hunter worked out (W3DSHADOW, a replay)
+#endif
 char	far	mpname[17];
 int		far	mpstate;			// 0 hello, 1 welcomed, 2 started, 3 over
 unsigned far mpfraglimit;		// WELCOME: deathmatch ends a level at these
@@ -2844,16 +2847,23 @@ static void LocalInput (byte *bits, int *x, int *y)
 			}
 			dx = (tx - o->x) >> 8;
 			dy = -((ty - o->y) >> 8);		// map y runs south
-			fx = costable[o->angle] >> 8;
-			fy = sintable[o->angle] >> 8;
+			fx = costable[o->angle];		// id's tables are sign and magnitude
+			fy = sintable[o->angle];		// (bit 31 the sign, for FixedByFrac):
+			fx = (fx < 0 ? -(fx & 0x7fffffffl) : fx) >> 8;	// read as plain numbers
+			fy = (fy < 0 ? -(fy & 0x7fffffffl) : fy) >> 8;	// they were garbage for
+											// three headings in four -- the hunter
+											// swung, stalled at doors, aimed wild
+											// (a replay's shadow of it, 2026-11-18)
 			cr = fx*dy - fy*dx;				// over 0: the target is to the left
 			dt = fx*dx + fy*dy;
 			if (dt > 0 && labs (cr) < dt/12)
 			{
-				int		see = !flag && clear && best < 8*65536l;	// (BotSees above)
-
-				*x = 0;
-				*bits = 4 | (see ? tog : 0);	// fire, pressed and let go
+				gametype	far *gw = mplocal == mpcur ? (gametype far *)&gamestate : &me->gs;
+				int		auto_ = gw->weapon >= wp_machinegun;	// (2026-11-18) a machine gun
+				int		see = !flag && clear && best < (auto_ ? 12 : 8)*65536l;	// or chaingun:
+																// 12 tiles, and held --
+				*x = 0;											// it fires while held;
+				*bits = 4 | (see ? (auto_ ? 1 : tog) : 0);		// the pistol pressed and let go
 			}
 			else
 			{
@@ -2874,6 +2884,11 @@ static void LocalInput (byte *bits, int *x, int *y)
 				*bits = 4;
 			}
 			*y = (dt > 0 && labs (cr) < dt && (flag || routed || best > 2*65536l)) ? -60 : 0;
+#ifdef W32
+			botdbg[0] = tx; botdbg[1] = ty; botdbg[2] = dt; botdbg[3] = cr;
+			botdbg[4] = routed; botdbg[5] = door; botdbg[6] = flag; botdbg[7] = clear;
+			botdbg[8] = botpk; botdbg[9] = botpn;
+#endif
 			if (door && tog)
 				*bits |= 8;						// use, pressed and let go
 			return;
@@ -4877,6 +4892,37 @@ static void NetLoop (void)
 						(signed char)row[3*bdp+1],(signed char)row[3*bdp+2],dn,
 						(dn & 0x80) ? doorobjlist[dn & 0x7f].action : -1,
 						(dn & 0x80) ? doorposition[dn & 0x7f] : 0);
+				}
+				if (bdp >= 0 && getenv ("W3DSHADOW") && mpplayed >= bdf && mpplayed <= bdt && mpctx[bdp].ob)
+				{						// the hunter's own code, for P, on this step's state
+					byte	sb = 0;
+					int		sx = 0, sy = 0, sl = mplocal, sbt = mpbot, sh = mpbothunt;
+					botdbg[0] = botdbg[1] = -1;
+					if (!botqm)			// (a replay is not a hunting machine)
+						MPBotAlloc ();
+					mplocal = bdp;
+					mpbot = mpbothunt = 1;
+					LocalInput (&sb,&sx,&sy);
+					mplocal = sl;
+					mpbot = sbt;
+					mpbothunt = sh;
+					printf ("shadow %ld: floor(goal) %d floor(me) %d btn%02X turn%d move%d to %ld,%ld dt %ld cr %ld routed %ld door %ld flag %ld seen %ld path %ld/%ld\n",
+						mpplayed,FLOORC (botgx*64+botgy) != 0,
+						FLOORC (mpctx[bdp].ob->tilex*64+mpctx[bdp].ob->tiley) != 0,
+						sb,sx,sy,botdbg[0] >> 16,botdbg[1] >> 16,botdbg[2],botdbg[3],
+						botdbg[4],botdbg[5],botdbg[6],botdbg[7],botdbg[8],botdbg[9]);
+				}
+				if (bdp >= 0 && flagobj[0] && !(mpplayed % 50) && mpplayed >= bdf && mpplayed <= bdt)
+				{						// and every 50 steps, capture the flag's state
+					int	k;				// and everyone's place (2026-11-18)
+					printf ("flags %ld: gold by %d at %d,%d  silver by %d at %d,%d  caps %d-%d |",
+						mpplayed,flagby_[0],flagx[0],flagy[0],flagby_[1],flagx[1],flagy[1],
+						mpcaps[0],mpcaps[1]);
+					for (k=0;k<mpplayers;k++)
+						if (mpctx[k].ob)
+							printf (" P%d %d,%d%s",k+1,mpctx[k].ob->tilex,mpctx[k].ob->tiley,
+								mpctx[k].dead ? " dead" : "");
+					printf ("\n");
 				}
 			}
 #endif
